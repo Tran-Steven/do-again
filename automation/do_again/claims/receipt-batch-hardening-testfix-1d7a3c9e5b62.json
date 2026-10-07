@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "claimed_at_utc": "2026-10-07T21:22:47.855635+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 12820,
+  "request_fingerprint": "a09aab5110a348f55c9d7415f60a9db4e4a28eeecd2319d428960c845bb6be82",
+  "request_id": "receipt-batch-hardening-testfix-1d7a3c9e5b62",
+  "schema_version": 1
+}
