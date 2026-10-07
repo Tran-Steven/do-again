@@ -1,0 +1,16 @@
+{
+  "args": {
+    "content": "from pathlib import Path\np=Path(\"tests/test_service.py\")\ns=p.read_text(encoding=\"utf-8\")\ns=s.replace(\"self.assertEqual(first.root.parent, root / \\\"home\\\" / \\\"projects\\\")\", \"self.assertEqual(first.root.parent, (root / \\\"home\\\" / \\\"projects\\\").resolve())\")\ns=s.replace(\"self.assertEqual(value[\\\"WorkingDirectory\\\"], str(repo))\", \"self.assertEqual(value[\\\"WorkingDirectory\\\"], str(repo.resolve()))\")\np.write_text(s, encoding=\"utf-8\")\nprint(\"normalized temp path assertions\")\n",
+    "cwd": "$REPO",
+    "language": "python"
+  },
+  "expected": {},
+  "expires_at_utc": "2026-10-07T14:54:23.726491+00:00",
+  "issued_at_utc": "2026-10-07T14:24:23.726491+00:00",
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "operation": "scratch_script",
+  "request_id": "dogfood-lifecycle-fix-001",
+  "schema_version": 1
+}
