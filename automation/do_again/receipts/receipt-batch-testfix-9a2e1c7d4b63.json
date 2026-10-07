@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:20:17.691607+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "c8e148e93242e5970fedf848e6b2d9bf3b6e1aa44a900ea65b9fd8782a9380f5",
+  "request_id": "receipt-batch-testfix-9a2e1c7d4b63",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "c8e148e93242e5970fedf848e6b2d9bf3b6e1aa44a900ea65b9fd8782a9380f5",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-testfix-9a2e1c7d4b63/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 32.474,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 2543,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-testfix-9a2e1c7d4b63/script.py",
+      "script_sha256": "dc80368df77637e9c2cf462e78c07c877cf07ba522a1ac59dc4a21efe350a402",
+      "stderr": "...........................\n----------------------------------------------------------------------\nRan 27 tests in 0.212s\n\nOK\n............................do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n....................F..........................................................................................\n======================================================================\nFAIL: test_two_delivery_workers_send_each_receipt_once (test_browser_hardening.BrowserHardeningTests.test_two_delivery_workers_send_each_receipt_once)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_browser_hardening.py\", line 280, in test_two_delivery_workers_send_each_receipt_once\n    self.assertEqual(errors, [])\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^\nAssertionError: Lists differ: [BrowserError('project has no bound automa[101 chars]up')] != []\n\nFirst list contains 2 additional elements.\nFirst extra element 0:\nBrowserError('project has no bound automation chat; run do-again setup')\n\n+ []\n- [BrowserError('project has no bound automation chat; run do-again setup'),\n-  BrowserError('project has no bound automation chat; run do-again setup')]\n\n----------------------------------------------------------------------\nRan 139 tests in 31.386s\n\nFAILED (failures=1)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-testfix-9a2e1c7d4b63/script.py\", line 41, in <module>\n    subprocess.run(\n    ~~~~~~~~~~~~~~^\n        [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        check=True,\n        ^^^^^^^^^^^\n    )\n    ^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpzc0aqz01/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpkfoverq0/repo with spaces/do-again.toml\nSETUP_OK\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpkfoverq0/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpkfoverq0/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpkfoverq0/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpkfoverq0/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:19:44.924940+00:00",
+  "state": "failed",
+  "traceback": null
+}
