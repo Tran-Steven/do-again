@@ -37,7 +37,7 @@ const addMessage = (role, text) => {
   } else if (modern) {
     const heading = document.createElement('h4');
     heading.dataset.conversationRole = role;
-    heading.textContent = role;
+    heading.textContent = role === 'user' ? 'You said:' : 'ChatGPT said:';
     node.append(heading);
   } else {
     node.dataset.messageAuthorRole = role;
@@ -166,7 +166,7 @@ def main() -> int:
                 prompt = "DO_AGAIN_RECEIPT_READY request_id=smoke state=succeeded. Quoted: maximum length for this conversation."
                 result = send_message(fixture, prompt, timeout=15.0)
                 if result.get("response") != "DO_AGAIN_BROWSER_OK":
-                    raise RuntimeError(f"{variant} composer/response fixture failed")
+                    raise RuntimeError(f"{variant} composer/response fixture failed: {result!r}")
                 if not _page_contains(fixture, "DO_AGAIN_RECEIPT_READY request_id=smoke state="):
                     raise RuntimeError(f"{variant} receipt acknowledgement was not detected")
                 if _page_contains(fixture, "request_id=not-posted state="):
