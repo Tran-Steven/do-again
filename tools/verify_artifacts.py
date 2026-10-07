@@ -26,7 +26,7 @@ def main():
         raise SystemExit("npm is required to verify both distributions")
     run([npm, "pack", "--ignore-scripts"], cwd=root)
     node_archive = root / f"do-again-{version}.tgz"
-    required = {"do_again/browser/runtime.py", "do_again/browser/cdp.py", "do_again/browser/errors.py", "do_again/service/daemon.py", "do_again/default_policy.json"}
+    required = {"do_again/browser/runtime.py", "do_again/browser/cdp.py", "do_again/browser/errors.py", "do_again/service/daemon.py", "do_again/default_policy.json", "do_again/platforms/process.py"}
     with zipfile.ZipFile(wheel) as archive:
         missing = required - set(archive.namelist())
         if missing:

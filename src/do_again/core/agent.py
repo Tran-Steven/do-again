@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from ..platforms.process import pid_alive
 from .executor import LocalExecutor
 from .schema import (
     OperatorError,
@@ -311,13 +312,7 @@ class Agent:
 
     @staticmethod
     def _pid_alive(pid: int) -> bool:
-        if pid <= 0:
-            return False
-        try:
-            os.kill(pid, 0)
-        except (OSError, ValueError):
-            return False
-        return True
+        return pid_alive(pid)
 
     def acquire_request_lock(self, request_id: str) -> bool:
         self.locks_dir.mkdir(parents=True, exist_ok=True)

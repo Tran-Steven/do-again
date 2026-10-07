@@ -413,6 +413,7 @@ class BrowserRuntimeTests(unittest.TestCase):
                 )
                 with (
                     patch("do_again.browser.runtime.cdp.create_target", return_value=new_target),
+                    patch("do_again.browser.runtime.cdp.evaluate", return_value=[]),
                     patch(
                         "do_again.browser.runtime.wait_for_authenticated",
                         return_value=(new_target, {"prompt": True}),

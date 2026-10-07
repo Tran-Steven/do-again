@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..platforms.process import pid_alive
 from . import cdp
 from .errors import BrowserAuthRequired, BrowserError
 
@@ -117,17 +118,7 @@ def save_state(state: dict[str, Any]) -> None:
 
 
 def _pid_alive(pid: int | None) -> bool:
-    if not pid or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
+    return pid_alive(pid)
 
 
 def discover_browser(config: dict[str, Any] | None = None) -> Path:
@@ -188,7 +179,8 @@ def discover_browser(config: dict[str, Any] | None = None) -> Path:
 def _port_free(port: int) -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if os.name == "nt":
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         sock.bind(("127.0.0.1", int(port)))
         return True
     except OSError:

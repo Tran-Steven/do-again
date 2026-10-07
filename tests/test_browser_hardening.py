@@ -55,6 +55,7 @@ class BrowserHardeningTests(unittest.TestCase):
 
     def test_occupied_port_is_not_reused_with_stale_state(self):
         with socket.socket() as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind(("127.0.0.1", 0))
             sock.listen()
             occupied = sock.getsockname()[1]
@@ -179,7 +180,7 @@ class BrowserHardeningTests(unittest.TestCase):
     def test_failed_rollover_preserves_old_chat_binding(self):
         record = self.bind()
         new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
-        with patch.object(cdp, "create_target", return_value=new), patch.object(browser, "wait_for_authenticated", return_value=(new, {})), patch.object(browser, "send_message", return_value={"response": "unready", "chat_url": "https://chatgpt.com/c/new"}), patch.object(cdp, "close_target") as close:
+        with patch.object(cdp, "evaluate", return_value=[]), patch.object(cdp, "create_target", return_value=new), patch.object(browser, "wait_for_authenticated", return_value=(new, {})), patch.object(browser, "send_message", return_value={"response": "unready", "chat_url": "https://chatgpt.com/c/new"}), patch.object(cdp, "close_target") as close:
             with self.assertRaises(browser.BrowserError):
                 browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
         self.assertEqual(browser.project_record(self.repo)["chat_url"], self.target.url)

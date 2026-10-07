@@ -107,6 +107,9 @@ class WebSocket:
             raise CdpError(f"CDP websocket connection failed: {exc}") from exc
         try:
             self._handshake(host, port, path, timeout)
+        except OSError as exc:
+            self.sock.close()
+            raise CdpError(f"CDP websocket handshake failed: {exc}") from exc
         except Exception:
             self.sock.close()
             raise
