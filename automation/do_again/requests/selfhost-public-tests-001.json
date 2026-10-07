@@ -1,0 +1,18 @@
+{
+  "args": {
+    "discover": true,
+    "pattern": "test_*.py",
+    "start_directory": "tests"
+  },
+  "expected": {
+    "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0"
+  },
+  "expires_at_utc": "2026-10-07T15:16:42.636597+00:00",
+  "issued_at_utc": "2026-10-07T14:46:42.636597+00:00",
+  "limits": {
+    "timeout_seconds": 300
+  },
+  "operation": "run_tests",
+  "request_id": "selfhost-public-tests-001",
+  "schema_version": 1
+}
