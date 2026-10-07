@@ -17,7 +17,7 @@ from typing import Any
 from .schema import OperatorError, atomic_json, expand_path, path_within, read_json, request_fingerprint
 
 
-class MacOperatorExecutor:
+class LocalExecutor:
     def __init__(self, *, repo: Path, policy_path: Path, state_dir: Path):
         self.repo = repo.resolve()
         self.policy_path = policy_path.resolve()

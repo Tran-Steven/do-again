@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-relay-bridge"
+name = "do-again"
 version = "0.1.0"
-description = "Cross-platform relay for securely executing agent-driven development tasks on a local machine"
+description = "Policy-controlled local execution for agent-driven development workflows"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [{name = "Steven Tran"}]
-keywords = ["agents", "automation", "developer-tools", "github", "relay", "orchestration"]
+keywords = ["agents", "automation", "developer-tools", "github", "orchestration", "local-execution"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -29,12 +29,12 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/Tran-Steven/agent-relay"
-Repository = "https://github.com/Tran-Steven/agent-relay"
-Issues = "https://github.com/Tran-Steven/agent-relay/issues"
+Homepage = "https://github.com/Tran-Steven/do-again"
+Repository = "https://github.com/Tran-Steven/do-again"
+Issues = "https://github.com/Tran-Steven/do-again/issues"
 
 [project.scripts]
-agent-relay = "agent_relay.cli:main"
+do-again = "do_again.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agent_relay"]
+packages = ["src/do_again"]

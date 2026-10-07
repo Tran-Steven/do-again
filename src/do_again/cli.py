@@ -33,17 +33,17 @@ def status() -> int:
 def init_project(path: str) -> int:
     target = Path(path).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
-    config = target / "agent-relay.toml"
+    config = target / "do-again.toml"
     if config.exists():
         print(str(config))
         return 0
-    config.write_text('[relay]\ncontrol_branch = "operator-control"\n')
+    config.write_text('[do_again]\ncontrol_branch = "operator-control"\n')
     print(str(config))
     return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="agent-relay")
+    parser = argparse.ArgumentParser(prog="do-again")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor")
     sub.add_parser("status")

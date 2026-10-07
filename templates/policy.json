@@ -25,16 +25,16 @@
   ],
   "approved_cwd_roots": [
     "$REPO",
-    "$HOME/.beatconnect_control_plane",
-    "$HOME/.beatconnect_chatgpt_bridge",
-    "$HOME/.beatconnect_mac_operator",
+    "$HOME/.do_again_control_plane",
+    "$HOME/.do_again_bridge",
+    "$HOME/.do_again",
     "/tmp"
   ],
   "read_roots": [
     "$REPO",
-    "$HOME/.beatconnect_control_plane",
-    "$HOME/.beatconnect_chatgpt_bridge",
-    "$HOME/.beatconnect_mac_operator",
+    "$HOME/.do_again_control_plane",
+    "$HOME/.do_again_bridge",
+    "$HOME/.do_again",
     "/tmp"
   ],
   "repo_script_prefixes": [
@@ -103,7 +103,7 @@
     "bootout"
   ],
   "launchctl_label_prefixes": [
-    "com.steventran."
+    "io.github.tran-steven."
   ],
   "process_signal_allowlist": [
     "TERM",
@@ -133,5 +133,5 @@
   "max_inline_artifact_bytes": 450000,
   "max_screenshot_width": 1440,
   "screenshot_jpeg_quality": 55,
-  "agent_launchd_label": "com.steventran.beatconnect-mac-operator"
+  "agent_launchd_label": "io.github.tran-steven.do-again"
 }

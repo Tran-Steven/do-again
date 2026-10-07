@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from agent_relay.platforms.detect import detect_platform
+from do_again.platforms.detect import detect_platform
 
 
 class PlatformDetectionTests(unittest.TestCase):

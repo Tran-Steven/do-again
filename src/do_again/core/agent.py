@@ -13,7 +13,7 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
-from .executor import MacOperatorExecutor
+from .executor import LocalExecutor
 from .schema import (
     OperatorError,
     atomic_json,
@@ -40,16 +40,16 @@ class Agent:
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
-        self.executor = MacOperatorExecutor(
+        self.executor = LocalExecutor(
             repo=self.repo,
             policy_path=self.policy_path,
             state_dir=self.state_dir,
         )
         self.requests_dir = (
-            self.control_worktree / "automation/agent_relay/requests"
+            self.control_worktree / "automation/do_again/requests"
         )
         self.receipts_dir = (
-            self.control_worktree / "automation/agent_relay/receipts"
+            self.control_worktree / "automation/do_again/receipts"
         )
         self.ledger_dir = self.state_dir / "ledger"
         self.stop_requested = False
@@ -125,16 +125,16 @@ class Agent:
 
     def publish_status(self, state: str, **extra: Any) -> None:
         self.publish_json(
-            Path("automation/agent_relay/agent_status.json"),
+            Path("automation/do_again/agent_status.json"),
             self.status_payload(state, **extra),
-            f"Mac operator {state}",
+            f"Do Again {state}",
         )
 
     def ledger_path(self, request_id: str) -> Path:
         return self.ledger_dir / f"{request_id}.json"
 
     def receipt_relative(self, request_id: str) -> Path:
-        return Path(f"automation/agent_relay/receipts/{request_id}.json")
+        return Path(f"automation/do_again/receipts/{request_id}.json")
 
     def receipt_exists(self, request_id: str) -> bool:
         return (self.control_worktree / self.receipt_relative(request_id)).is_file()
@@ -196,14 +196,15 @@ class Agent:
         self.publish_json(
             self.receipt_relative(request_id),
             receipt,
-            f"Mac operator receipt {request_id}: {receipt['state']}",
+            f"Do Again receipt {request_id}: {receipt['state']}",
         )
 
     def schedule_self_restart(self) -> None:
         label = str(
-            self.policy.get("agent_launchd_label", "com.steventran.mac-operator")
+            self.policy.get("agent_launchd_label", "io.github.tran-steven.do-again")
         ).strip()
-        if not label.startswith("com.steventran."):
+        prefixes = tuple(str(value) for value in self.policy.get("launchctl_label_prefixes", []))
+        if not prefixes or not label.startswith(prefixes):
             raise OperatorError("agent launchd label is not approved")
         target = f"gui/{os.getuid()}/{label}"
         subprocess.Popen(
@@ -342,7 +343,7 @@ class Agent:
         try:
             self.publish_status("ready")
         except Exception as exc:
-            print(f"mac-operator initial status publish failed: {exc}", file=sys.stderr, flush=True)
+            print(f"do-again initial status publish failed: {exc}", file=sys.stderr, flush=True)
         while not self.stop_requested:
             try:
                 self.sync()
@@ -357,7 +358,7 @@ class Agent:
                 if not did_work:
                     time.sleep(self.poll_seconds)
             except Exception as exc:
-                print(f"mac-operator loop error: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+                print(f"do-again loop error: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 if once:
                     return 1
                 time.sleep(max(3.0, self.poll_seconds))

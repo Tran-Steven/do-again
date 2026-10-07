@@ -9,8 +9,8 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_relay.core.executor import MacOperatorExecutor
-from agent_relay.core.schema import OperatorError, atomic_json, utc_now, validate_request
+from do_again.core.executor import LocalExecutor
+from do_again.core.schema import OperatorError, atomic_json, utc_now, validate_request
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,11 +20,11 @@ def git(repo: Path, *args: str) -> None:
 
 
 def load_agent_module():
-    from agent_relay.core import agent
+    from do_again.core import agent
     return agent
 
 
-class MacOperatorTests(unittest.TestCase):
+class ExecutorTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -77,7 +77,7 @@ class MacOperatorTests(unittest.TestCase):
                 "max_inline_artifact_bytes": 450000,
                 "max_screenshot_width": 1440,
                 "screenshot_jpeg_quality": 55,
-                "agent_launchd_label": "com.steventran.mac-operator",
+                "agent_launchd_label": "io.github.tran-steven.do-again",
                 "allowed_operations": [
                     "status",
                     "read_file",
@@ -111,13 +111,13 @@ class MacOperatorTests(unittest.TestCase):
                 ],
                 "git_allowed_subcommands": ["status", "show", "diff", "rev-parse"],
                 "launchctl_allowed_subcommands": ["print", "kickstart"],
-                "launchctl_label_prefixes": ["com.steventran."],
+                "launchctl_label_prefixes": ["io.github.tran-steven."],
                 "process_signal_allowlist": ["TERM", "KILL"],
                 "python_allowed_modules": ["unittest", "py_compile"],
                 "hard_denied_binaries": ["sudo", "rm", "dd", "docker"],
             },
         )
-        self.executor = MacOperatorExecutor(
+        self.executor = LocalExecutor(
             repo=self.repo,
             policy_path=self.policy,
             state_dir=self.state,
@@ -529,7 +529,7 @@ class MacOperatorTests(unittest.TestCase):
             },
         )
         snapshot = self.executor.authority_snapshot()
-        with patch("agent_relay.core.executor.Path.home", return_value=home), \
+        with patch("do_again.core.executor.Path.home", return_value=home), \
              patch.object(self.executor, "authority_snapshot", return_value=snapshot), \
              patch.object(self.executor, "_capture") as capture:
             capture.return_value = {"returncode": 0, "stdout": "", "stderr": ""}
