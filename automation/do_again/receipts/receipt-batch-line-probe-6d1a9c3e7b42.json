@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:07:12.362544+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "509c2b70ce57379593bebf228ccce54811954ff164a401f662e366e7c2a0d95b",
+  "request_id": "receipt-batch-line-probe-6d1a9c3e7b42",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "509c2b70ce57379593bebf228ccce54811954ff164a401f662e366e7c2a0d95b",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-line-probe-6d1a9c3e7b42/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.13,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 196,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-line-probe-6d1a9c3e7b42/script.py",
+      "script_sha256": "853e48a9ef7b88efac0d282b53d262888a636b2c1186bc82bde1565cf822247c",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "1265:         return send_message(\n1266:             target,\n1267:             message,\n1268:             timeout=180.0,\n1269:             wait_for_response=False,\n1270:         )\n1271: \n1272: \n1273: @_project_operation\n1274: def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any]:\n1275:     if not receipts:\n1276:         return {\"response\": \"nothing_to_deliver\", \"chat_url\": \"\"}\n1277: \n1278:     record = project_record(repo)\n1279:     chat_url = str(record.get(\"chat_url\") or \"\")\n1280:     if not chat_url:\n1281:         raise BrowserError(\"project has no bound automation chat; run do-again setup\")\n1282: \n1283:     rows = []\n1284:     ids = []\n1285:     for receipt in receipts:\n1286:         request_id = str(receipt.get(\"request_id\") or \"\")\n1287:         state = str(receipt.get(\"state\") or \"\")\n1288:         ids.append(request_id)\n1289:         rows.append(\n1290:             f\"- {request_id} state={state} path=automation/do_again/receipts/{request_id}.json\"\n1291:         )\n1292: \n1293:     batch_marker = \"DO_AGAIN_RECEIPTS_READY request_ids=\" + \",\".join(ids)\n1294:     message = (\n1295:         batch_marker\n1296:         + \". Inspect these receipts on \"\n1297:         + str(record.get(\"control_branch\", \"operator-control\"))\n1298:         + \" in order, continue the existing goal once across the batch, and use another scoped \"\n1299:           \"Do Again request only if more local work is needed:\n1300: \"\n1301:         + \"\n1302: \".join(rows)\n1303:     )\n1304: \n1305:     status = ensure_browser_running(verify_auth=True)\n1306:     port = int(status[\"port\"])\n1307:     target = _find_chatgpt_target(port, chat_url)\n1308:     if target is None:\n1309:         target = cdp.create_target(port, chat_url, background=True)\n1310: \n1311:     warning = _context_limit_warning(target)\n1312:     if warning:\n1313:         if _assistant_snapshot(target).get(\"busy\"):\n1314:             raise BrowserError(\n1315:                 \"context limit detected while ChatGPT is still busy; retrying later\"\n1316:             )\n1317:         target, record = _rollover_project_chat(\n1318:             repo,\n1319:             record,\n1320:             port=port,\n1321:             old_target=target,\n1322:         )\n1323: \n1324:     target, _ = wait_for_authenticated(\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:07:11.912883+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
