@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:7074:1791396583:91c6b4930212",
+  "claimed_at_utc": "2026-10-07T18:15:40.758356+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 7074,
+  "request_fingerprint": "ed69ed8340e093c47c7a2e9781f2ed9b4410073e27632bb2581f9936ec929d60",
+  "request_id": "release-030-142171eef840",
+  "schema_version": 1
+}
