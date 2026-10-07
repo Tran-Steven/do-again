@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "duplicate-dedupe-jsfix2-6f0a9c2d1b47",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T20:01:30.000000+00:00",
+  "expires_at_utc": "2026-10-07T20:31:30.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nruntime = Path(\"src/do_again/browser/runtime.py\")\ntext = runtime.read_text()\n\nstart = text.index(\"def _page_contains(\")\nend = text.index(\"\\n\\ndef _context_limit_warning\", start)\n\nreplacement = '''def _page_contains(target: cdp.Target, text: str) -> bool:\n    needle = json.dumps(text)\n    expression = (\n        \"(() => {\" + _MESSAGE_NODES_JS + r\"\"\"\nconst needle = \"\"\" + needle + r\"\"\";\nconst users = messageNodes('user');\nif (users.some(el => (el.innerText || el.textContent || '').includes(needle))) return true;\nconst conversation = document.querySelector('[aria-label=\"Conversation\"]') || document.body;\nif (!conversation) return false;\nconst raw = String(conversation.innerText || conversation.textContent || '');\nreturn raw.includes('You said:' + String.fromCharCode(10) + needle);\n})()\"\"\"\n    )\n    return bool(cdp.evaluate(target, expression, timeout=10.0))\n'''\n\nruntime.write_text(text[:start] + replacement + text[end:])\n\nsubprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_browser\"], check=True)\nsubprocess.run([\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"], check=True)\nsubprocess.run([\"git\", \"add\", str(runtime)], check=True)\nsubprocess.run([\"git\", \"commit\", \"-m\", \"Fix live receipt dedupe fallback\"], check=True)\nsubprocess.run([\"git\", \"push\", \"origin\", \"main\"], check=True)\nprint(subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip())\n"
+  },
+  "expected": {
+    "repo_head": "9f23e3d4f6467662ae735e113e6d2743828249dc"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
