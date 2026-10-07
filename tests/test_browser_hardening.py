@@ -154,6 +154,23 @@ class BrowserHardeningTests(unittest.TestCase):
                 browser.ensure_browser_running()
         launch.assert_not_called()
 
+    def test_headless_launch_failure_automatically_uses_background(self):
+        with patch.object(browser, "browser_status", side_effect=[{"running": False}, {"running": True, "port": 9223, "mode": "background"}]), patch.object(browser, "stop_browser"), patch.object(browser, "launch_browser", side_effect=[browser.BrowserError("headless startup failed"), {"port": 9223}]) as launch:
+            status = browser.ensure_browser_running(verify_auth=False)
+        self.assertEqual(status["mode"], "background")
+        self.assertEqual([call.args[0] for call in launch.call_args_list], ["headless", "background"])
+        self.assertEqual(browser.load_config()["resolved_mode"], "background")
+
+    def test_background_network_failure_does_not_mark_auth_expired(self):
+        config = browser.load_config()
+        config.update(authenticated=True, resolved_mode="background")
+        browser.save_config(config)
+        with patch.object(browser, "browser_status", return_value={"running": True, "port": 9223, "mode": "background"}), patch.object(browser, "wait_for_authenticated", side_effect=browser.BrowserError("network unavailable")):
+            with self.assertRaises(browser.BrowserError):
+                browser.ensure_browser_running()
+        self.assertTrue(browser.load_config()["authenticated"])
+        self.assertFalse(browser.load_config().get("auth_required", False))
+
     def test_repeated_setup_uses_authenticated_runtime_without_visible_launch(self):
         config = browser.load_config()
         config["authenticated"] = True
@@ -181,6 +198,15 @@ class BrowserHardeningTests(unittest.TestCase):
         record = self.bind()
         new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
         with patch.object(cdp, "evaluate", return_value=[]), patch.object(cdp, "create_target", return_value=new), patch.object(browser, "wait_for_authenticated", return_value=(new, {})), patch.object(browser, "send_message", return_value={"response": "unready", "chat_url": "https://chatgpt.com/c/new"}), patch.object(cdp, "close_target") as close:
+            with self.assertRaises(browser.BrowserError):
+                browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
+        self.assertEqual(browser.project_record(self.repo)["chat_url"], self.target.url)
+        close.assert_called_once_with(9223, "new")
+
+    def test_rollover_transport_failure_closes_unbound_target(self):
+        record = self.bind()
+        new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
+        with patch.object(cdp, "evaluate", return_value=[]), patch.object(cdp, "create_target", return_value=new), patch.object(browser, "wait_for_authenticated", return_value=(new, {})), patch.object(browser, "send_message", side_effect=browser.BrowserError("connection lost")), patch.object(cdp, "close_target") as close:
             with self.assertRaises(browser.BrowserError):
                 browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
         self.assertEqual(browser.project_record(self.repo)["chat_url"], self.target.url)

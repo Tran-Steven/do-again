@@ -589,7 +589,16 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
         if verify_auth and config.get("auth_required"):
             raise BrowserAuthRequired("ChatGPT authentication requires interaction; run do-again setup")
         if not status["running"]:
-            launch_browser(_normal_mode(config), config=config)
+            mode = _normal_mode(config)
+            try:
+                launch_browser(mode, config=config)
+            except BrowserError:
+                if mode != "headless" or config.get("preferred_mode") != "auto":
+                    raise
+                stop_browser(force=True)
+                launch_browser("background", config=config)
+                config["resolved_mode"] = "background"
+                save_config(config)
         status = browser_status(verify_session=False)
 
     if not verify_auth:
@@ -598,7 +607,7 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
     port = int(status["port"])
     try:
         _, probe = wait_for_authenticated(port, chat_url=CHATGPT_URL, timeout=20.0)
-    except BrowserAuthRequired as headless_exc:
+    except BrowserError as headless_exc:
         config = load_config()
         current_mode = str(status.get("mode") or "")
         preferred = str(config.get("preferred_mode") or "auto")
@@ -616,18 +625,19 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
                     chat_url=CHATGPT_URL,
                     timeout=30.0,
                 )
-            except BrowserAuthRequired:
+            except BrowserAuthRequired as background_exc:
                 config["authenticated"] = False
                 config["auth_required"] = True
                 save_config(config)
-                raise headless_exc
+                raise background_exc from headless_exc
             config["resolved_mode"] = "background"
             save_config(config)
             status = browser_status(verify_session=False)
         else:
-            config["authenticated"] = False
-            config["auth_required"] = True
-            save_config(config)
+            if isinstance(headless_exc, BrowserAuthRequired):
+                config["authenticated"] = False
+                config["auth_required"] = True
+                save_config(config)
             raise
 
     config = load_config()
@@ -925,8 +935,6 @@ def _rollover_project_chat(
     if not remote_url:
         raise BrowserError("project browser record is missing remote_url")
 
-    target = cdp.create_target(port, CHATGPT_URL, background=True)
-    target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
     handoff = []
     if old_target is not None:
         try:
@@ -945,15 +953,8 @@ return messageNodes().slice(-8).map(el => ({role: el.getAttribute('data-message-
     if isinstance(handoff, list) and handoff:
         prompt += "\nRecent conversation excerpts for continuity; verify work against Git and receipts:\n" + json.dumps(handoff, ensure_ascii=False)
 
-    result = send_message(target, prompt, timeout=180.0)
-    if "DO_AGAIN_PROJECT_READY" not in result.get("response", ""):
-        cdp.close_target(port, target.id)
-        raise BrowserError("ChatGPT rollover bootstrap did not return the expected readiness marker")
-
-    new_url = str(result.get("chat_url") or "")
-    if "/c/" not in new_url:
-        cdp.close_target(port, target.id)
-        raise BrowserError(f"ChatGPT rollover did not bind a conversation URL: {new_url}")
+    target, result = _bootstrap_new_chat(port, prompt)
+    new_url = result["chat_url"]
 
     updated = register_project(
         repo,
@@ -1026,6 +1027,21 @@ When development work is requested in this conversation, use the Do Again reques
 Reply exactly: DO_AGAIN_PROJECT_READY"""
 
 
+def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, Any]]:
+    target = cdp.create_target(port, CHATGPT_URL, background=True)
+    try:
+        target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
+        result = send_message(target, prompt, timeout=180.0)
+        if "DO_AGAIN_PROJECT_READY" not in result.get("response", ""):
+            raise BrowserError("ChatGPT bootstrap did not return the expected readiness marker")
+        if "/c/" not in str(result.get("chat_url") or ""):
+            raise BrowserError("ChatGPT bootstrap did not bind a conversation URL")
+        return target, result
+    except Exception:
+        cdp.close_target(port, target.id)
+        raise
+
+
 @_project_operation
 def ensure_project_chat(
     repo: Path,
@@ -1046,21 +1062,8 @@ def ensure_project_chat(
         wait_for_authenticated(port, chat_url=chat_url, timeout=30.0, target=target)
         return record
 
-    target = cdp.create_target(port, CHATGPT_URL, background=True)
-    target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
-    result = send_message(
-        target,
-        _bootstrap_prompt(repo, remote_url, control_branch),
-        timeout=180.0,
-    )
-    response = result["response"]
-    if "DO_AGAIN_PROJECT_READY" not in response:
-        raise BrowserError("ChatGPT project bootstrap did not return the expected readiness marker")
+    _, result = _bootstrap_new_chat(port, _bootstrap_prompt(repo, remote_url, control_branch))
     chat_url = result["chat_url"]
-    if "/c/" not in chat_url:
-        raise BrowserError(
-            f"ChatGPT project bootstrap did not bind a conversation URL: {chat_url}"
-        )
     return register_project(
         repo,
         remote_url=remote_url,
