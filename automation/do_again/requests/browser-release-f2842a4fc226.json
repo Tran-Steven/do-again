@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "browser-release-f2842a4fc226",
+  "operation": "run_tests",
+  "issued_at_utc": "2026-10-07T17:43:42.719471+00:00",
+  "expires_at_utc": "2026-10-07T17:58:42.719471+00:00",
+  "args": {
+    "discover": true,
+    "start_directory": "tests"
+  },
+  "expected": {
+    "repo_head": "6bc66295e052b62400844eb1ec158ab0538b4227"
+  },
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
