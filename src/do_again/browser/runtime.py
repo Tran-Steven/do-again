@@ -761,9 +761,19 @@ const messageNodes = role => {
   const selector = role
     ? `[data-message-author-role="${role}"],[data-conversation-role="${role}"]`
     : '[data-message-author-role],[data-conversation-role]';
-  return Array.from(new Set(Array.from(document.querySelectorAll(selector)).map(el =>
+  const nodes = Array.from(new Set(Array.from(document.querySelectorAll(selector)).map(el =>
     el.hasAttribute('data-conversation-role') ? el.parentElement : el
   )));
+  for (const heading of document.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+    const label = (heading.innerText || heading.textContent || '').trim();
+    const headingRole = label === 'You said:' ? 'user' : label === 'ChatGPT said:' ? 'assistant' : '';
+    if (!headingRole || (role && headingRole !== role)) continue;
+    const unit = heading.closest('[data-testid^="conversation-turn-"]') || heading.parentElement;
+    if (!unit || unit.querySelector('[data-message-author-role],[data-conversation-role]')) continue;
+    if (heading.closest('[data-message-author-role],[data-conversation-role]')) continue;
+    nodes.push(unit);
+  }
+  return Array.from(new Set(nodes));
 };
 """
 
@@ -908,7 +918,10 @@ if (users.some(el => (el.innerText || el.textContent || '').includes(needle))) r
 const conversation = document.querySelector('[aria-label="Conversation"]') || document.body;
 if (!conversation) return false;
 const raw = String(conversation.innerText || conversation.textContent || '');
-return raw.includes('You said:' + String.fromCharCode(10) + needle);
+const lines = raw.split(String.fromCharCode(10)).map(line => line.trim()).filter(Boolean);
+return lines.some((line, index) =>
+  line === 'You said:' && (lines[index + 1] || '').startsWith(needle)
+);
 })()"""
     )
     return bool(cdp.evaluate(target, expression, timeout=10.0))

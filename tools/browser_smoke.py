@@ -17,21 +17,27 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         modern = self.path.startswith("/modern")
         legacy = self.path.startswith("/legacy")
+        labeled = self.path.startswith("/labeled")
         body = b"<!doctype html><title>Do Again Browser Smoke</title><div>ready</div>"
-        if modern or legacy:
+        if modern or legacy or labeled:
             body = ("""<!doctype html><title>Do Again Browser Smoke</title>
 <main id="messages"></main>
 <div contenteditable="true" role="textbox" aria-label="Ask ChatGPT" style="width:600px;min-height:30px"></div>
 <button aria-label="Send">Send</button>
 <script>
 const modern = """ + str(modern).lower() + """;
+const labeled = """ + str(labeled).lower() + """;
 const editor = document.querySelector('[contenteditable]');
 const addMessage = (role, text) => {
   const node = document.createElement('div');
-  if (modern) {
+  if (labeled) {
+    const heading = document.createElement('h4');
+    heading.textContent = role === 'user' ? 'You said:' : 'ChatGPT said:';
+    node.append(heading);
+  } else if (modern) {
     const heading = document.createElement('h4');
     heading.dataset.conversationRole = role;
-    heading.textContent = role;
+    heading.textContent = role === 'user' ? 'You said:' : 'ChatGPT said:';
     node.append(heading);
   } else {
     node.dataset.messageAuthorRole = role;
@@ -154,15 +160,17 @@ def main() -> int:
             if persisted != "yes":
                 raise RuntimeError("could not write persistent browser storage")
 
-            for variant in ("legacy", "modern"):
+            for variant in ("legacy", "modern", "labeled"):
                 fixture = cdp.create_target(int(first["port"]), url + variant, background=True)
                 wait_title(cdp, fixture, "Do Again Browser Smoke")
                 prompt = "DO_AGAIN_RECEIPT_READY request_id=smoke state=succeeded. Quoted: maximum length for this conversation."
                 result = send_message(fixture, prompt, timeout=15.0)
-                if "DO_AGAIN_BROWSER_OK" not in result.get("response", ""):
-                    raise RuntimeError(f"{variant} composer/response fixture failed")
-                if not _page_contains(fixture, "request_id=smoke state="):
+                if result.get("response") != "DO_AGAIN_BROWSER_OK":
+                    raise RuntimeError(f"{variant} composer/response fixture failed: {result!r}")
+                if not _page_contains(fixture, "DO_AGAIN_RECEIPT_READY request_id=smoke state="):
                     raise RuntimeError(f"{variant} receipt acknowledgement was not detected")
+                if _page_contains(fixture, "request_id=not-posted state="):
+                    raise RuntimeError(f"{variant} reported an unposted receipt")
                 if _context_limit_warning(fixture):
                     raise RuntimeError(f"{variant} quoted limit text caused a false rollover")
                 cdp.evaluate(fixture, "const alert = document.createElement('div'); alert.setAttribute('role','alert'); alert.textContent='maximum length for this conversation'; document.body.append(alert)")
