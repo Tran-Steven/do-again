@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:58:25.855191+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "4632f583e55d60a6d28ef40db843ec935f755ad848b815d464042f453b4a2297",
+  "request_id": "selfdev-verify-import-fix-20261007-24",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "4632f583e55d60a6d28ef40db843ec935f755ad848b815d464042f453b4a2297",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-verify-import-fix-20261007-24/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 12.476,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1885,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-verify-import-fix-20261007-24/script.py",
+      "script_sha256": "74e358fafa77130367b4a1f987f75378f9e4dc59cd0fa01427e3048638855bbe",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpbguuzdtq/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpsj3xm6ly/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpsj3xm6ly/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpsj3xm6ly/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpsj3xm6ly/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpsj3xm6ly/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n.............E\n======================================================================\nERROR: test_verify_reports_setup_ok_only_after_matching_success_receipt (tests.test_cli.CliOnboardingTests.test_verify_reports_setup_ok_only_after_matching_success_receipt)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_cli.py\", line 194, in test_verify_reports_setup_ok_only_after_matching_success_receipt\n    patch(\"do_again.cli.cdp.create_target\", return_value=object()),\n    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 1487, in __enter__\n    self.target = self.getter()\n                  ~~~~~~~~~~~^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/pkgutil.py\", line 528, in resolve_name\n    result = getattr(result, p)\nAttributeError: module 'do_again.cli' has no attribute 'cdp'\n\n----------------------------------------------------------------------\nRan 14 tests in 11.832s\n\nFAILED (errors=1)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:58:13.052119+00:00",
+  "state": "failed",
+  "traceback": null
+}
