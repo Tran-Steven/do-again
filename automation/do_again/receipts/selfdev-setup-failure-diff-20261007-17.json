@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:52:44.201647+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "43da342d38cc5f81f58184c9e1f58ae34102bb696b620845c2efc4ff0cceea40",
+  "request_id": "selfdev-setup-failure-diff-20261007-17",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "43da342d38cc5f81f58184c9e1f58ae34102bb696b620845c2efc4ff0cceea40",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-setup-failure-diff-20261007-17/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.716,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 478,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-setup-failure-diff-20261007-17/script.py",
+      "script_sha256": "71494aacdbfe7902678067a22df347c2e310d6f7a01367ed2889f9cf77126ef3",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=f108fa2765a922f800c9cc87e99eab11b629839e\nstatus:\n M src/do_again/cli.py\n\ndiff:\ndiff --git a/src/do_again/cli.py b/src/do_again/cli.py\nindex 8905462..54b5f6f 100644\n--- a/src/do_again/cli.py\n+++ b/src/do_again/cli.py\n@@ -249,7 +249,8 @@ def setup_project(\n         print(f\"do-again: setup failed: {exc}\", file=sys.stderr)\n         return 1\n \n-    print(\"SETUP_OK\")\n+    print(\"SETUP_CONFIGURED\")\n+    print(\"verification=not_run\")\n     print(f\"repo={repo}\")\n     print(f\"remote={layout.remote}\")\n     print(f\"remote_url={remote_url}\")\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:52:43.033350+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
