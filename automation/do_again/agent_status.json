@@ -1,0 +1,12 @@
+{
+  "control_branch": "operator-control",
+  "control_worktree": "/Users/steventran/.do_again/dogfood-do-again/control",
+  "host": "Stevens-Mac-mini.local",
+  "instance_id": "Stevens-Mac-mini.local:56984:1791382766",
+  "pid": 56984,
+  "repo": "/Users/steventran/do-again",
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:19:26.386665+00:00",
+  "state": "ready",
+  "updated_at_utc": "2026-10-07T14:19:26.387290+00:00"
+}
