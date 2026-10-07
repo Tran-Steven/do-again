@@ -1,0 +1,59 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:83817:1791383724",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:49:06.358502+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "f635afe5278fd064102869b8d7e855c48dc4218838596e84e8e35050eaa8d0fc",
+  "request_id": "selfhost-crossplatform-verify-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "f635afe5278fd064102869b8d7e855c48dc4218838596e84e8e35050eaa8d0fc",
+    "result": {
+      "argv": [
+        "python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-crossplatform-verify-001/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 32.983,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 105,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-crossplatform-verify-001/script.py",
+      "script_sha256": "90e0ac9f9630e1cf97f24c071e292cd50de449a3beab4b098f40e917e51c691f",
+      "stderr": "test_ambiguous_started_request_is_not_replayed (test_executor.ExecutorTests.test_ambiguous_started_request_is_not_replayed) ... ok\ntest_artifact_get_rejects_outside_root (test_executor.ExecutorTests.test_artifact_get_rejects_outside_root) ... ok\ntest_artifact_put_and_get_round_trip (test_executor.ExecutorTests.test_artifact_put_and_get_round_trip) ... ok\ntest_artifact_put_rejects_oversize (test_executor.ExecutorTests.test_artifact_put_rejects_oversize) ... ok\ntest_authority_fence_mismatch_blocks_execution (test_executor.ExecutorTests.test_authority_fence_mismatch_blocks_execution) ... ok\ntest_authority_mutation_rejects_dirty_repository (test_executor.ExecutorTests.test_authority_mutation_rejects_dirty_repository) ... ok\ntest_bundle_deploy_reconciles_local_main_after_successful_retarget (test_executor.ExecutorTests.test_bundle_deploy_reconciles_local_main_after_successful_retarget) ... ok\ntest_bundle_deploy_requires_stop (test_executor.ExecutorTests.test_bundle_deploy_requires_stop) ... ok\ntest_capture_screenshot_packages_compressed_artifact (test_executor.ExecutorTests.test_capture_screenshot_packages_compressed_artifact) ... ok\ntest_extended_exec_rejects_denied_binary (test_executor.ExecutorTests.test_extended_exec_rejects_denied_binary) ... ok\ntest_extended_exec_rejects_destructive_git (test_executor.ExecutorTests.test_extended_exec_rejects_destructive_git) ... ok\ntest_extended_exec_rejects_file_outside_approved_roots (test_executor.ExecutorTests.test_extended_exec_rejects_file_outside_approved_roots) ... ok\ntest_extended_exec_rejects_find_exec_and_delete (test_executor.ExecutorTests.test_extended_exec_rejects_find_exec_and_delete) ... ok\ntest_extended_exec_rejects_inline_python (test_executor.ExecutorTests.test_extended_exec_rejects_inline_python) ... ok\ntest_extended_exec_rejects_inline_shell (test_executor.ExecutorTests.test_extended_exec_rejects_inline_shell) ... ok\ntest_extended_exec_rejects_sed_in_place (test_executor.ExecutorTests.test_extended_exec_rejects_sed_in_place) ... ok\ntest_fast_forward_clean_main_to_origin_reconciles_remote_publication (test_executor.ExecutorTests.test_fast_forward_clean_main_to_origin_reconciles_remote_publication) ... ok\ntest_kill_requires_process_identity_guard (test_executor.ExecutorTests.test_kill_requires_process_identity_guard) ... ok\ntest_launcher_materializes_inline_json (test_executor.ExecutorTests.test_launcher_materializes_inline_json) ... ok\ntest_process_rows_support_commands_with_spaces (test_executor.ExecutorTests.test_process_rows_support_commands_with_spaces) ... ok\ntest_repo_script_executes_trusted_repository_script (test_executor.ExecutorTests.test_repo_script_executes_trusted_repository_script) ... ok\ntest_request_ttl_is_bounded (test_executor.ExecutorTests.test_request_ttl_is_bounded) ... ok\ntest_scratch_bash_executes (test_executor.ExecutorTests.test_scratch_bash_executes) ... ok\ntest_scratch_python_executes_and_records_hash (test_executor.ExecutorTests.test_scratch_python_executes_and_records_hash) ... ok\ntest_scratch_rejects_empty_content (test_executor.ExecutorTests.test_scratch_rejects_empty_content) ... ok\ntest_scratch_rejects_invalid_language (test_executor.ExecutorTests.test_scratch_rejects_invalid_language) ... ok\ntest_scratch_rejects_oversized_content (test_executor.ExecutorTests.test_scratch_rejects_oversized_content) ... ok\ntest_self_update_requires_stop (test_executor.ExecutorTests.test_self_update_requires_stop) ... ok\ntest_self_update_stale_local_run_requires_explicit_reconcile_mode (test_executor.ExecutorTests.test_self_update_stale_local_run_requires_explicit_reconcile_mode) ... ok\ntest_session_intake_requires_generation_and_revision_fences (test_executor.ExecutorTests.test_session_intake_requires_generation_and_revision_fences) ... ok\ntest_session_intake_requires_repo_head_fence (test_executor.ExecutorTests.test_session_intake_requires_repo_head_fence) ... ok\ntest_stale_local_self_update_rejects_target_run_even_with_claimed_stop (test_executor.ExecutorTests.test_stale_local_self_update_rejects_target_run_even_with_claimed_stop) ... ok\ntest_stale_local_self_update_target_requires_exact_coherent_stop_proof (test_executor.ExecutorTests.test_stale_local_self_update_target_requires_exact_coherent_stop_proof) ... ok\ntest_successful_self_update_schedules_restart_after_receipt (test_executor.ExecutorTests.test_successful_self_update_schedules_restart_after_receipt) ... ok\ntest_linux (test_platforms.PlatformDetectionTests.test_linux) ... ok\ntest_macos (test_platforms.PlatformDetectionTests.test_macos) ... ok\ntest_windows (test_platforms.PlatformDetectionTests.test_windows) ... ok\ntest_background_lifecycle_rejects_unknown_platform (test_service.ServiceRuntimeTests.test_background_lifecycle_rejects_unknown_platform) ... ok\ntest_default_policy_is_packaged (test_service.ServiceRuntimeTests.test_default_policy_is_packaged) ... ok\ntest_launchd_plist_uses_copied_runtime (test_service.ServiceRuntimeTests.test_launchd_plist_uses_copied_runtime) ... ok\ntest_linux_status_reports_installed_running (test_service.ServiceRuntimeTests.test_linux_status_reports_installed_running) ... ok\ntest_run_error_wraps_missing_binary (test_service.ServiceRuntimeTests.test_run_error_wraps_missing_binary) ... ok\ntest_runtime_layout_is_stable_and_project_scoped (test_service.ServiceRuntimeTests.test_runtime_layout_is_stable_and_project_scoped) ... ok\ntest_systemd_unit_uses_user_scoped_copied_runtime (test_service.ServiceRuntimeTests.test_systemd_unit_uses_user_scoped_copied_runtime) ... ok\ntest_windows_launcher_uses_copied_runtime (test_service.ServiceRuntimeTests.test_windows_launcher_uses_copied_runtime) ... ok\ntest_windows_status_reports_task_state (test_service.ServiceRuntimeTests.test_windows_status_reports_task_state) ... ok\n\n----------------------------------------------------------------------\nRan 46 tests in 22.132s\n\nOK\n* Creating isolated environment: venv+pip...\n* Installing packages in isolated environment:\n  - hatchling\n* Getting build dependencies for sdist...\n* Installed build dependency versions:\n  - hatchling==1.32.4\n* Building sdist...\n* Building wheel from sdist\n* Creating isolated environment: venv+pip...\n* Installing packages in isolated environment:\n  - hatchling\n* Getting build dependencies for wheel...\n* Installed build dependency versions:\n  - hatchling==1.32.4\n* Building wheel...\nnpm notice\nnpm notice 📦  do-again@0.2.0\nnpm notice Tarball Contents\nnpm notice 1.1kB LICENSE\nnpm notice 4.1kB README.md\nnpm notice 2.6kB bin/do-again.js\nnpm notice 931B package.json\nnpm notice 0B src/do_again/__init__.py\nnpm notice 3.8kB src/do_again/cli.py\nnpm notice 0B src/do_again/core/__init__.py\nnpm notice 14.5kB src/do_again/core/agent.py\nnpm notice 55.5kB src/do_again/core/executor.py\nnpm notice 3.9kB src/do_again/core/schema.py\nnpm notice 2.0kB src/do_again/default_policy.json\nnpm notice 0B src/do_again/platforms/__init__.py\nnpm notice 175B src/do_again/platforms/base.py\nnpm notice 593B src/do_again/platforms/detect.py\nnpm notice 187B src/do_again/platforms/linux.py\nnpm notice 183B src/do_again/platforms/macos.py\nnpm notice 89B src/do_again/platforms/windows.py\nnpm notice 272B src/do_again/service/__init__.py\nnpm notice 25.1kB src/do_again/service/runtime.py\nnpm notice Tarball Details\nnpm notice name: do-again\nnpm notice version: 0.2.0\nnpm notice filename: do-again-0.2.0.tgz\nnpm notice package size: 26.2 kB\nnpm notice unpacked size: 115.0 kB\nnpm notice shasum: 5fbf655760adaf2c88b059203060649c5b82e37c\nnpm notice integrity: sha512-wDklkFw8MIruG[...]Rqv17o2JgJ7kQ==\nnpm notice total files: 19\nnpm notice\n",
+      "stderr_truncated": false,
+      "stdout": "+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m unittest discover -s tests -v\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 tools/check_release_version.py\nrelease_version=0.2.0\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m compileall -q src/do_again\n+ git diff --check\n+ npm ci\n\nup to date, audited 1 package in 733ms\n\nfound 0 vulnerabilities\n+ npm test\n\n> do-again@0.2.0 test\n> node --test npm-tests/*.test.js\n\n✔ npm launcher runs the bundled Python CLI (487.514583ms)\n✔ npm launcher reports a missing configured Python cleanly (105.752ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 731.760959\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m build\nSuccessfully built do_again-0.2.0.tar.gz and do_again-0.2.0-py3-none-any.whl\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m twine check /Users/steventran/do-again/dist/do_again-0.2.0-py3-none-any.whl /Users/steventran/do-again/dist/do_again-0.2.0.tar.gz\nChecking /Users/steventran/do-again/dist/do_again-0.2.0-py3-none-any.whl: \u001b[32mPASSED\u001b[0m\nChecking /Users/steventran/do-again/dist/do_again-0.2.0.tar.gz: \u001b[32mPASSED\u001b[0m\ndo-again-0.2.0.tgz\nCROSSPLATFORM_VERIFY_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:48:33.072972+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
