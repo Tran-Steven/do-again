@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "verify-installed-runtime-after-restart-4b8d1c7e5a62",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:46:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T22:16:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nfrom pathlib import Path\n\nruntime_root = Path.home() / \".do_again/projects/41857a676462/runtime\"\ndaemon = runtime_root / \"do_again/service/daemon.py\"\nbrowser = runtime_root / \"do_again/browser/runtime.py\"\n\ndef inspect(path):\n    if not path.exists():\n        return {\"exists\": False}\n    text = path.read_text()\n    return {\n        \"exists\": True,\n        \"has_notify_receipts\": \"notify_receipts\" in text,\n        \"has_batch_limit_20\": \"paths[:20]\" in text,\n        \"has_wait_for_response_false\": \"wait_for_response=False\" in text,\n    }\n\nprint(json.dumps({\n    \"daemon\": inspect(daemon),\n    \"browser\": inspect(browser),\n}, indent=2))\n"
+  },
+  "expected": {
+    "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
