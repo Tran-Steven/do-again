@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-batch-syntaxsafe-2c7e1a9d4b63",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:08:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T21:38:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nruntime = Path(\"src/do_again/browser/runtime.py\")\nlines = runtime.read_text().splitlines()\n\nstart = None\nend = None\nfor i, line in enumerate(lines):\n    if line.strip() == 'message = (' and i > 0 and 'batch_marker' in lines[i - 1]:\n        start = i\n        break\nif start is None:\n    raise SystemExit(\"batch message block start not found\")\n\nfor i in range(start, min(start + 20, len(lines))):\n    if lines[i].strip() == ')' and i > start:\n        end = i + 1\n        break\nif end is None:\n    raise SystemExit(\"batch message block end not found\")\n\nreplacement = [\n    '    newline = chr(10)',\n    '    message = (',\n    '        batch_marker',\n    '        + \". Inspect these receipts on \"',\n    '        + str(record.get(\"control_branch\", \"operator-control\"))',\n    '        + \" in order, continue the existing goal once across the batch, and use another scoped \"',\n    '        + \"Do Again request only if more local work is needed:\"',\n    '        + newline',\n    '        + newline.join(rows)',\n    '    )',\n]\n\nlines[start:end] = replacement\nruntime.write_text(chr(10).join(lines) + chr(10))\n\nsubprocess.run([\n    \"python3\", \"-m\", \"py_compile\",\n    \"src/do_again/browser/runtime.py\",\n    \"src/do_again/service/daemon.py\",\n], check=True)\n\nsubprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\"], check=True)\nsubprocess.run([\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"], check=True)\n\nsubprocess.run([\n    \"git\", \"add\",\n    \"src/do_again/browser/runtime.py\",\n    \"src/do_again/browser/__init__.py\",\n    \"src/do_again/service/daemon.py\",\n    \"tests/test_browser.py\",\n    \"tests/test_daemon.py\",\n], check=True)\n\nsubprocess.run([\"git\", \"commit\", \"-m\", \"Batch browser receipt notifications\"], check=True)\n\npush = subprocess.run([\"git\", \"push\", \"origin\", \"main\"])\nif push.returncode != 0:\n    subprocess.run([\"git\", \"fetch\", \"origin\", \"main\"], check=True)\n    subprocess.run([\"git\", \"rebase\", \"origin/main\"], check=True)\n    subprocess.run([\"python3\", \"-m\", \"py_compile\", \"src/do_again/browser/runtime.py\", \"src/do_again/service/daemon.py\"], check=True)\n    subprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\"], check=True)\n    subprocess.run([\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"], check=True)\n    subprocess.run([\"git\", \"push\", \"origin\", \"main\"], check=True)\n\nprint(\"HEAD=\" + subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip())\nprint(\"STATUS=\")\nprint(subprocess.check_output([\"git\", \"status\", \"--short\"], text=True))\n"
+  },
+  "expected": {
+    "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
