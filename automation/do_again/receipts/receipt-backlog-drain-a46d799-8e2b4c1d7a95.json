@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:57:02.230825+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "8f44a372eebb4f898986d8b391918578c2ec16592f4f9fa514f030c5ed163e7d",
+  "request_id": "receipt-backlog-drain-a46d799-8e2b4c1d7a95",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "8f44a372eebb4f898986d8b391918578c2ec16592f4f9fa514f030c5ed163e7d",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-backlog-drain-a46d799-8e2b4c1d7a95/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 187.025,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 587,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-backlog-drain-a46d799-8e2b4c1d7a95/script.py",
+      "script_sha256": "9c031766c661d38aa80f34a0f53f78d3c4e61ffc410621330f416eb1798db977",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"before_count\": 28,\n  \"before\": [\n    \"delivery-probe-20261007T191948-f194.json\",\n    \"live-e2e-rerun-54bda37e9021.json\",\n    \"live-final-20261007T192139-93cd.json\",\n    \"fingerprint-fix-20261007T192651-b54a.json\",\n    \"fingerprint-live-20261007T192814-c173.json\",\n    \"duplicate-receipt-inspect-4f10b7a9c2d3.json\",\n    \"duplicate-receipt-inspect-2-6a31d8c4f902.json\",\n    \"duplicate-dom-probe-8b2f4c91d7e6.json\",\n    \"duplicate-dedupe-fix-5e7c1a93b4d8.json\",\n    \"duplicate-dedupe-live-verify-1c7a5e92d4b0.json\",\n    \"duplicate-dedupe-jsfix-3b6d7c9e1a20.json\",\n    \"duplicate-dedupe-jsfix2-6f0a9c2d1b47.json\",\n    \"receipt-js-fix-20261007T200403-d826.json\",\n    \"duplicate-dedupe-live-verify2-4a8f2c6e1d93.json\",\n    \"receipt-js-verify-20261007T200625-83e4.json\",\n    \"duplicate-queue-probe-7d2c5a91e4b8.json\",\n    \"receipt-delivery-fastpath-2e7b4c19a6d3.json\",\n    \"receipt-submit-fastpath-9c4d2e7b1a65.json\",\n    \"receipt-submit-fastpath2-5a1d8e3c7b94.json\",\n    \"receipt-local-source-probe-6c2f9a1d8e47.json\",\n    \"receipt-local-diff-probe-2b7e4c9a1d63.json\",\n    \"receipt-fastpath-finalize-4d8a1c7e2b95.json\",\n    \"receipt-fastpath-rebase-7e2c4a91d5b8.json\",\n    \"receipt-backlog-final-drain-3f7a1c9e5b24.json\",\n    \"receipt-drain-resilience-6e4b1a9d2c73.json\",\n    \"receipt-drain-diff-probe-1f6c8a2e4d95.json\",\n    \"receipt-drain-resilience-finalize-8c1e5a3d7b29.json\",\n    \"receipt-drain-transient-only-5b2d8c1e7a94.json\"\n  ],\n  \"delivered\": 3,\n  \"after_count\": 25,\n  \"after\": [\n    \"live-final-20261007T192139-93cd.json\",\n    \"fingerprint-fix-20261007T192651-b54a.json\",\n    \"fingerprint-live-20261007T192814-c173.json\",\n    \"duplicate-receipt-inspect-4f10b7a9c2d3.json\",\n    \"duplicate-receipt-inspect-2-6a31d8c4f902.json\",\n    \"duplicate-dom-probe-8b2f4c91d7e6.json\",\n    \"duplicate-dedupe-fix-5e7c1a93b4d8.json\",\n    \"duplicate-dedupe-live-verify-1c7a5e92d4b0.json\",\n    \"duplicate-dedupe-jsfix-3b6d7c9e1a20.json\",\n    \"duplicate-dedupe-jsfix2-6f0a9c2d1b47.json\",\n    \"receipt-js-fix-20261007T200403-d826.json\",\n    \"duplicate-dedupe-live-verify2-4a8f2c6e1d93.json\",\n    \"receipt-js-verify-20261007T200625-83e4.json\",\n    \"duplicate-queue-probe-7d2c5a91e4b8.json\",\n    \"receipt-delivery-fastpath-2e7b4c19a6d3.json\",\n    \"receipt-submit-fastpath-9c4d2e7b1a65.json\",\n    \"receipt-submit-fastpath2-5a1d8e3c7b94.json\",\n    \"receipt-local-source-probe-6c2f9a1d8e47.json\",\n    \"receipt-local-diff-probe-2b7e4c9a1d63.json\",\n    \"receipt-fastpath-finalize-4d8a1c7e2b95.json\",\n    \"receipt-fastpath-rebase-7e2c4a91d5b8.json\",\n    \"receipt-drain-resilience-6e4b1a9d2c73.json\",\n    \"receipt-drain-diff-probe-1f6c8a2e4d95.json\",\n    \"receipt-drain-resilience-finalize-8c1e5a3d7b29.json\",\n    \"receipt-drain-transient-only-5b2d8c1e7a94.json\"\n  ]\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:53:54.896526+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
