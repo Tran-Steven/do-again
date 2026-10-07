@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:41:31.142592+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "f12c8812584c9256c706eab02b65c16f40df48c2e79aff5c57426216808918c0",
+  "request_id": "receipt-drain-resilience-6e4b1a9d2c73",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "f12c8812584c9256c706eab02b65c16f40df48c2e79aff5c57426216808918c0",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-resilience-6e4b1a9d2c73/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.54,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 3578,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-resilience-6e4b1a9d2c73/script.py",
+      "script_sha256": "508fe124d9eb869ff9a2e0d08bf1aa53d2311755f43f0e65390ec8d9c55b79e7",
+      "stderr": ".E...\n======================================================================\nERROR: test_one_blocked_receipt_does_not_stop_later_delivery (tests.test_daemon.BrowserOutboxTests.test_one_blocked_receipt_does_not_stop_later_delivery)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_daemon.py\", line 69, in test_one_blocked_receipt_does_not_stop_later_delivery\n    delivered = _drain_browser_outbox_locked(repo, state_dir)\n                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nNameError: name '_drain_browser_outbox_locked' is not defined. Did you mean: '_drain_browser_outbox'?\n\n----------------------------------------------------------------------\nRan 5 tests in 0.027s\n\nFAILED (errors=1)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-resilience-6e4b1a9d2c73/script.py\", line 89, in <module>\n    subprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_daemon\"], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'unittest', 'tests.test_daemon']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:41:30.316773+00:00",
+  "state": "failed",
+  "traceback": null
+}
