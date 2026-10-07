@@ -1,0 +1,59 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:83817:1791383724",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:52:30.183959+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "2626feee2ca77c7e99771958984af8b2ac06215495e5e9aaa760fe5c23bea507",
+  "request_id": "selfhost-windows-ci-fix-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6982e06c4832c3b8630a50b29a8270e8ecc91902",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": false,
+      "repo_head": "6982e06c4832c3b8630a50b29a8270e8ecc91902",
+      "revision": null
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "2626feee2ca77c7e99771958984af8b2ac06215495e5e9aaa760fe5c23bea507",
+    "result": {
+      "argv": [
+        "python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-windows-ci-fix-001/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.096,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 99,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-windows-ci-fix-001/script.py",
+      "script_sha256": "a9a8d31272251a8a5f3d29282c7500a7c9c2df1d54bb07748477ae84a9de3d31",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "fixed systemd unit path assertions for Windows CI\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:52:29.767136+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
