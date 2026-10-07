@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "release-030-142171eef840",
+  "operation": "run_tests",
+  "issued_at_utc": "2026-10-07T18:15:34.420113+00:00",
+  "expires_at_utc": "2026-10-07T18:30:34.420113+00:00",
+  "args": {
+    "discover": true,
+    "start_directory": "tests"
+  },
+  "expected": {
+    "repo_head": "cce9c7a78858e799217097ef9a02b2735de05a2e"
+  },
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
