@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-batch-hardening-testfix-1d7a3c9e5b62",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:21:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T21:51:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\ntests = Path(\"tests/test_browser_hardening.py\")\ntext = tests.read_text()\n\nold = '''        with patch.object(daemon, \"activate_project\"), patch.object(daemon, \"ensure_browser_running\"), patch.object(daemon, \"notify_receipt\") as send:\n            threads = [threading.Thread(target=worker) for _ in range(2)]\n'''\nnew = '''        with patch.object(daemon, \"activate_project\"), patch.object(daemon, \"ensure_browser_running\"), patch.object(daemon, \"notify_receipts\") as send:\n            threads = [threading.Thread(target=worker) for _ in range(2)]\n'''\n\nif old not in text:\n    raise SystemExit(\"concurrency mock block not found\")\n\ntests.write_text(text.replace(old, new, 1))\n\nsubprocess.run([\n    \"python3\", \"-m\", \"py_compile\",\n    \"src/do_again/browser/runtime.py\",\n    \"src/do_again/service/daemon.py\",\n], check=True)\n\nsubprocess.run(\n    [\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\", \"tests.test_browser_hardening\"],\n    check=True,\n)\n\nsubprocess.run(\n    [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"],\n    check=True,\n)\n\nsubprocess.run([\n    \"git\", \"add\",\n    \"src/do_again/browser/runtime.py\",\n    \"src/do_again/browser/__init__.py\",\n    \"src/do_again/service/daemon.py\",\n    \"tests/test_browser.py\",\n    \"tests/test_daemon.py\",\n    \"tests/test_browser_hardening.py\",\n], check=True)\n\nsubprocess.run([\"git\", \"commit\", \"-m\", \"Batch browser receipt notifications\"], check=True)\n\npush = subprocess.run([\"git\", \"push\", \"origin\", \"main\"])\nif push.returncode != 0:\n    subprocess.run([\"git\", \"fetch\", \"origin\", \"main\"], check=True)\n    subprocess.run([\"git\", \"rebase\", \"origin/main\"], check=True)\n    subprocess.run([\n        \"python3\", \"-m\", \"py_compile\",\n        \"src/do_again/browser/runtime.py\",\n        \"src/do_again/service/daemon.py\",\n    ], check=True)\n    subprocess.run(\n        [\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\", \"tests.test_browser_hardening\"],\n        check=True,\n    )\n    subprocess.run(\n        [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"],\n        check=True,\n    )\n    subprocess.run([\"git\", \"push\", \"origin\", \"main\"], check=True)\n\nprint(\"HEAD=\" + subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip())\nprint(\"STATUS=\")\nprint(subprocess.check_output([\"git\", \"status\", \"--short\"], text=True))\n"
+  },
+  "expected": {
+    "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
