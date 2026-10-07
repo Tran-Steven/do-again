@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:12:26.022846+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "0aabd7887150725d0291573c1f6d11f3e27e24aa5add18647babc32f62f07c0f",
+  "request_id": "receipt-js-verify-20261007T200625-83e4",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "0aabd7887150725d0291573c1f6d11f3e27e24aa5add18647babc32f62f07c0f",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-js-verify-20261007T200625-83e4/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.094,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 95,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-js-verify-20261007T200625-83e4/script.py",
+      "script_sha256": "fd65ec0586f8ce6f7af64ccef417ea1cc720a399c6119100f9a8739cd14ab080",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "Receipt detection validation moved to GitHub pull-request CI; no local changes needed\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:12:25.621627+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
