@@ -1,0 +1,16 @@
+{
+  "args": {
+    "content": "import subprocess\nfiles=[\n\"README.md\",\"ROADMAP.md\",\"package.json\",\"src/do_again/cli.py\",\"src/do_again/core/agent.py\",\"src/do_again/core/schema.py\",\"src/do_again/default_policy.json\",\"src/do_again/service/runtime.py\",\"templates/policy.json\",\"tests/test_agent_claims.py\",\"tests/test_cli.py\",\"tests/test_executor.py\",\"tests/test_service.py\"\n]\nsubprocess.run([\"git\",\"add\",*files],check=True)\nsubprocess.run([\"git\",\"diff\",\"--cached\",\"--check\"],check=True)\nstatus=subprocess.run([\"git\",\"diff\",\"--cached\",\"--quiet\"])\nif status.returncode != 0:\n    subprocess.run([\"git\",\"commit\",\"-m\",\"Harden control plane and simplify onboarding\"],check=True)\nsubprocess.run([\"git\",\"push\",\"origin\",\"main\"],check=True)\nprint(subprocess.run([\"git\",\"status\",\"--short\",\"--branch\"],check=True,text=True,capture_output=True).stdout)\n",
+    "cwd": "$REPO",
+    "language": "python"
+  },
+  "expected": {},
+  "expires_at_utc": "2026-10-07T16:19:07.714271+00:00",
+  "issued_at_utc": "2026-10-07T15:49:07.714271+00:00",
+  "limits": {
+    "timeout_seconds": 300
+  },
+  "operation": "scratch_script",
+  "request_id": "hardening-onboarding-commit-001",
+  "schema_version": 1
+}
