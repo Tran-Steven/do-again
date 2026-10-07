@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ack-inspect-recovery-20261007-03",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:42:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:12:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"d6114a1564542b17309f91423d533345c8056307\"\nhead = subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], cwd=wt, text=True).strip()\nbranch = subprocess.check_output([\"git\", \"branch\", \"--show-current\"], cwd=wt, text=True).strip()\nstatus = subprocess.check_output([\"git\", \"status\", \"--porcelain=v1\"], cwd=wt, text=True).strip()\n\nprint(f\"branch={branch}\")\nprint(f\"head={head}\")\nprint(f\"clean={not bool(status)}\")\n\nif head != expected:\n    raise SystemExit(f\"isolated worktree head changed: expected {expected}, observed {head}\")\nif branch != \"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected isolated branch: {branch}\")\nif status:\n    raise SystemExit(\"isolated worktree is not clean\")\n\ntargets = [\n    wt / \"src/do_again/browser/runtime.py\",\n    wt / \"src/do_again/service/daemon.py\",\n    wt / \"tests/test_browser.py\",\n    wt / \"tests/test_daemon.py\",\n]\nneedles = (\"notify_receipt\", \"notify_receipts\", \"browser_status\", \"pending_receipts\", \"receipt\", \"ack\")\n\nfor path in targets:\n    print(f\"=== {path.relative_to(wt)} ===\")\n    lines = path.read_text().splitlines()\n    hit_lines = [i for i, line in enumerate(lines, 1) if any(n in line for n in needles)]\n    emitted = set()\n    for hit in hit_lines[:50]:\n        start = max(1, hit - 3)\n        end = min(len(lines), hit + 6)\n        if (start, end) in emitted:\n            continue\n        emitted.add((start, end))\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start, end + 1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
