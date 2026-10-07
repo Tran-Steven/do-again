@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "request_id": "browser-handoff-947f7dd25064",
+  "operation": "run_tests",
+  "issued_at_utc": "2026-10-07T17:22:59.830734+00:00",
+  "expires_at_utc": "2026-10-07T17:37:59.830734+00:00",
+  "args": {
+    "discover": true,
+    "start_directory": "tests",
+    "pattern": "test_browser*.py"
+  },
+  "expected": {
+    "repo_head": "2e4d7098dda141f0e2cbaa91048b20bb627c3402"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
