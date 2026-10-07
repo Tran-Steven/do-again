@@ -1,0 +1,59 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:83817:1791383724",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:41:18.237633+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "cd9741730b8f9031c730cc7ae5967d85ba5c8f0540532335f378da2a096f64d4",
+  "request_id": "selfhost-crossplatform-implement-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": false,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "cd9741730b8f9031c730cc7ae5967d85ba5c8f0540532335f378da2a096f64d4",
+    "result": {
+      "argv": [
+        "python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-crossplatform-implement-001/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.079,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 103,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-crossplatform-implement-001/script.py",
+      "script_sha256": "44ba786ef15bfbd5d26989cf5e6b991ffffecbe1c19fb0393d09fd04a1fcd753",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "implemented Linux systemd + Windows Task Scheduler lifecycle support\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:41:17.875375+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
