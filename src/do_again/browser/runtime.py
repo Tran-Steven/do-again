@@ -768,6 +768,16 @@ const messageNodes = role => {
 """
 
 
+def _normalize_assistant_text(value: Any) -> str:
+    text = str(value or "").strip()
+    prefix = "ChatGPT said:"
+    if text.startswith(prefix):
+        remainder = text[len(prefix):]
+        if remainder.startswith("\n") or remainder.startswith("\r"):
+            return remainder.lstrip("\r\n").strip()
+    return text
+
+
 def _assistant_snapshot(target: cdp.Target) -> dict[str, Any]:
     expression = r"""(() => {""" + _MESSAGE_NODES_JS + r"""
 const assistant = messageNodes('assistant');
@@ -776,7 +786,11 @@ const stop = document.querySelector('[data-testid="stop-button"],button[aria-lab
 return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: location.href};
 })()"""
     value = cdp.evaluate(target, expression, timeout=15.0)
-    return value if isinstance(value, dict) else {}
+    if not isinstance(value, dict):
+        return {}
+    result = dict(value)
+    result["latest"] = _normalize_assistant_text(result.get("latest"))
+    return result
 
 
 def send_message(

@@ -197,6 +197,21 @@ class BrowserHardeningTests(unittest.TestCase):
                 browser.setup_browser()
         launch.assert_not_called()
 
+    def test_assistant_snapshot_strips_chatgpt_presentation_prefix(self):
+        payload = {
+            "count": 1,
+            "latest": "ChatGPT said:\n\nDO_AGAIN_BROWSER_OK",
+            "busy": False,
+            "url": self.target.url,
+        }
+        with patch.object(cdp, "evaluate", return_value=payload):
+            snapshot = browser._assistant_snapshot(self.target)
+        self.assertEqual(snapshot["latest"], "DO_AGAIN_BROWSER_OK")
+
+    def test_assistant_text_does_not_strip_inline_chatgpt_said_content(self):
+        value = "ChatGPT said: this is actual content"
+        self.assertEqual(browser._normalize_assistant_text(value), value)
+
     def test_busy_conversation_keeps_receipt_pending_without_changing_composer(self):
         with patch.object(browser, "_assistant_snapshot", return_value={"busy": True}), patch.object(cdp, "insert_text") as insert:
             with self.assertRaises(browser.BrowserError):
