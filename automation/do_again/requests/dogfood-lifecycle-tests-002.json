@@ -1,0 +1,16 @@
+{
+  "args": {
+    "discover": true,
+    "pattern": "test_*.py",
+    "start_directory": "tests"
+  },
+  "expected": {},
+  "expires_at_utc": "2026-10-07T14:54:37.188260+00:00",
+  "issued_at_utc": "2026-10-07T14:24:37.188260+00:00",
+  "limits": {
+    "timeout_seconds": 300
+  },
+  "operation": "run_tests",
+  "request_id": "dogfood-lifecycle-tests-002",
+  "schema_version": 1
+}
