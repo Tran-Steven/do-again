@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:52987:1791409098:020bfc276004",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:38:47.175054+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "10bf443727c17fd185191d79a7d84669ccaad8ea44fb18df8e049d93a8bacea0",
+  "request_id": "post-restart-queue-check-3a8d1c7e5b62",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "10bf443727c17fd185191d79a7d84669ccaad8ea44fb18df8e049d93a8bacea0",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/post-restart-queue-check-3a8d1c7e5b62/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.501,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 956,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/post-restart-queue-check-3a8d1c7e5b62/script.py",
+      "script_sha256": "f45bfb94569c909d163fd620ce89f012050b28c63661a9b8eead26e761d1b7c4",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"head\": \"1926138e8910a1d2ad9db68db0940f7584f4b092\",\n  \"outbox_count\": 2,\n  \"outbox\": [\n    {\n      \"file\": \"final-receipt-repeat-probe-2f8c1a7d4e63.json\",\n      \"request_id\": \"final-receipt-repeat-probe-2f8c1a7d4e63\",\n      \"state\": \"succeeded\"\n    },\n    {\n      \"file\": \"restart-batched-daemon-clean-tail-7c2e1a9d4b63.json\",\n      \"request_id\": \"restart-batched-daemon-clean-tail-7c2e1a9d4b63\",\n      \"state\": \"succeeded\"\n    }\n  ],\n  \"launchctl_rc\": 0,\n  \"launchctl_excerpt\": \"gui/501/io.github.tran-steven.do-again.41857a676462 = {\\n\\tactive count = 1\\n\\tpath = /Users/steventran/Library/LaunchAgents/io.github.tran-steven.do-again.41857a676462.plist\\n\\ttype = LaunchAgent\\n\\tstate = running\\n\\n\\tprogram = /Library/Frameworks/Python.framework/Versions/3.13/bin/python3\\n\\targuments = {\\n\\t\\t/Library/Frameworks/Python.framework/Versions/3.13/bin/python3\\n\\t\\t-m\\n\\t\\tdo_again.service.daemon\\n\\t\\t--repo\\n\\t\\t/Users/steventran/do-again\\n\\t\\t--control-worktree\\n\\t\\t/Users/steventran/.do_again/projects/41857a676462/control\\n\\t\\t--branch\\n\\t\\toperator-control\\n\\t\\t--remote\\n\\t\\torigin\\n\\t\\t--policy\\n\\t\\t/Users/steventran/.do_again/projects/41857a676462/policy.json\\n\\t\\t--state-dir\\n\\t\\t/Users/steventran/.do_again/projects/41857a676462/state\\n\\t}\\n\\n\\tworking directory = /Users/steventran/do-again\\n\\n\\tstdout path = /Users/steventran/.do_again/projects/41857a676462/logs/agent.out.log\\n\\tstderr path = /Users/steventran/.do_again/projects/41857a676462/logs/agent.err.log\\n\\tinherited environment = {\\n\\t\\tSSH_AUTH_SOCK => /var/run/com.apple.launchd.tJUdh37OlE/Listeners\\n\\t}\\n\\n\\tdefault environment = {\\n\\t\\tPATH => /usr/bin:/bin:/usr/sbin:/sbin\\n\\t}\\n\\n\\tenvironment = {\\n\\t\\tOSLogRateLimit => 64\\n\\t\\tDO_AGAIN_HOME => /Users/steventran/.do_again\\n\\t\\tPYTHONUNBUFFERED => 1\\n\\t\\tPYTHONDONTWRITEBYTECODE => 1\\n\\t\\tPATH => /Library/Frameworks/Python.framework/Versions/3.13/bin:/Users/steventran/.nvm/versions/node/v24.14.0/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/Applications/VMware Fusion.app/Contents/Public:/opt/homebrew/bin:/Users/steventran/.npm/_npx/4b4c857f6efdfb61/node_modules/.bin:/Users/steventran/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/steventran/.nvm/versions/node/v24.14.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/steventran/.nvm/versions/node/v24.14.0/bin\\n\\t\\tPYTHONPATH => /Users/steventran/.do_again/projects/41857a676462/runtime\\n\\t\\tXPC_SERVICE_NAME => io.github.tran-steven.do-again.41857a676462\\n\\t}\\n\\n\\tdomain = gui/501 [100029]\\n\\tasid = 100029\\n\\tminimum runtime = 5\\n\\texit timeout = 5\\n\\truns = 3\\n\\tpid = 52987\\n\\timmediate reason = inefficient\\n\\tforks = 47\\n\\texecs = 2\\n\\tinitialized = 1\\n\\ttrampolined = 1\\n\\tstarted suspended = 0\\n\\tproxy started suspended = 0\\n\\tchecked allocations = 0 \"\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:38:46.376293+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
