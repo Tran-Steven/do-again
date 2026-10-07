@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:12:50.644001+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "98f33db0117fe5e939bc312b236e0970bd3de20f70876155c81760fa46b54758",
+  "request_id": "duplicate-queue-probe-7d2c5a91e4b8",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "98f33db0117fe5e939bc312b236e0970bd3de20f70876155c81760fa46b54758",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/duplicate-queue-probe-7d2c5a91e4b8/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.603,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1404,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/duplicate-queue-probe-7d2c5a91e4b8/script.py",
+      "script_sha256": "55d55d958b740eea2c3dc58f63d49a79e00631fccafa5451936c5fdfbce94c6e",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"chat_url\": \"https://chatgpt.com/c/6ac683c3-93ac-83e8-95a3-78905b34577e\",\n  \"queue_count\": 17,\n  \"rows\": [\n    {\n      \"name\": \"live-confirm-20261007T191718-a28f.json\",\n      \"request_id\": \"live-confirm-20261007T191718-a28f\",\n      \"state\": \"failed\",\n      \"already_present\": true,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"live-e2e-fix-7e924f4a1d31.json\",\n      \"request_id\": \"live-e2e-fix-7e924f4a1d31\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"delivery-probe-20261007T191948-f194.json\",\n      \"request_id\": \"delivery-probe-20261007T191948-f194\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"live-e2e-rerun-54bda37e9021.json\",\n      \"request_id\": \"live-e2e-rerun-54bda37e9021\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"live-final-20261007T192139-93cd.json\",\n      \"request_id\": \"live-final-20261007T192139-93cd\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"fingerprint-fix-20261007T192651-b54a.json\",\n      \"request_id\": \"fingerprint-fix-20261007T192651-b54a\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"fingerprint-live-20261007T192814-c173.json\",\n      \"request_id\": \"fingerprint-live-20261007T192814-c173\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-receipt-inspect-4f10b7a9c2d3.json\",\n      \"request_id\": \"duplicate-receipt-inspect-4f10b7a9c2d3\",\n      \"state\": \"blocked\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-receipt-inspect-2-6a31d8c4f902.json\",\n      \"request_id\": \"duplicate-receipt-inspect-2-6a31d8c4f902\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-dom-probe-8b2f4c91d7e6.json\",\n      \"request_id\": \"duplicate-dom-probe-8b2f4c91d7e6\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-dedupe-fix-5e7c1a93b4d8.json\",\n      \"request_id\": \"duplicate-dedupe-fix-5e7c1a93b4d8\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-dedupe-live-verify-1c7a5e92d4b0.json\",\n      \"request_id\": \"duplicate-dedupe-live-verify-1c7a5e92d4b0\",\n      \"state\": \"failed\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-dedupe-jsfix-3b6d7c9e1a20.json\",\n      \"request_id\": \"duplicate-dedupe-jsfix-3b6d7c9e1a20\",\n      \"state\": \"failed\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-dedupe-jsfix2-6f0a9c2d1b47.json\",\n      \"request_id\": \"duplicate-dedupe-jsfix2-6f0a9c2d1b47\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"receipt-js-fix-20261007T200403-d826.json\",\n      \"request_id\": \"receipt-js-fix-20261007T200403-d826\",\n      \"state\": \"blocked\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"duplicate-dedupe-live-verify2-4a8f2c6e1d93.json\",\n      \"request_id\": \"duplicate-dedupe-live-verify2-4a8f2c6e1d93\",\n      \"state\": \"failed\",\n      \"already_present\": false,\n      \"probe_error\": null\n    },\n    {\n      \"name\": \"receipt-js-verify-20261007T200625-83e4.json\",\n      \"request_id\": \"receipt-js-verify-20261007T200625-83e4\",\n      \"state\": \"succeeded\",\n      \"already_present\": false,\n      \"probe_error\": null\n    }\n  ]\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:12:49.692381+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
