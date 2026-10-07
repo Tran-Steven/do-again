@@ -183,11 +183,12 @@ class ExecutorTests(unittest.TestCase):
         self.assertEqual(Path(result["script_path"]).read_text(), request["args"]["content"])
 
     def test_windows_bash_path_uses_msys_drive_form(self):
-        with patch("do_again.core.executor.os.name", "nt"):
-            self.assertEqual(
-                self.executor._shell_script_arg(Path("D:/repo/script.sh")),
-                "/d/repo/script.sh",
-            )
+        self.assertEqual(
+            self.executor._shell_script_arg(
+                Path("D:/repo/script.sh"), windows=True
+            ),
+            "/d/repo/script.sh",
+        )
 
     def test_scratch_bash_executes(self):
         request = self.request(

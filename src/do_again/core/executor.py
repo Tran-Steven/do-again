@@ -166,11 +166,12 @@ class LocalExecutor:
             raise OperatorError(f"cwd does not exist: {path}")
         return path
 
-    def _shell_script_arg(self, path: Path) -> str:
+    def _shell_script_arg(self, path: Path, *, windows: bool | None = None) -> str:
         value = path.as_posix()
-        if os.name == "nt" and len(value) >= 3 and value[1:3] == ":/":
+        is_windows = os.name == "nt" if windows is None else windows
+        if is_windows and len(value) >= 3 and value[1:3] == ":/":
             return f"/{value[0].lower()}{value[2:]}"
-        return value if os.name == "nt" else str(path)
+        return value if is_windows else str(path)
 
     def _base_env(self, extra: dict[str, Any] | None = None) -> dict[str, str]:
         names = {
