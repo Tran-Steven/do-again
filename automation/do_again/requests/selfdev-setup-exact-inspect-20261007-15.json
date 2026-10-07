@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-setup-exact-inspect-20261007-15",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:54:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:24:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"f108fa2765a922f800c9cc87e99eab11b629839e\"\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nif head != expected:\n    raise SystemExit(f\"unexpected head {head}\")\n\np = wt/\"src/do_again/cli.py\"\nlines = p.read_text().splitlines()\nfor start,end in [(140,340),(340,520)]:\n    print(f\"=== cli {start}-{min(end,len(lines))} ===\")\n    for n in range(start,min(end,len(lines))+1):\n        print(f\"{n:04d}: {lines[n-1]}\")\n\np = wt/\"tests/test_cli.py\"\nlines = p.read_text().splitlines()\nfor n,line in enumerate(lines,1):\n    if \"SETUP_OK\" in line or \"setup(\" in line or \"setup_\" in line:\n        start=max(1,n-8); end=min(len(lines),n+30)\n        print(f\"=== test_cli {start}-{end} ===\")\n        for i in range(start,end+1):\n            print(f\"{i:04d}: {lines[i-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
