@@ -1,0 +1,12 @@
+{
+  "args": {},
+  "expected": {},
+  "expires_at_utc": "2026-10-07T15:05:51.295547+00:00",
+  "issued_at_utc": "2026-10-07T14:35:51.295547+00:00",
+  "limits": {
+    "timeout_seconds": 60
+  },
+  "operation": "status",
+  "request_id": "selfhost-crossplatform-status-001",
+  "schema_version": 1
+}
