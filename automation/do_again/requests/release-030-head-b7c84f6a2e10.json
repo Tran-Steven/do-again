@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "request_id": "release-030-head-b7c84f6a2e10",
+  "operation": "extended_exec",
+  "issued_at_utc": "2026-10-07T18:16:30.000000+00:00",
+  "expires_at_utc": "2026-10-07T18:31:30.000000+00:00",
+  "args": {
+    "argv": [
+      "git",
+      "show",
+      "--stat",
+      "--oneline",
+      "--decorate",
+      "HEAD"
+    ]
+  },
+  "expected": {
+    "repo_head": "cce9c7a78858e799217097ef9a02b2735de05a2e"
+  },
+  "limits": {
+    "timeout_seconds": 30
+  }
+}
