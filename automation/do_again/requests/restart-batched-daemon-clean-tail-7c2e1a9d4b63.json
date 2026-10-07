@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "restart-batched-daemon-clean-tail-7c2e1a9d4b63",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:38:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T22:08:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport os\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.service.daemon import _pending_outbox\nfrom do_again.service.runtime import runtime_layout\n\nstate = runtime_layout(repo).state_dir\ntarget_name = \"receipt-batch-final-drain-1926138-4a7d1c9e3b62.json\"\ntarget = state / \"browser_outbox\" / target_name\n\nbefore = [p.name for p in _pending_outbox(state)]\nremoved = False\nif target.exists():\n    target.unlink()\n    removed = True\nafter = [p.name for p in _pending_outbox(state)]\n\nuid = os.getuid()\nlabel = \"io.github.tran-steven.do-again.41857a676462\"\ncmd = f\"sleep 2; launchctl kickstart -k gui/{uid}/{label}\"\nsubprocess.Popen(\n    [\"sh\", \"-c\", cmd],\n    stdout=subprocess.DEVNULL,\n    stderr=subprocess.DEVNULL,\n    start_new_session=True,\n)\n\nprint(json.dumps({\n    \"head\": subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip(),\n    \"before\": before,\n    \"removed_verified_tail\": removed,\n    \"after\": after,\n    \"restart_scheduled\": True,\n    \"label\": label,\n}, indent=2))\n"
+  },
+  "expected": {
+    "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
