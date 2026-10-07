@@ -166,6 +166,12 @@ class LocalExecutor:
             raise OperatorError(f"cwd does not exist: {path}")
         return path
 
+    def _shell_script_arg(self, path: Path) -> str:
+        value = path.as_posix()
+        if os.name == "nt" and len(value) >= 3 and value[1:3] == ":/":
+            return f"/{value[0].lower()}{value[2:]}"
+        return value if os.name == "nt" else str(path)
+
     def _base_env(self, extra: dict[str, Any] | None = None) -> dict[str, str]:
         names = {
             "PATH",
@@ -510,7 +516,7 @@ class LocalExecutor:
         if script.suffix == ".py":
             argv = ["python3", str(script), *script_args]
         elif script.suffix in {".sh", ".bash", ".zsh"}:
-            script_arg = script.as_posix() if os.name == "nt" else str(script)
+            script_arg = self._shell_script_arg(script)
             argv = ["bash" if script.suffix != ".zsh" else "zsh", script_arg, *script_args]
         else:
             if not os.access(script, os.X_OK):
@@ -1105,7 +1111,7 @@ class LocalExecutor:
 
         digest = hashlib.sha256(data).hexdigest()
         runner = "python3" if language == "python" else "bash"
-        script_arg = path.as_posix() if language == "bash" and os.name == "nt" else str(path)
+        script_arg = self._shell_script_arg(path) if language == "bash" else str(path)
         result = self._capture(
             [runner, script_arg, *values],
             timeout=timeout,
