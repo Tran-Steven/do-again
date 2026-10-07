@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
-  "last_request_id": "receipt-batch-live-drain-1926138-6c1e9a3d7b42",
+  "last_request_id": "receipt-batch-final-drain-1926138-4a7d1c9e3b62",
   "last_request_state": "succeeded",
   "pid": 12820,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-07T19:27:44.542634+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-07T21:28:46.329201+00:00"
+  "updated_at_utc": "2026-10-07T21:29:28.035577+00:00"
 }
