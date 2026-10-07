@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "live-e2e-20261007T191505-b6c9",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:15:05.565Z",
+  "expires_at_utc": "2026-10-07T19:45:05.565Z",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport os\nimport shutil\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\nreport = {\"repo\": str(repo), \"python\": sys.version.split()[0], \"checks\": []}\n\ndef command(name, argv, timeout):\n    try:\n        result = subprocess.run(argv, cwd=repo, text=True, capture_output=True, timeout=timeout)\n        item = {\"name\": name, \"passed\": result.returncode == 0, \"returncode\": result.returncode, \"stdout\": result.stdout[-6000:], \"stderr\": result.stderr[-6000:]}\n    except Exception as exc:\n        item = {\"name\": name, \"passed\": False, \"error\": str(exc)}\n    report[\"checks\"].append(item)\n    print(json.dumps(item), flush=True)\n\ncommand(\"repository_state\", [\"git\", \"status\", \"--short\"], 15)\ncommand(\"repository_head\", [\"git\", \"rev-parse\", \"HEAD\"], 15)\ncommand(\"unit_regression_suite\", [sys.executable, \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-v\"], 180)\nnpm = shutil.which(\"npm\")\nif npm:\n    command(\"npm_launcher_suite\", [npm, \"test\"], 60)\nelse:\n    report[\"checks\"].append({\"name\": \"npm_launcher_suite\", \"passed\": False, \"error\": \"npm unavailable in service environment\"})\ncommand(\"disposable_real_chrome_smoke\", [sys.executable, \"tools/browser_smoke.py\", \"--background\"], 120)\ncommand(\"project_service_status\", [sys.executable, \"-m\", \"do_again.cli\", \"status\"], 30)\ntry:\n    from do_again.browser.runtime import browser_status, browser_self_test\n    before = browser_status()\n    result = browser_self_test()\n    after = browser_status()\n    response = result.get(\"response\", \"\")\n    item = {\"name\": \"authenticated_chatgpt_round_trip\", \"passed\": response.strip() == \"DO_AGAIN_BROWSER_OK\", \"response\": response[:500], \"chat_url\": result.get(\"chat_url\"), \"mode_before\": before.get(\"mode\"), \"mode_after\": after.get(\"mode\"), \"pid_before\": before.get(\"pid\"), \"pid_after\": after.get(\"pid\")}\nexcept Exception as exc:\n    item = {\"name\": \"authenticated_chatgpt_round_trip\", \"passed\": False, \"error\": f\"{type(exc).__name__}: {exc}\"}\nreport[\"checks\"].append(item)\nprint(json.dumps(item), flush=True)\nreport[\"passed\"] = all(item[\"passed\"] for item in report[\"checks\"])\nprint(\"DO_AGAIN_LIVE_TEST_REPORT=\" + json.dumps(report), flush=True)\nsys.exit(0 if report[\"passed\"] else 1)\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
