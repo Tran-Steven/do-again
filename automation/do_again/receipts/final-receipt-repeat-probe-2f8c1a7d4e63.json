@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:37:14.478808+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "15dad962a2dc9977748c10b750fa1986e1099d199acb54fb82f41c78e5b02c3a",
+  "request_id": "final-receipt-repeat-probe-2f8c1a7d4e63",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "15dad962a2dc9977748c10b750fa1986e1099d199acb54fb82f41c78e5b02c3a",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/final-receipt-repeat-probe-2f8c1a7d4e63/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.459,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 564,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/final-receipt-repeat-probe-2f8c1a7d4e63/script.py",
+      "script_sha256": "e250b58c17d82984d990fa32a3a652721b3b309d68b968f76476b4545811f987",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"count\": 1,\n  \"items\": [\n    {\n      \"file\": \"receipt-batch-final-drain-1926138-4a7d1c9e3b62.json\",\n      \"request_id\": \"receipt-batch-final-drain-1926138-4a7d1c9e3b62\",\n      \"state\": \"succeeded\"\n    }\n  ]\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:37:13.747383+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
