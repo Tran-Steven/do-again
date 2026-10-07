@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:38:11.071849+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "1249cc050ed6ab28d6d14f4791069c0e787d16ac8ad73045fd56c3115c220711",
+  "request_id": "restart-batched-daemon-clean-tail-7c2e1a9d4b63",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "1249cc050ed6ab28d6d14f4791069c0e787d16ac8ad73045fd56c3115c220711",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/restart-batched-daemon-clean-tail-7c2e1a9d4b63/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.518,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1085,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/restart-batched-daemon-clean-tail-7c2e1a9d4b63/script.py",
+      "script_sha256": "17c342eb86b45636d2bb1012f17a1afb4c49dfc02e7edfaaff846caf6a23c424",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"head\": \"1926138e8910a1d2ad9db68db0940f7584f4b092\",\n  \"before\": [\n    \"final-receipt-repeat-probe-2f8c1a7d4e63.json\"\n  ],\n  \"removed_verified_tail\": false,\n  \"after\": [\n    \"final-receipt-repeat-probe-2f8c1a7d4e63.json\"\n  ],\n  \"restart_scheduled\": true,\n  \"label\": \"io.github.tran-steven.do-again.41857a676462\"\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:38:10.262390+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
