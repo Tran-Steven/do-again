@@ -16,6 +16,15 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Callable
 
+from ..browser import (
+    BrowserAuthRequired,
+    BrowserError,
+    activate_project,
+    deactivate_project,
+    ensure_browser_running,
+    notify_receipt,
+    stop_if_unused,
+)
 from ..core.agent import Agent
 from ..platforms.detect import detect_platform
 from ..platforms.linux import service_definition_path as linux_service_definition_path
@@ -33,6 +42,7 @@ class RuntimeLayout:
     branch: str
     remote: str
     policy_source: Path | None
+    browser_enabled: bool
     key: str
     label: str
     root: Path
@@ -141,11 +151,20 @@ def _config_policy_source(repo: Path) -> Path | None:
         raise ServiceError(f"configured policy does not exist: {source}")
     return source
 
+def _config_browser_enabled(repo: Path) -> bool:
+    section = _project_config(repo)
+    raw = section.get("browser", False)
+    if isinstance(raw, bool):
+        return raw
+    raise ServiceError("browser must be true or false in [do_again]")
+
+
 def runtime_layout(repo: Path) -> RuntimeLayout:
     repo = repo.resolve()
     branch = _config_branch(repo)
     remote = _config_remote(repo)
     policy_source = _config_policy_source(repo)
+    browser_enabled = _config_browser_enabled(repo)
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     label = f"io.github.tran-steven.do-again.{key}"
     home = Path(os.environ.get("DO_AGAIN_HOME", str(Path.home() / ".do_again"))).expanduser().resolve()
@@ -155,6 +174,7 @@ def runtime_layout(repo: Path) -> RuntimeLayout:
         branch=branch,
         remote=remote,
         policy_source=policy_source,
+        browser_enabled=browser_enabled,
         key=key,
         label=label,
         root=root,
@@ -266,6 +286,7 @@ def prepare_runtime(repo: Path) -> RuntimeLayout:
         "policy_source": (
             str(layout.policy_source) if layout.policy_source else None
         ),
+        "browser_enabled": layout.browser_enabled,
         "service_label": layout.label,
     }
     layout.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -276,7 +297,7 @@ def _agent_argv(layout: RuntimeLayout) -> list[str]:
     return [
         sys.executable,
         "-m",
-        "do_again.core.agent",
+        "do_again.service.daemon",
         "--repo",
         str(layout.repo),
         "--control-worktree",
@@ -349,6 +370,7 @@ def _launchd_plist(layout: RuntimeLayout) -> dict[str, Any]:
         "EnvironmentVariables": {
             "PATH": path,
             "PYTHONPATH": str(layout.runtime_source),
+            "DO_AGAIN_HOME": str(layout.root.parent.parent),
             "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONUNBUFFERED": "1",
         },
@@ -486,6 +508,7 @@ def _posix_launcher_text(layout: RuntimeLayout) -> str:
     return (
         "#!/bin/sh\n"
         f"export PYTHONPATH={shlex.quote(str(layout.runtime_source))}\n"
+        f"export DO_AGAIN_HOME={shlex.quote(str(layout.root.parent.parent))}\n"
         "export PYTHONDONTWRITEBYTECODE=1\n"
         "export PYTHONUNBUFFERED=1\n"
         f"cd {shlex.quote(str(layout.repo))}\n"
@@ -601,9 +624,11 @@ def _windows_launcher_text(layout: RuntimeLayout) -> str:
     command = subprocess.list2cmdline(_agent_argv(layout))
     pythonpath = str(layout.runtime_source).replace("%", "%%")
     repo = str(layout.repo).replace("%", "%%")
+    do_again_home = str(layout.root.parent.parent).replace("%", "%%")
     return (
         "@echo off\r\n"
         f'set "PYTHONPATH={pythonpath}"\r\n'
+        f'set "DO_AGAIN_HOME={do_again_home}"\r\n'
         'set "PYTHONDONTWRITEBYTECODE=1"\r\n'
         'set "PYTHONUNBUFFERED=1"\r\n'
         f'cd /d "{repo}"\r\n'
@@ -788,14 +813,13 @@ def run_foreground(path: str | Path = ".", *, once: bool = False) -> int:
     if service_status(repo)["running"]:
         raise ServiceError("background service is already running; stop it before using foreground mode")
     layout = prepare_runtime(repo)
-    agent = Agent(
-        repo=repo,
-        control_worktree=layout.control_worktree,
-        branch=layout.branch,
-        policy_path=layout.policy_path,
-        state_dir=layout.state_dir,
-    )
-    return agent.run(once=once)
+
+    from .daemon import main as daemon_main
+
+    argv = _agent_argv(layout)[3:]
+    if once:
+        argv.append("--once")
+    return daemon_main(argv)
 
 
 def layout_as_dict(path: str | Path = ".") -> dict[str, Any]:

@@ -59,48 +59,91 @@ The npm package ships the same Python runtime from this repository behind a smal
 From the Git repository you want an agent to work on:
 
 ```bash
+pip install do-again
+cd my-project
 do-again setup
-```
-
-That one command checks the repository and Git remote, creates the project config and policy if they do not exist, creates the dedicated control branch, installs the user-level background agent, and verifies that it is running.
-
-Then:
-
-```bash
+do-again start
 do-again status
 ```
 
-For attended use or advanced setup without a background service:
+On the first browser-enabled setup, Do Again creates a dedicated automation Chrome/Chromium profile and opens it visibly so you can sign into ChatGPT and complete any human verification. Do Again watches for the real composer and continues automatically when sign-in is complete; you do not need to return to the terminal and confirm it. Do Again does not ask for or store your ChatGPT username or password.
+
+After that one-time authentication step, setup automatically:
+
+- verifies the real ChatGPT composer through CDP;
+- tests the saved session with Chrome's current `--headless=new` mode;
+- uses true headless mode when it is reliable, otherwise falls back to a real background Chrome instance;
+- creates and binds a dedicated automation conversation for the project;
+- creates the Git control branch and project policy;
+- installs the native user-level background service; and
+- verifies the local runtime.
+
+Normal use is intentionally small:
+
+```bash
+do-again start
+do-again status
+do-again stop
+do-again list
+```
+
+`setup` already starts the project, so `start` is mainly for bringing it back later. Multiple projects can run at the same time; they share one dedicated authenticated browser runtime while keeping separate project conversations, service state, control worktrees, policies, and receipt queues.
+
+If you do not want ChatGPT browser automation for a project:
+
+```bash
+do-again setup --no-browser
+```
+
+For attended use without installing a native background service:
 
 ```bash
 do-again setup --no-service
 do-again run
 ```
 
+## Browser runtime
+
+The browser is an implementation detail during normal operation. Do Again never attaches to your everyday Chrome/Chromium profile and does not touch your normal tabs, cookies, extensions, Firefox session, or browser history.
+
+The shared automation profile lives under `~/.do_again/browser/profile` by default. CDP listens only on loopback, and Do Again chooses another local port if its preferred port is occupied.
+
+The default browser mode is `auto`:
+
+1. first authentication is visible and interactive;
+2. Do Again restarts the same persistent profile with `--headless=new`;
+3. if the authenticated ChatGPT session is not reliable in true headless mode, it automatically falls back to a real Chrome process running without a startup window;
+4. later starts reuse the verified mode without opening a foreground window.
+
+The daemon monitors the browser and restarts it after crashes. Browser delivery uses a durable per-project outbox, so a receipt is retried after browser/network failures instead of being lost. Receipt markers make retries idempotent. If ChatGPT reports that a conversation reached its maximum length, Do Again creates a fresh background conversation, carries over recent conversation excerpts, bootstraps it from the Git control state, rebinds the project, and continues there.
+
+If headless authentication fails, Do Again first checks the background browser with the same profile. If both modes fail, Do Again reports `auth_required` and waits for interactive setup. It does not repeatedly launch browsers or bypass verification. Local request execution continues, and browser receipts stay queued. Re-run `do-again setup` to reopen only the dedicated automation profile for human interaction.
+
+Advanced/debug controls remain available when needed:
+
+```bash
+do-again browser status
+do-again browser test
+do-again browser login
+do-again browser stop
+```
+
+You can force a browser mode during setup with `--browser-mode headless` or `--browser-mode background`; `auto` is recommended.
+
 ## Service lifecycle
 
-Do Again can install a per-repository background agent using the native user-level service manager:
+Do Again installs a per-repository background agent using the native user-level service manager:
 
-    do-again install
-    do-again status
-    do-again restart
-    do-again stop
-    do-again uninstall
+```bash
+do-again start
+do-again status
+do-again restart
+do-again stop
+```
 
-For attended use, or when a native service manager is unavailable, run the agent in the foreground:
+Low-level `install`, `uninstall`, `init`, and foreground `run` commands remain available for advanced use and backward compatibility, but they are intentionally omitted from the primary help surface.
 
-    do-again run
-    do-again run --once
-
-Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under ~/.do_again. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits. do-again init also creates do-again-policy.json for project-specific operation, binary, root, timeout, and execution controls. The control branch must be dedicated and cannot be main, master, trunk, or the currently checked-out branch.
-
-## ChatGPT browser bridge
-
-The public package currently sets up the local execution runtime and Git-backed request/receipt transport. It does **not** yet install or automate a ChatGPT browser session.
-
-A private predecessor has a working dedicated-Chrome/CDP flow for one-time ChatGPT sign-in, browser verification, conversation binding, and safe chat rollover. That code is being generalized before it is exposed publicly so Do Again does not inherit project-specific assumptions or foreground-focus behavior.
-
-The target experience is still one-command onboarding: browser automation will be optional and layered on top of `do-again setup`, not a required pile of extra commands. See `ROADMAP.md`.
+Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under `~/.do_again`. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits. `do-again init` also creates `do-again-policy.json` for project-specific operation, binary, root, timeout, and execution controls. The control branch must be dedicated and cannot be `main`, `master`, `trunk`, or the currently checked-out branch.
 
 ## Why Do Again
 
@@ -109,18 +152,21 @@ The target experience is still one-command onboarding: browser automation will b
 - Project-scoped filesystem and command access
 - Deterministic audit trail and recovery
 - No agent API keys embedded in the project
+- Dedicated ChatGPT browser profile with headless-first operation
+- Durable retry/recovery when the browser crashes or a send fails
+- One shared browser runtime for multiple concurrent projects
 - A shared platform interface for macOS, Linux, and Windows
 - CI-tested on Python 3.11, 3.12, and 3.13 across all three platforms
 
 ## Platform status
 
-| Platform | Status | Service backend |
+| Platform | Service backend | Browser runtime |
 | --- | --- | --- |
-| macOS | Service lifecycle working | launchd |
-| Linux | Service lifecycle working | systemd user service |
-| Windows | Service lifecycle working | Task Scheduler |
+| macOS | launchd | Chrome/Chromium CDP, headless-first |
+| Linux | systemd user service | Chrome/Chromium CDP, headless-first |
+| Windows | per-user Task Scheduler | Chrome/Chromium CDP, headless-first |
 
-Do Again is currently alpha software. The foreground runner and per-repository background service lifecycle are implemented on macOS, Linux, and Windows. Linux uses a systemd user service; Windows uses a per-user Task Scheduler task so administrator privileges are not required.
+Do Again is currently alpha software. The foreground runner, per-repository service lifecycle, browser discovery, persistent profile model, and CDP runtime are implemented behind the same interface on macOS, Linux, and Windows. Browser availability still depends on a compatible local Chrome/Chromium installation and ChatGPT authentication.
 
 ## Development
 
@@ -129,12 +175,15 @@ git clone https://github.com/Tran-Steven/do-again.git
 cd do-again
 python -m pip install .
 python -m unittest discover -s tests -v
+python tools/browser_smoke.py
 do-again doctor
 ```
 
+Disposable-profile smoke tests verify real Chrome CDP, profile persistence, and crash recovery without signing into ChatGPT. Authenticated ChatGPT round trips are a separate manual integration check; mocked tests cannot establish that a real session works in headless mode. Linux background Chrome requires a graphical session or virtual display.
+
 ## Release model
 
-Releases use semantic versioning. Pushing a version tag such as `v0.2.1` validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
+Releases use semantic versioning. Pushing a version tag validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
 
 PyPI distribution name: `do-again`
 
@@ -146,7 +195,7 @@ Python package: `do_again`
 
 ## Security
 
-Do Again is designed around explicit allowlists, scoped filesystem roots, bounded execution, and auditable request/receipt records. It should not be configured as unrestricted shell access.
+Do Again is designed around explicit allowlists, scoped filesystem roots, bounded execution, and auditable request/receipt records. Browser cookies and session data remain in the dedicated local automation profile; credentials are never requested or stored by Do Again, and CDP is bound to localhost. It should not be configured as unrestricted shell access.
 
 ## License
 

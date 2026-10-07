@@ -13,7 +13,7 @@ import traceback
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .executor import LocalExecutor
 from .schema import (
@@ -37,11 +37,13 @@ class Agent:
         policy_path: Path,
         state_dir: Path,
         remote: str = "origin",
+        receipt_callback: Callable[[dict[str, Any]], None] | None = None,
     ):
         self.repo = repo.resolve()
         self.control_worktree = control_worktree.resolve()
         self.branch = branch
         self.remote = remote
+        self.receipt_callback = receipt_callback
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
@@ -452,6 +454,21 @@ class Agent:
             f"Do Again receipt {request_id}: {receipt['state']}",
         )
 
+    def notify_receipt(self, receipt: dict[str, Any]) -> None:
+        if self.receipt_callback is None:
+            return
+        try:
+            self.receipt_callback(receipt)
+        except Exception as exc:
+            atomic_json(
+                self.state_dir / "receipt_callback_error.json",
+                {
+                    "request_id": receipt.get("request_id"),
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "recorded_at_utc": utc_now().isoformat(),
+                },
+            )
+
     def schedule_self_restart(self) -> None:
         label = str(
             self.policy.get("agent_launchd_label", "io.github.tran-steven.do-again")
@@ -557,6 +574,7 @@ class Agent:
                         },
                     )
                     self.publish_receipt(receipt)
+                    self.notify_receipt(receipt)
                     return True
 
             if not self.acquire_remote_claim(raw):
@@ -617,6 +635,7 @@ class Agent:
                 },
             )
             self.publish_receipt(receipt)
+            self.notify_receipt(receipt)
             try:
                 self.publish_status(
                     "ready",

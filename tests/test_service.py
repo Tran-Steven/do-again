@@ -11,6 +11,7 @@ from do_again.platforms.base import PlatformInfo
 from do_again.service.runtime import (
     ServiceError,
     _config_branch,
+    _config_browser_enabled,
     _config_policy_source,
     _config_remote,
     _default_policy,
@@ -41,6 +42,20 @@ class ServiceRuntimeTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ServiceError, "unsafe control branch"):
                 _config_branch(repo)
+
+    def test_browser_flag_is_explicit_and_boolean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            (repo / "do-again.toml").write_text(
+                '[do_again]\nbrowser = true\n', encoding="utf-8"
+            )
+            self.assertTrue(_config_browser_enabled(repo))
+            (repo / "do-again.toml").write_text(
+                '[do_again]\nbrowser = "yes"\n', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ServiceError, "browser must be true or false"):
+                _config_browser_enabled(repo)
 
     def test_custom_remote_is_read_from_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -132,7 +147,8 @@ class ServiceRuntimeTests(unittest.TestCase):
             self.assertEqual(value["Label"], layout.label)
             self.assertEqual(value["WorkingDirectory"], str(repo.resolve()))
             self.assertEqual(value["EnvironmentVariables"]["PYTHONPATH"], str(layout.runtime_source))
-            self.assertIn("do_again.core.agent", value["ProgramArguments"])
+            self.assertEqual(value["EnvironmentVariables"]["DO_AGAIN_HOME"], str(layout.root.parent.parent))
+            self.assertIn("do_again.service.daemon", value["ProgramArguments"])
             self.assertTrue(value["KeepAlive"])
 
     def test_systemd_unit_uses_user_scoped_copied_runtime(self) -> None:
@@ -146,7 +162,9 @@ class ServiceRuntimeTests(unittest.TestCase):
             unit = _systemd_unit(layout)
             self.assertIn("PYTHONPATH=", launcher)
             self.assertIn(str(layout.runtime_source), launcher)
-            self.assertIn("do_again.core.agent", launcher)
+            self.assertIn("DO_AGAIN_HOME=", launcher)
+            self.assertIn(str(layout.root.parent.parent), launcher)
+            self.assertIn("do_again.service.daemon", launcher)
             self.assertIn("Restart=always", unit)
             self.assertIn(_systemd_quote(str(layout.root / "run-agent.sh")), unit)
             self.assertIn(_systemd_quote(str(repo.resolve())), unit)
@@ -161,7 +179,9 @@ class ServiceRuntimeTests(unittest.TestCase):
             launcher = _windows_launcher_text(layout)
             self.assertIn("PYTHONPATH=", launcher)
             self.assertIn(str(layout.runtime_source), launcher)
-            self.assertIn("do_again.core.agent", launcher)
+            self.assertIn("DO_AGAIN_HOME=", launcher)
+            self.assertIn(str(layout.root.parent.parent), launcher)
+            self.assertIn("do_again.service.daemon", launcher)
             self.assertIn("PYTHONDONTWRITEBYTECODE", launcher)
 
     @patch("do_again.service.runtime._linux_pid", return_value=4321)

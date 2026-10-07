@@ -20,31 +20,26 @@ Do Again should be easy on the first run and still expose lower-level controls f
 
 ## P1 — frictionless ChatGPT connection
 
-Build an optional public browser transport without coupling the core runtime to a browser.
-
-Target UX:
-
-    do-again setup
-    # optional guided ChatGPT connection from setup
-
-Requirements:
-
-- Dedicated automation Chrome profile; never reuse the user's normal browser profile.
-- One-time visible setup for Cloudflare/sign-in only when necessary.
-- Verify the real ChatGPT composer before claiming setup success.
-- Bind and validate the selected automation conversation.
-- No foreground focus stealing after the one-time setup step.
-- Safe new-chat rollover when a conversation reaches its context limit.
-- Clear browser health/status diagnostics and recovery instructions.
-- Keep browser state local; never publish cookies, tokens, or browser-profile data.
-- Preserve Git-backed request/receipt transport so browser automation is replaceable.
-
-The existing private bridge prototype is reference material only. It must be generalized and stripped of private repository, Vast, persona, and legacy control-plane assumptions before becoming public.
+- [x] Dedicated persistent automation Chrome/Chromium profile
+- [x] One-time visible ChatGPT sign-in / human-verification flow
+- [x] Real composer/session verification over localhost CDP
+- [x] True `--headless=new` operation when the authenticated session supports it
+- [x] Automatic background-headed fallback when true headless is unreliable
+- [x] No normal-profile attachment and no post-setup foreground focus requirement
+- [x] Per-project automation conversation binding
+- [x] Shared browser runtime across concurrent projects
+- [x] Browser crash detection and automatic restart
+- [x] Durable browser-delivery outbox with idempotent receipt retries
+- [x] Explicit `auth_required` state instead of challenge/auth bypass loops
+- [x] Automatic safe new-chat rollover on conversation-length limits
+- [x] Browser state remains local; credentials are never requested or stored
+- [x] Git-backed request/receipt transport remains independent of the browser layer
 
 ## P1 — diagnostics and recovery
 
-- [ ] Make `doctor` repository-aware and explain exactly how to repair failed checks.
-- [ ] Surface recent request/receipt failures without requiring users to inspect the control branch manually.
+- [x] Make `doctor` repository-aware and report browser/runtime repair information.
+- [x] Surface browser delivery failures and pending receipt count through `status`.
+- [ ] Surface recent core request/receipt failures without requiring users to inspect the control branch manually.
 - [ ] Add safe repair/reinstall behavior for damaged service definitions and runtime copies.
 - [ ] Add upgrade-path tests from older Do Again releases.
 
@@ -54,3 +49,13 @@ The existing private bridge prototype is reference material only. It must be gen
 - [ ] More end-to-end service tests on real Linux and Windows hosts, not only CI-level mocks/contracts.
 - [ ] Stable machine-readable CLI output for external agent integrations.
 - [ ] Signed release/install verification guidance.
+
+## 0.3.0 release validation
+
+- [x] Unit and regression tests for shared startup, stale PID/port protection, auth recovery, rollover, and durable delivery.
+- [x] Real macOS Chrome smoke tests with disposable profiles, persistence, forced crash recovery, and background launch.
+- [x] Clean wheel, sdist, and npm installation verification.
+- [x] Browser hardening tests executed through a real Do Again request/receipt loop.
+- [ ] Real Chrome smoke tests pass in Linux and Windows CI.
+- [x] Authenticated ChatGPT message/response succeeds after human verification and runtime restart (macOS background fallback).
+- [ ] Publish 0.3.0 through Trusted Publishing after validation passes.
