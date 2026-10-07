@@ -111,6 +111,15 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertNotIn("SETUP_OK", output.getvalue())
             self.assertIn("after service restart", error.getvalue())
 
+    def test_setup_falls_back_when_headless_auth_works_but_messages_fail(self) -> None:
+        from do_again.browser import BrowserError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            with patch("do_again.cli.setup_browser", return_value={"running": True, "mode": "headless"}), patch("do_again.cli.ensure_project_chat", side_effect=[BrowserError("headless send failed"), {"chat_url": "https://chatgpt.com/c/project"}]), patch("do_again.cli.use_background_fallback", return_value={"running": True, "mode": "background"}) as fallback, patch("do_again.cli.service_status", return_value={"installed": False}), redirect_stdout(io.StringIO()):
+                self.assertEqual(setup_project(str(repo), browser=True, install_background=False), 0)
+            fallback.assert_called_once()
+
 
     def test_setup_browser_path_is_integrated_without_duplicate_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

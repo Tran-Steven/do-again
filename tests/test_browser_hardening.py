@@ -161,6 +161,15 @@ class BrowserHardeningTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in launch.call_args_list], ["headless", "background"])
         self.assertEqual(browser.load_config()["resolved_mode"], "background")
 
+    def test_explicit_mode_change_restarts_an_existing_browser(self):
+        config = browser.load_config()
+        config["preferred_mode"] = "background"
+        browser.save_config(config)
+        with patch.object(browser, "browser_status", side_effect=[{"running": True, "port": 9223, "mode": "headless"}, {"running": True, "port": 9223, "mode": "background"}]), patch.object(browser, "stop_browser") as stop, patch.object(browser, "launch_browser") as launch:
+            self.assertEqual(browser.ensure_browser_running(verify_auth=False)["mode"], "background")
+        stop.assert_called_once_with(force=True)
+        self.assertEqual(launch.call_args.args[0], "background")
+
     def test_background_network_failure_does_not_mark_auth_expired(self):
         config = browser.load_config()
         config.update(authenticated=True, resolved_mode="background")

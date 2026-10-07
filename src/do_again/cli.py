@@ -24,6 +24,7 @@ from .browser import (
     stop_if_unused,
 )
 from .platforms.detect import detect_platform
+from .browser.runtime import use_background_fallback
 from .service.runtime import (
     ServiceError,
     _default_policy,
@@ -223,11 +224,13 @@ def setup_project(
                 mode=browser_mode,
                 run_iteration_test=False,
             )
-            chat_info = ensure_project_chat(
-                repo,
-                remote_url=remote_url,
-                control_branch=layout.branch,
-            )
+            try:
+                chat_info = ensure_project_chat(repo, remote_url=remote_url, control_branch=layout.branch)
+            except BrowserError:
+                if browser_mode != "auto" or browser_info.get("mode") != "headless":
+                    raise
+                browser_info = use_background_fallback()
+                chat_info = ensure_project_chat(repo, remote_url=remote_url, control_branch=layout.branch)
 
         if install_background:
             value = install_service(repo)

@@ -588,6 +588,10 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
         config = load_config()
         if verify_auth and config.get("auth_required"):
             raise BrowserAuthRequired("ChatGPT authentication requires interaction; run do-again setup")
+        preferred = config.get("preferred_mode")
+        if status["running"] and preferred in {"headless", "background"} and status.get("mode") != preferred:
+            stop_browser(force=True)
+            status["running"] = False
         if not status["running"]:
             mode = _normal_mode(config)
             try:
@@ -652,6 +656,17 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
     status["session_ready"] = True
     status["chat_url"] = probe.get("url")
     return status
+
+
+@_shared_operation
+def use_background_fallback() -> dict[str, Any]:
+    config = load_config()
+    if config.get("preferred_mode") != "auto":
+        raise BrowserError("automatic browser fallback requires auto mode")
+    stop_browser(force=True)
+    config["resolved_mode"] = "background"
+    save_config(config)
+    return ensure_browser_running(verify_auth=True)
 
 
 @_shared_operation
