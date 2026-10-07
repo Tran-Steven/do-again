@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "final-receipt-repeat-probe-2f8c1a7d4e63",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:32:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T22:02:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.service.daemon import _pending_outbox, _read_outbox\nfrom do_again.service.runtime import runtime_layout\n\nstate = runtime_layout(repo).state_dir\nitems = []\nfor path in _pending_outbox(state):\n    receipt = _read_outbox(path)\n    items.append({\n        \"file\": path.name,\n        \"request_id\": receipt.get(\"request_id\"),\n        \"state\": receipt.get(\"state\"),\n    })\n\nprint(json.dumps({\n    \"count\": len(items),\n    \"items\": items,\n}, indent=2))\n"
+  },
+  "expected": {
+    "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
