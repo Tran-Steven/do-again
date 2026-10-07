@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:46:02.736740+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "bf55561d29e2843bec69cbc4dc7c3cf810a39ce0ea28ad36e84f3ace242caa1c",
+  "request_id": "selfdev-ack-failure-diff-20261007-09",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "bf55561d29e2843bec69cbc4dc7c3cf810a39ce0ea28ad36e84f3ace242caa1c",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-failure-diff-20261007-09/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.439,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 529,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-failure-diff-20261007-09/script.py",
+      "script_sha256": "472b9ae37731ac589b47d80b96f2516aa63895d62e6047b6014f80b52eb9462b",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=d6114a1564542b17309f91423d533345c8056307\nstatus:\n M src/do_again/core/agent.py\n M src/do_again/core/schema.py\n?? tests/test_operator_progress.py\n\ndiff:\ndiff --git a/src/do_again/core/agent.py b/src/do_again/core/agent.py\nindex e5e5bbf..ae4cbf2 100644\n--- a/src/do_again/core/agent.py\n+++ b/src/do_again/core/agent.py\n@@ -412,6 +412,37 @@ class Agent:\n     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:\n         atomic_json(self.ledger_path(request_id), value)\n \n+    def record_operator_progress(\n+        self,\n+        request: dict[str, Any],\n+        *,\n+        request_id: str,\n+        fingerprint: str,\n+    ) -> None:\n+        continuation = request.get(\"continuation\")\n+        if not isinstance(continuation, dict):\n+            return\n+        acknowledged = list(continuation.get(\"acknowledged_receipts\", []))\n+        missing = [value for value in acknowledged if not self.receipt_exists(value)]\n+        if missing:\n+            raise OperatorError(\n+                \"continuation acknowledges receipts that are not durably published: \"\n+                + \", \".join(missing)\n+            )\n+        atomic_json(\n+            self.state_dir / \"operator_progress.json\",\n+            {\n+                \"schema_version\": 1,\n+                \"request_id\": request_id,\n+                \"request_fingerprint\": fingerprint,\n+                \"acknowledged_receipts\": acknowledged,\n+                \"goal_state\": continuation.get(\"goal_state\", \"in_progress\"),\n+                \"goal_id\": continuation.get(\"goal_id\"),\n+                \"summary\": continuation.get(\"summary\"),\n+                \"recorded_at_utc\": utc_now().isoformat(),\n+            },\n+        )\n+\n     @staticmethod\n     def _request_matches_fingerprint(request: dict[str, Any], fingerprint: str) -> bool:\n         if request_fingerprint(request) == fingerprint:\n@@ -431,7 +462,7 @@ class Agent:\n         error: str | None = None,\n         traceback_text: str | None = None,\n     ) -> dict[str, Any]:\n-        return {\n+        payload = {\n             \"schema_version\": 1,\n             \"request_id\": request.get(\"request_id\"),\n             \"request_fingerprint\": request_fingerprint(request),\n@@ -445,6 +476,10 @@ class Agent:\n             \"error\": error,\n             \"traceback\": traceback_text,\n         }\n+        continuation = request.get(\"continuation\")\n+        if isinstance(continuation, dict):\n+            payload[\"operator_progress\"] = continuation\n+        return payload\n \n     def result_succeeded(self, payload: dict[str, Any]) -> bool:\n         result = payload.get(\"result\")\n@@ -608,6 +643,11 @@ class Agent:\n                         self.policy.get(\"max_future_skew_seconds\", 300)\n                     ),\n                 )\n+                self.record_operator_progress(\n+                    raw,\n+                    request_id=request_id,\n+                    fingerprint=fingerprint,\n+                )\n                 self.write_ledger(\n                     request_id,\n                     {\ndiff --git a/src/do_again/core/schema.py b/src/do_again/core/schema.py\nindex c625e1e..7c6903a 100644\n--- a/src/do_again/core/schema.py\n+++ b/src/do_again/core/schema.py\n@@ -103,10 +103,47 @@ def validate_request(\n         raise OperatorError(\"expected must be an object\")\n     if not isinstance(limits, dict):\n         raise OperatorError(\"limits must be an object\")\n+    continuation = request.get(\"continuation\")\n+    if continuation is not None:\n+        if not isinstance(continuation, dict):\n+            raise OperatorError(\"continuation must be an object\")\n+        acknowledged = continuation.get(\"acknowledged_receipts\", [])\n+        if not isinstance(acknowledged, list) or any(\n+            not isinstance(value, str) or not REQUEST_ID_RE.fullmatch(value)\n+            for value in acknowledged\n+        ):\n+            raise OperatorError(\"continuation.acknowledged_receipts must be valid request IDs\")\n+        if len(set(acknowledged)) != len(acknowledged):\n+            raise OperatorError(\"continuation.acknowledged_receipts must not contain duplicates\")\n+        goal_state = continuation.get(\"goal_state\", \"in_progress\")\n+        if goal_state not in {\"in_progress\", \"completed\", \"blocked\"}:\n+            raise OperatorError(\"continuation.goal_state must be in_progress, completed, or blocked\")\n+        goal_id = continuation.get(\"goal_id\")\n+        if goal_id is not None and (\n+            not isinstance(goal_id, str) or not REQUEST_ID_RE.fullmatch(goal_id)\n+        ):\n+            raise OperatorError(\"continuation.goal_id must be a valid identifier\")\n+        summary = continuation.get(\"summary\")\n+        if summary is not None and (\n+            not isinstance(summary, str) or len(summary.strip()) > 2000\n+        ):\n+            raise OperatorError(\"continuation.summary must be a string up to 2000 characters\")\n+        normalized_continuation = {\n+            \"acknowledged_receipts\": acknowledged,\n+            \"goal_state\": goal_state,\n+        }\n+        if goal_id is not None:\n+            normalized_continuation[\"goal_id\"] = goal_id\n+        if summary is not None:\n+            normalized_continuation[\"summary\"] = summary.strip()\n+    else:\n+        normalized_continuation = None\n     normalized = dict(request)\n     normalized[\"args\"] = args\n     normalized[\"expected\"] = expected\n     normalized[\"limits\"] = limits\n+    if normalized_continuation is not None:\n+        normalized[\"continuation\"] = normalized_continuation\n     return normalized\n \n \n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:46:01.973458+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
