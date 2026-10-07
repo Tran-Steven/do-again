@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "duplicate-dedupe-live-verify2-4a8f2c6e1d93",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T20:05:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T20:35:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.service.daemon import _drain_browser_outbox, _pending_outbox\nfrom do_again.service.runtime import runtime_layout\n\nlayout = runtime_layout(repo)\nstate = layout.state_dir\n\nbefore = [p.name for p in _pending_outbox(state)]\ndelivered = _drain_browser_outbox(repo, state)\nafter = [p.name for p in _pending_outbox(state)]\n\nprint(json.dumps({\n    \"before_count\": len(before),\n    \"before\": before,\n    \"delivered\": delivered,\n    \"after_count\": len(after),\n    \"after\": after,\n}, indent=2))\n\nraise SystemExit(0 if not after else 1)\n"
+  },
+  "expected": {
+    "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
