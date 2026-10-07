@@ -1,0 +1,59 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:69160:1791383246",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:27:30.021923+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "15cdd7ffa45ee0bba0760ae0042b61c7f1acb3f87df6c74cf8dd1a8c9d145b2b",
+  "request_id": "dogfood-lifecycle-fix-002",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "53f8242fd9ae38bce58381254be678d1b5669d70",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "53f8242fd9ae38bce58381254be678d1b5669d70",
+      "revision": null
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "15cdd7ffa45ee0bba0760ae0042b61c7f1acb3f87df6c74cf8dd1a8c9d145b2b",
+    "result": {
+      "argv": [
+        "python3",
+        "/Users/steventran/.do_again/dogfood-do-again/state/scratch/dogfood-lifecycle-fix-002/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.058,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 3019,
+      "script_path": "/Users/steventran/.do_again/dogfood-do-again/state/scratch/dogfood-lifecycle-fix-002/script.py",
+      "script_sha256": "ac964625e2f460f613c73e4df184f0fc49b76d0e8efd8a81fbc77949663bed71",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "added launchd state waits\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:27:29.759900+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
