@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-verify-syntax-fix-20261007-22",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:01:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:31:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"61ffe358c866c419b4af7f369f6446eed3f072f7\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=check, env=env)\n\nhead = run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch = run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nif head != expected or branch != \"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected isolated state head={head} branch={branch}\")\n\ncli = wt / \"src/do_again/cli.py\"\ntext = cli.read_text()\nif \"from .browser import cdp\\n\" not in text:\n    text = text.replace(\"from .browser.runtime import use_background_fallback\\n\", \"from .browser.runtime import use_background_fallback\\nfrom .browser import cdp\\n\", 1)\ntext = text.replace(\"        from .browser import cdp\\n        target = cdp.create_target(port, chat_url, background=True)\\n\", \"        target = cdp.create_target(port, chat_url, background=True)\\n\", 1)\ncli.write_text(text)\n\ntest = wt / \"tests/test_cli.py\"\nt = test.read_text()\n\nstart = t.index('            (repo / \"do-again.toml\").write_text(\\n', t.index(\"test_verify_reports_setup_ok_only_after_matching_success_receipt\"))\nend = t.index('            control = root / \"control\"\\n', start)\nreplacement = '''            (repo / \"do-again.toml\").write_text(\n                '[do_again]\\\\n'\n                'control_branch = \"operator-control\"\\\\n'\n                'remote = \"origin\"\\\\n'\n                'browser = true\\\\n',\n                encoding=\"utf-8\",\n            )\n'''\nt = t[:start] + replacement + t[end:]\ntest.write_text(t)\n\nenv = os.environ.copy()\nenv[\"PYTHONPATH\"] = str(wt/\"src\")\n\ncompile_run = run([\"python3\",\"-m\",\"py_compile\",\"src/do_again/cli.py\",\"tests/test_cli.py\"], env=env)\nprint(\"py_compile=ok\")\n\nfocused = run([\"python3\",\"-m\",\"unittest\",\"tests.test_cli\"], check=False, env=env)\nprint(\"=== focused stdout ===\")\nprint(focused.stdout)\nprint(\"=== focused stderr ===\")\nprint(focused.stderr)\nprint(\"focused_rc=\" + str(focused.returncode))\nif focused.returncode != 0:\n    raise SystemExit(focused.returncode)\n\nrun([\"git\",\"add\",\"src/do_again/cli.py\",\"tests/test_cli.py\"])\ncommit = run([\"git\",\"commit\",\"-m\",\"Add end-to-end setup verification command\"], check=False)\nprint(\"=== commit stdout ===\")\nprint(commit.stdout)\nprint(\"=== commit stderr ===\")\nprint(commit.stderr)\nif commit.returncode != 0:\n    raise SystemExit(commit.returncode)\n\nprint(\"new_head=\" + run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\" + repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
