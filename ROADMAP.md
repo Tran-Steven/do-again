@@ -58,4 +58,4 @@ Do Again should be easy on the first run and still expose lower-level controls f
 - [x] Browser hardening tests executed through a real Do Again request/receipt loop.
 - [x] Real Chrome smoke tests pass in Linux and Windows CI.
 - [x] Authenticated ChatGPT message/response succeeds after human verification and runtime restart (macOS background fallback).
-- [ ] Publish 0.3.0 through Trusted Publishing after validation passes.
+- [x] Publish 0.3.0 through Trusted Publishing after validation passes.
