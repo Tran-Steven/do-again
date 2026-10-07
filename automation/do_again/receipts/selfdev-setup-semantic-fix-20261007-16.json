@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:52:16.196620+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "2b015c2c08fdd93f73832f6d49fc0210e87f67efe4fda80f10eb090bc82da0d4",
+  "request_id": "selfdev-setup-semantic-fix-20261007-16",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "2b015c2c08fdd93f73832f6d49fc0210e87f67efe4fda80f10eb090bc82da0d4",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-setup-semantic-fix-20261007-16/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 10.991,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 3312,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-setup-semantic-fix-20261007-16/script.py",
+      "script_sha256": "2e48b99ec566bf2afc80dd71f675e81c0ab7856b866067f53f7732692b327b72",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== focused stdout ===\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpgph973mr/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp3joos09l/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp3joos09l/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp3joos09l/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp3joos09l/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp3joos09l/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n..........F.\n======================================================================\nFAIL: test_setup_no_service_is_one_command_bootstrap (tests.test_cli.CliOnboardingTests.test_setup_no_service_is_one_command_bootstrap)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_cli.py\", line 55, in test_setup_no_service_is_one_command_bootstrap\n    self.assertIn(\"SETUP_OK\", text)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\nAssertionError: 'SETUP_OK' not found in '/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp9nvt1i84/repo with spaces/do-again.toml\\nSETUP_CONFIGURED\\nverification=not_run\\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp9nvt1i84/repo with spaces\\nremote=origin\\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp9nvt1i84/origin.git\\ncontrol_branch=operator-control\\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp9nvt1i84/repo with spaces/do-again.toml\\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp9nvt1i84/repo with spaces/do-again-policy.json\\nbrowser_enabled=False\\nbackground_installed=false\\nnext=do-again run\\n'\n\n----------------------------------------------------------------------\nRan 12 tests in 10.096s\n\nFAILED (failures=1)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:52:04.890385+00:00",
+  "state": "failed",
+  "traceback": null
+}
