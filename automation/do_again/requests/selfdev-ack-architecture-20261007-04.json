@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ack-architecture-20261007-04",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:43:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:13:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"d6114a1564542b17309f91423d533345c8056307\"\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nif head != expected:\n    raise SystemExit(f\"head changed: {head}\")\n\nfiles = {\n    \"daemon\": wt / \"src/do_again/service/daemon.py\",\n    \"browser\": wt / \"src/do_again/browser/runtime.py\",\n    \"runtime\": wt / \"src/do_again/service/runtime.py\",\n    \"agent\": wt / \"src/do_again/core/agent.py\",\n}\n\nranges = {\n    \"daemon\": [(1, 220), (220, 420)],\n    \"browser\": [(1180, 1335)],\n    \"runtime\": [(1, 260)],\n    \"agent\": [(1, 260)],\n}\n\nfor name, path in files.items():\n    print(f\"=== {name}: {path.relative_to(wt)} ===\")\n    lines = path.read_text().splitlines()\n    for start, end in ranges[name]:\n        print(f\"--- {start}-{min(end,len(lines))} ---\")\n        for n in range(start, min(end, len(lines)) + 1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
