@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "live-final-20261007T192139-93cd",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:21:39.845Z",
+  "expires_at_utc": "2026-10-07T19:36:39.845Z",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport subprocess\nimport sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path.cwd() / \"src\"))\nfrom do_again.browser.runtime import browser_self_test, browser_status\nresult = browser_self_test()\nreport = {\"passed\": result.get(\"response\", \"\").strip() == \"DO_AGAIN_BROWSER_OK\", \"response\": result.get(\"response\"), \"mode\": browser_status().get(\"mode\"), \"chat_url\": result.get(\"chat_url\"), \"repo_head\": subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"],text=True).strip()}\nprint(\"DO_AGAIN_FINAL_ROUND_TRIP=\" + json.dumps(report),flush=True)\nsys.exit(0 if report[\"passed\"] else 1)\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
