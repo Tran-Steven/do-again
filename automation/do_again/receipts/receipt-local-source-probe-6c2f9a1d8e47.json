@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:25:09.952784+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "5799a98488779237f19ada6173f9658e856512c1a7f16be4006f03cbd09077be",
+  "request_id": "receipt-local-source-probe-6c2f9a1d8e47",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "5799a98488779237f19ada6173f9658e856512c1a7f16be4006f03cbd09077be",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-local-source-probe-6c2f9a1d8e47/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.112,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 179,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-local-source-probe-6c2f9a1d8e47/script.py",
+      "script_sha256": "5d8888299326f744f7248955452afcad5407965e4efc62aff41f248cf758f12d",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "def send_message(\n    target: cdp.Target,\n    text: str,\n    *,\n    timeout: float = 180.0,\n    wait_for_response: bool = True,\n) -> dict[str, Any]:\n    baseline = _assistant_snapshot(target)\n    if baseline.get(\"busy\"):\n        raise BrowserError(\"ChatGPT is still generating; retry delivery later\")\n    if _context_limit_warning(target):\n        raise BrowserError(\"ChatGPT conversation reached its context limit\")\n    prep = r\"\"\"(() => {\nconst visible = (el) => {\n  if (!el) return false;\n  const r = el.getBoundingClientRect();\n  const s = getComputedStyle(el);\n  return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';\n};\nconst nodes = Array.from(document.querySelectorAll('#prompt-textarea,[data-testid=\"prompt-textarea\"],textarea,div[contenteditable=\"true\"]'));\nconst el = nodes.find(visible) || nodes[0];\nif (!el) return 'no_prompt';\nel.focus({preventScroll:true});\nif ('value' in el) {\n  el.value = '';\n  el.dispatchEvent(new Event('input', {bubbles:true}));\n} else {\n  const sel = window.getSelection();\n  const range = document.createRange();\n  range.selectNodeContents(el);\n  sel.removeAllRanges();\n  sel.addRange(range);\n  document.execCommand('delete');\n}\nreturn 'ready';\n})()\"\"\"\n    if cdp.evaluate(target, prep, timeout=15.0, user_gesture=True) != \"ready\":\n        raise BrowserError(\"ChatGPT composer was not available\")\n    cdp.insert_text(target, text)\n\n    click = r\"\"\"(() => {\nconst buttons = [\n  document.querySelector('[data-testid=\"send-button\"]'),\n  document.querySelector('button[aria-label=\"Send prompt\"]'),\n  document.querySelector('button[aria-label=\"Send\"]')\n].filter(Boolean);\nconst button = buttons.find(b => !b.disabled);\nif (!button) return 'no_button';\nbutton.click();\nreturn 'clicked';\n})()\"\"\"\n    time.sleep(0.15)\n    cdp.press_enter(target)\n    accepted = False\n    for _ in range(20):\n        time.sleep(0.1)\n        accepted = bool(cdp.evaluate(target, r\"\"\"(() => {\nconst el = document.querySelector('#prompt-textarea,[data-testid=\"prompt-textarea\"],textarea,div[contenteditable=\"true\"]');\nreturn el && !(el.value || el.innerText || '').trim();\n})()\"\"\", timeout=10.0))\n        if accepted:\n            break\n    if not accepted:\n        if cdp.evaluate(target, click, timeout=10.0, user_gesture=True) != \"clicked\":\n            raise BrowserError(\"ChatGPT did not accept the submitted prompt\")\n\n    if not wait_for_response:\n        return {\n            \"response\": \"\",\n            \"chat_url\": target.url,\n        }\n\n    deadline = time.monotonic() + timeout\n    last = baseline\n    stable = 0\n    while time.monotonic() < deadline:\n        time.sleep(1.0)\n        current = _assistant_snapshot(target)\n        if _context_limit_warning(target):\n            raise BrowserError(\"ChatGPT conversation reached its context limit\")\n        if (\n            int(current.get(\"count\") or 0) > int(baseline.get(\"count\") or 0)\n            and not current.get(\"busy\")\n            and str(current.get(\"latest\") or \"\").strip()\n        ):\n            if current.get(\"latest\") == last.get(\"latest\"):\n                stable += 1\n            else:\n                stable = 0\n            if stable >= 1 and \"/c/local-\" not in str(current.get(\"url\") or \"\"):\n                return {\n                    \"response\": str(current.get(\"latest\") or \"\"),\n                    \"chat_url\": str(current.get(\"url\") or \"\"),\n                }\n        last = current\n    raise BrowserError(\"timed out waiting for ChatGPT to finish the browser iteration\")\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:25:09.499494+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
