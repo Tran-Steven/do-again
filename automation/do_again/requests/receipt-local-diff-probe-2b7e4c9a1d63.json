@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-local-diff-probe-2b7e4c9a1d63",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T20:26:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T20:56:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nprint(\"=== git diff ===\")\nprint(subprocess.check_output([\"git\", \"diff\", \"--\", \"src/do_again/browser/runtime.py\", \"tests/test_browser.py\"], text=True))\n\np = Path(\"src/do_again/browser/runtime.py\")\ns = p.read_text()\ni = s.index(\"@_project_operation\\ndef notify_receipt\")\nprint(\"=== notify_receipt ===\")\nprint(s[i:i+4200])\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 60
+  }
+}
