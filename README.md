@@ -27,15 +27,31 @@ The agent can inspect the result, decide what still needs work, and submit anoth
 
 ## Install
 
+### Python / PyPI
+
 ```bash
 pip install do-again
 ```
 
-The installed command is:
+### Node / npm
+
+```bash
+npm install -g do-again
+```
+
+or run it without a global install:
+
+```bash
+npx do-again doctor
+```
+
+Both distributions expose the same command:
 
 ```bash
 do-again
 ```
+
+The npm package ships the same Python runtime from this repository behind a small Node launcher. It requires Node.js 18+ and Python 3.11+.
 
 ## Quick start
 
@@ -80,6 +96,8 @@ do-again doctor
 Releases use semantic versioning. Pushing a version tag such as `v0.1.0` builds and validates a wheel and source distribution, publishes them to PyPI through Trusted Publishing, and creates the matching GitHub Release.
 
 PyPI distribution name: `do-again`
+
+npm package name: `do-again`
 
 CLI command: `do-again`
 
