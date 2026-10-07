@@ -399,6 +399,15 @@ class Agent:
     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:
         atomic_json(self.ledger_path(request_id), value)
 
+    @staticmethod
+    def _request_matches_fingerprint(request: dict[str, Any], fingerprint: str) -> bool:
+        if request_fingerprint(request) == fingerprint:
+            return True
+        legacy = dict(request)
+        for field in ("args", "expected", "limits"):
+            legacy.setdefault(field, {})
+        return request_fingerprint(legacy) == fingerprint
+
     def make_receipt(
         self,
         *,
@@ -502,7 +511,7 @@ class Agent:
             existing_fingerprint = str(
                 existing_receipt.get("request_fingerprint") or ""
             )
-            if existing_fingerprint == fingerprint:
+            if self._request_matches_fingerprint(raw, existing_fingerprint):
                 return False
             self.publish_conflict(
                 request=raw,
@@ -520,7 +529,7 @@ class Agent:
                 existing_fingerprint = str(
                     existing_receipt.get("request_fingerprint") or ""
                 )
-                if existing_fingerprint == fingerprint:
+                if self._request_matches_fingerprint(raw, existing_fingerprint):
                     return False
                 self.publish_conflict(
                     request=raw,
@@ -534,7 +543,7 @@ class Agent:
                 ledger_fingerprint = str(
                     ledger.get("request_fingerprint") or ""
                 )
-                if ledger_fingerprint and ledger_fingerprint != fingerprint:
+                if ledger_fingerprint and not self._request_matches_fingerprint(raw, ledger_fingerprint):
                     self.publish_conflict(
                         request=raw,
                         reason="request_id conflicts with durable local ledger content",
@@ -577,7 +586,7 @@ class Agent:
 
             started_at = utc_now().isoformat()
             try:
-                request = validate_request(
+                validate_request(
                     raw,
                     max_ttl_seconds=int(
                         self.policy.get("max_request_ttl_seconds", 3600)
@@ -590,17 +599,17 @@ class Agent:
                     request_id,
                     {
                         "state": "started",
-                        "request_fingerprint": request_fingerprint(request),
+                        "request_fingerprint": fingerprint,
                         "started_at_utc": started_at,
                         "agent_instance_id": self.instance_id,
                     },
                 )
-                payload = self.executor.execute(request)
+                payload = self.executor.execute(raw)
                 receipt_state = (
                     "succeeded" if self.result_succeeded(payload) else "failed"
                 )
                 receipt = self.make_receipt(
-                    request=request,
+                    request=raw,
                     state=receipt_state,
                     started_at=started_at,
                     result=payload,
