@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "request_id": "browser-verify-251a6d3538d0",
+  "operation": "extended_exec",
+  "issued_at_utc": "2026-10-07T17:45:34.625289+00:00",
+  "expires_at_utc": "2026-10-07T18:00:34.625289+00:00",
+  "args": {
+    "argv": [
+      "git",
+      "status",
+      "--short"
+    ]
+  },
+  "expected": {
+    "repo_head": "6bc66295e052b62400844eb1ec158ab0538b4227"
+  },
+  "limits": {
+    "timeout_seconds": 30
+  }
+}
