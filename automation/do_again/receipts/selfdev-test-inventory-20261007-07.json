@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:44:05.801578+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "25dd6c6f6767dfbf6b006ec8508b47e5704e78630d421b4b0471e68c0a872656",
+  "request_id": "selfdev-test-inventory-20261007-07",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "25dd6c6f6767dfbf6b006ec8508b47e5704e78630d421b4b0471e68c0a872656",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-test-inventory-20261007-07/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.146,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 929,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-test-inventory-20261007-07/script.py",
+      "script_sha256": "b2c65a844a90f3ebb8b7c00d28d0da1f3d6b7ef1bee34d7d30c0495cff25d0b0",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== tests ===\ntest_agent_claims.py\ntest_agent_sync.py\ntest_browser.py\ntest_browser_hardening.py\ntest_cdp.py\ntest_cli.py\ntest_daemon.py\ntest_executor.py\ntest_platforms.py\ntest_request_fingerprints.py\ntest_service.py\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:44:05.301756+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
