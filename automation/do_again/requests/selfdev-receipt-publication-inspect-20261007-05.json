@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-receipt-publication-inspect-20261007-05",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:44:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:14:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nif head != \"d6114a1564542b17309f91423d533345c8056307\":\n    raise SystemExit(f\"unexpected head {head}\")\n\np = wt / \"src/do_again/core/agent.py\"\nlines = p.read_text().splitlines()\n\nneedles = [\n    \"publish_receipt\",\n    \"receipt_callback\",\n    \"ledger_path\",\n    \"blocked_ambiguous_replay\",\n    \"state =\",\n    \"receipt_payload\",\n]\nhits = [i for i,l in enumerate(lines,1) if any(n in l for n in needles)]\nseen = set()\nfor hit in hits:\n    start=max(1,hit-8); end=min(len(lines),hit+24)\n    if (start,end) in seen: continue\n    seen.add((start,end))\n    print(f\"--- {start}-{end} ---\")\n    for n in range(start,end+1):\n        print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
