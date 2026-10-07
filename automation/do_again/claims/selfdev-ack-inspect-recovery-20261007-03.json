@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:41:22.634866+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "e4b58d5931a94389abbaaa3579cb84f6c5381c0ad108dd57e687e8bfcb8b31ea",
+  "request_id": "selfdev-ack-inspect-recovery-20261007-03",
+  "schema_version": 1
+}
