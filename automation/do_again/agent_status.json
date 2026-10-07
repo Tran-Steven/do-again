@@ -3,12 +3,12 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:83817:1791383724",
-  "last_request_id": "selfhost-public-tests-001",
+  "last_request_id": "selfhost-crossplatform-verify-001",
   "last_request_state": "succeeded",
   "pid": 83817,
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-07T14:35:24.084070+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-07T14:47:09.208574+00:00"
+  "updated_at_utc": "2026-10-07T14:49:09.052161+00:00"
 }
