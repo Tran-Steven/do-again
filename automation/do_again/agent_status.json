@@ -3,12 +3,12 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:34524:1791384962",
-  "last_request_id": "hardening-probe-001",
+  "last_request_id": "hardening-probe-002",
   "last_request_state": "succeeded",
   "pid": 34524,
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-07T14:56:02.656416+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-07T15:06:14.603034+00:00"
+  "updated_at_utc": "2026-10-07T15:33:35.142682+00:00"
 }
