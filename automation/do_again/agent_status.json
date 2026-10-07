@@ -3,10 +3,12 @@
   "control_worktree": "/Users/steventran/.do_again/dogfood-do-again/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:69160:1791383246",
+  "last_request_id": "dogfood-lifecycle-fix-002",
+  "last_request_state": "succeeded",
   "pid": 69160,
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-07T14:27:26.753149+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-07T14:27:26.753523+00:00"
+  "updated_at_utc": "2026-10-07T14:27:32.243849+00:00"
 }
