@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "duplicate-dom-probe-8b2f4c91d7e6",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:49:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T20:19:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.browser import cdp\nfrom do_again.browser.runtime import browser_status, project_record, _find_chatgpt_target, wait_for_authenticated\n\nrecord = project_record(repo)\nstatus = browser_status()\nport = int(status[\"port\"])\ntarget = _find_chatgpt_target(port, str(record.get(\"chat_url\") or \"\"))\nif target is None:\n    raise SystemExit(\"bound target not found\")\ntarget, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)\n\nmarker = \"DO_AGAIN_RECEIPT_READY request_id=live-e2e-inspect-9c41f0f2e3ab\"\nexpr = \"\"\"(() => {\nconst marker = %s;\nconst all = Array.from(document.querySelectorAll('body *'));\nconst hits = all.filter(el => ((el.innerText || el.textContent || '')).includes(marker));\nreturn hits.slice(0, 30).map(el => {\n  const chain = [];\n  let cur = el;\n  for (let i = 0; cur && i < 8; i++, cur = cur.parentElement) {\n    chain.push({\n      tag: cur.tagName,\n      id: cur.id || null,\n      cls: typeof cur.className === 'string' ? cur.className.slice(0, 300) : null,\n      testid: cur.getAttribute && cur.getAttribute('data-testid'),\n      role: cur.getAttribute && cur.getAttribute('data-message-author-role'),\n      convo: cur.getAttribute && cur.getAttribute('data-conversation-role'),\n      aria: cur.getAttribute && cur.getAttribute('aria-label'),\n      text: (cur.innerText || cur.textContent || '').slice(0, 500)\n    });\n  }\n  return chain;\n});\n})()\"\"\" % json.dumps(marker)\n\nresult = cdp.evaluate(target, expr, timeout=20.0)\nprint(json.dumps({\"chat_url\": target.url, \"marker\": marker, \"hits\": result}, indent=2))\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 90
+  }
+}
