@@ -1,7 +1,7 @@
 {
   "agent_instance_id": "Stevens-Mac-mini.local:7074:1791396583:91c6b4930212",
   "existing_fingerprint": "8206a229de5a75a56744a798a8a66bec17a7a4ff03d2a5b120de82bc478331a6",
-  "observed_at_utc": "2026-10-07T19:19:58.206708+00:00",
+  "observed_at_utc": "2026-10-07T19:20:01.472541+00:00",
   "reason": "request_id already has a receipt for different request content",
   "request_fingerprint": "4c78f962b806124cd080956aed36ea6f1d13943c201285ba3e3837f05b811ee9",
   "request_id": "live-confirm-20261007T191718-a28f",
