@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:44:25.639919+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "1ac3a9ba3674867a8f2c1727adaa9c5a16572ea126e0e162d46fbdf5236c57e1",
+  "request_id": "receipt-drain-diff-probe-1f6c8a2e4d95",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "1ac3a9ba3674867a8f2c1727adaa9c5a16572ea126e0e162d46fbdf5236c57e1",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-diff-probe-1f6c8a2e4d95/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.228,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 275,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-diff-probe-1f6c8a2e4d95/script.py",
+      "script_sha256": "975a797f0261409df1ad7e8cf00ea9f7d5ef17eb9ccef3d861f6a5e56fd8f858",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "diff --git a/src/do_again/service/daemon.py b/src/do_again/service/daemon.py\nindex f3379f3..494c862 100644\n--- a/src/do_again/service/daemon.py\n+++ b/src/do_again/service/daemon.py\n@@ -100,15 +100,25 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path) -> int:\n     activate_project(repo)\n     ensure_browser_running(verify_auth=True)\n     delivered = 0\n+    blocked = 0\n+    last_error: str | None = None\n     for path in _pending_outbox(state_dir):\n         receipt = _read_outbox(path)\n-        notify_receipt(repo, receipt)\n+        try:\n+            notify_receipt(repo, receipt)\n+        except BrowserError as exc:\n+            blocked += 1\n+            last_error = str(exc)\n+            continue\n         try:\n             path.unlink()\n         except FileNotFoundError:\n             pass\n         delivered += 1\n-    _record_browser_state(state_dir, \"ready\")\n+    if blocked:\n+        _record_browser_state(state_dir, \"recovering\", error=last_error)\n+    else:\n+        _record_browser_state(state_dir, \"ready\")\n     return delivered\n \n \ndiff --git a/tests/test_daemon.py b/tests/test_daemon.py\nindex 06bf4a9..d636ec0 100644\n--- a/tests/test_daemon.py\n+++ b/tests/test_daemon.py\n@@ -48,6 +48,33 @@ class BrowserOutboxTests(unittest.TestCase):\n                     _drain_browser_outbox(repo, state)\n             self.assertTrue(path.is_file())\n \n+    def test_one_blocked_receipt_does_not_stop_later_delivery(self) -> None:\n+        with tempfile.TemporaryDirectory() as tmp:\n+            state_dir = Path(tmp) / \"state\"\n+            first = _queue_receipt(state_dir, {\"request_id\": \"first\", \"state\": \"succeeded\"})\n+            second = _queue_receipt(state_dir, {\"request_id\": \"second\", \"state\": \"succeeded\"})\n+            repo = Path(tmp) / \"repo\"\n+            repo.mkdir()\n+\n+            def deliver(_repo, receipt):\n+                if receipt[\"request_id\"] == \"first\":\n+                    raise BrowserError(\"ChatGPT is still generating; retry delivery later\")\n+                return {\"response\": \"submitted\"}\n+\n+            with (\n+                patch(\"do_again.service.daemon.activate_project\"),\n+                patch(\"do_again.service.daemon.ensure_browser_running\"),\n+                patch(\"do_again.service.daemon.notify_receipt\", side_effect=deliver),\n+            ):\n+                delivered = _drain_browser_outbox_locked(repo, state_dir)\n+\n+            self.assertEqual(delivered, 1)\n+            self.assertTrue(first.exists())\n+            self.assertFalse(second.exists())\n+            status = json.loads((state_dir / \"browser_status.json\").read_text())\n+            self.assertEqual(status[\"state\"], \"recovering\")\n+            self.assertEqual(status[\"pending_receipts\"], 1)\n+\n     def test_successful_delivery_removes_outbox_item(self) -> None:\n         with tempfile.TemporaryDirectory() as tmp:\n             state = Path(tmp)\n\n=== imports ===\nfrom __future__ import annotations\n\nimport json\nimport tempfile\nimport unittest\nfrom pathlib import Path\nfrom unittest.mock import patch\n\nfrom do_again.service.daemon import (\n    _browser_outbox_dir,\n    _drain_browser_outbox,\n    _pending_outbox,\n    _queue_receipt,\n)\n\n\nclass BrowserOutboxTests(unittest.TestCase):\n    def test_queue_receipt_is_durable_and_idempotent_by_request_id(self) -> None:\n        with tempfile.TemporaryDirectory() as tmp:\n            state = Path(tmp)\n            first = {\"request_id\": \"req-1\", \"state\": \"succeeded\"}\n            second = {\"request_id\": \"req-1\", \"state\": \"failed\"}\n            path = _queue_receipt(state, first)\n            self.assertTrue(path.is_file())\n            _queue_receipt(state, second)\n            saved = json.loads(path.read_text(encoding=\"utf-8\"))\n            self.assertEqual(saved[\"state\"], \"failed\")\n            self.assertEqual(len(_pending_outbox(state)), 1)\n\n    def test_failed_delivery_stays_queued_for_retry(self) -> None:\n        with tempfile.TemporaryDirectory() as tmp:\n            state = Path(tmp)\n            repo = Path(tmp) / \"repo\"\n            repo.mkdir()\n            path = _queue_receipt(\n                state,\n                {\"request_id\": \"req-retry\", \"state\": \"succeeded\"},\n            )\n            with (\n                patch(\"do_again.service.daemon.ensure_browser_running\"),\n                patch(\"do_again.service.daemon.activate_project\"),\n                patch(\n                    \"do_again.service.daemon.notify_receipt\",\n                    side_effect=RuntimeError(\"browser crashed\"),\n                ),\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:44:24.978301+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
