@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:48:35.702408+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "56dedefd3711c8fff567e954a121384572d619123b852fe520be5301e61e3f85",
+  "request_id": "selfdev-ack-fixture-fix-commit-20261007-12",
+  "schema_version": 1
+}
