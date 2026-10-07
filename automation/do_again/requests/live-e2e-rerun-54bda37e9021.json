@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "live-e2e-rerun-54bda37e9021",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:20:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T19:35:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.browser.runtime import browser_status, browser_self_test\n\nbefore = browser_status(verify_session=True)\nresult = browser_self_test()\nafter = browser_status(verify_session=True)\nresponse = result.get(\"response\", \"\")\n\nreport = {\n    \"passed\": response.strip() == \"DO_AGAIN_BROWSER_OK\",\n    \"response\": response,\n    \"chat_url\": result.get(\"chat_url\"),\n    \"mode_before\": before.get(\"mode\"),\n    \"mode_after\": after.get(\"mode\"),\n    \"pid_before\": before.get(\"pid\"),\n    \"pid_after\": after.get(\"pid\"),\n    \"authenticated_before\": before.get(\"authenticated\"),\n    \"authenticated_after\": after.get(\"authenticated\"),\n    \"session_ready_before\": before.get(\"session_ready\"),\n    \"session_ready_after\": after.get(\"session_ready\"),\n}\nprint(\"DO_AGAIN_LIVE_ROUNDTRIP=\" + json.dumps(report), flush=True)\nraise SystemExit(0 if report[\"passed\"] else 1)\n"
+  },
+  "expected": {
+    "repo_head": "b6209bd792ea98034b73fb7eae36b9548d4ccffe"
+  },
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
