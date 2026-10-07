@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:04:18.982155+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "fc7e8b75c8f35c35d7383d0be9463319210987f28e9acee4e9819da4acbcafd2",
+  "request_id": "receipt-batch-finalize-4e9a1c7d2b65",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "fc7e8b75c8f35c35d7383d0be9463319210987f28e9acee4e9819da4acbcafd2",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-finalize-4e9a1c7d2b65/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.284,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 5270,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-finalize-4e9a1c7d2b65/script.py",
+      "script_sha256": "0cc856dce6b91d2b60bfac8a9b95c2582a7b690b076547512b87731c1315074d",
+      "stderr": "  File \"src/do_again/browser/runtime.py\", line 1299\n    \"Do Again request only if more local work is needed:\n    ^\nSyntaxError: unterminated string literal (detected at line 1299)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-finalize-4e9a1c7d2b65/script.py\", line 117, in <module>\n    subprocess.run([\"python3\", \"-m\", \"py_compile\", \"src/do_again/browser/runtime.py\", \"src/do_again/service/daemon.py\"], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'py_compile', 'src/do_again/browser/runtime.py', 'src/do_again/service/daemon.py']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:04:18.364074+00:00",
+  "state": "failed",
+  "traceback": null
+}
