@@ -249,7 +249,8 @@ def setup_project(
         print(f"do-again: setup failed: {exc}", file=sys.stderr)
         return 1
 
-    print("SETUP_OK")
+    print("SETUP_CONFIGURED")
+    print("verification=not_run")
     print(f"repo={repo}")
     print(f"remote={layout.remote}")
     print(f"remote_url={remote_url}")

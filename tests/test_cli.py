@@ -52,7 +52,9 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertTrue((repo / "do-again.toml").is_file())
             self.assertTrue((repo / "do-again-policy.json").is_file())
             text = output.getvalue()
-            self.assertIn("SETUP_OK", text)
+            self.assertIn("SETUP_CONFIGURED", text)
+            self.assertIn("verification=not_run", text)
+            self.assertNotIn("SETUP_OK", text)
             self.assertIn("next=do-again run", text)
 
     def test_setup_background_reports_success(self) -> None:
