@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-test-inventory-20261007-07",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:46:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:16:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nif head != \"d6114a1564542b17309f91423d533345c8056307\":\n    raise SystemExit(f\"unexpected head {head}\")\n\nprint(\"=== tests ===\")\nfor p in sorted((wt/\"tests\").glob(\"test_*.py\")):\n    print(p.name)\n\nfor rel in [\"tests/test_agent.py\", \"tests/test_core.py\", \"tests/test_safety.py\"]:\n    p = wt/rel\n    if not p.exists():\n        continue\n    print(f\"=== {rel} ===\")\n    lines=p.read_text().splitlines()\n    for n,line in enumerate(lines,1):\n        if any(k in line for k in [\"validate_request(\", \"make_request\", \"request_id\", \"receipt_callback\", \"Agent(\"]):\n            start=max(1,n-4); end=min(len(lines),n+12)\n            print(f\"--- {start}-{end} ---\")\n            for i in range(start,end+1):\n                print(f\"{i:04d}: {lines[i-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
