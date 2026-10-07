@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-status-policy-20261007-01",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:40:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:10:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nif not wt.is_dir():\n    raise SystemExit(f\"missing isolated worktree: {wt}\")\n\ndef run(*args):\n    return subprocess.check_output(args, cwd=wt, text=True).strip()\n\nstatus = {\n    \"worktree\": str(wt),\n    \"branch\": run(\"git\", \"branch\", \"--show-current\"),\n    \"head\": run(\"git\", \"rev-parse\", \"HEAD\"),\n    \"status_porcelain\": run(\"git\", \"status\", \"--porcelain=v1\"),\n    \"origin_main\": run(\"git\", \"rev-parse\", \"origin/main\"),\n    \"remote\": run(\"git\", \"remote\", \"-v\"),\n}\n\npolicy_candidates = [\n    wt / \"do-again-policy.json\",\n    wt / \"do-again.toml\",\n    wt / \"pyproject.toml\",\n]\nstatus[\"files\"] = {\n    str(p.name): {\n        \"exists\": p.exists(),\n        \"size\": p.stat().st_size if p.exists() else None,\n    }\n    for p in policy_candidates\n}\n\nprint(json.dumps(status, indent=2))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
