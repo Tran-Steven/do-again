@@ -13,6 +13,7 @@ from do_again.service.runtime import (
     _default_policy,
     _launchd_plist,
     _posix_launcher_text,
+    _systemd_quote,
     _systemd_unit,
     _windows_launcher_text,
     runtime_layout,
@@ -72,8 +73,8 @@ class ServiceRuntimeTests(unittest.TestCase):
             self.assertIn(str(layout.runtime_source), launcher)
             self.assertIn("do_again.core.agent", launcher)
             self.assertIn("Restart=always", unit)
-            self.assertIn(str(layout.root / "run-agent.sh"), unit)
-            self.assertIn(str(repo.resolve()), unit)
+            self.assertIn(_systemd_quote(str(layout.root / "run-agent.sh")), unit)
+            self.assertIn(_systemd_quote(str(repo.resolve())), unit)
 
     def test_windows_launcher_uses_copied_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
