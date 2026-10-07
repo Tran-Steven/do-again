@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "duplicate-dedupe-jsfix-3b6d7c9e1a20",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T20:00:30.000000+00:00",
+  "expires_at_utc": "2026-10-07T20:30:30.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nruntime = Path(\"src/do_again/browser/runtime.py\")\ntests = Path(\"tests/test_browser.py\")\n\ntext = runtime.read_text()\nold = \"\"\"const raw = (conversation.innerText || conversation.textContent || '').replace(/\\\\r\\\\n/g, '\\\\n');\nconst labeled = 'You said:\\\\n' + needle;\nreturn raw.includes(labeled);\"\"\"\nnew = \"\"\"const raw = (conversation.innerText || conversation.textContent || '').split('\\\\r\\\\n').join('\\\\n');\nconst labeled = 'You said:\\\\n' + needle;\nreturn raw.includes(labeled);\"\"\"\nif old not in text:\n    raise SystemExit(\"fallback normalization block not found\")\nruntime.write_text(text.replace(old, new))\n\nsubprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_browser\"], check=True)\nsubprocess.run([\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"], check=True)\nsubprocess.run([\"git\", \"add\", str(runtime)], check=True)\nsubprocess.run([\"git\", \"commit\", \"-m\", \"Fix receipt dedupe JavaScript fallback\"], check=True)\nsubprocess.run([\"git\", \"push\", \"origin\", \"main\"], check=True)\nprint(subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip())\n"
+  },
+  "expected": {
+    "repo_head": "9f23e3d4f6467662ae735e113e6d2743828249dc"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
