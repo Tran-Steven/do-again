@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "duplicate-receipt-inspect-2-6a31d8c4f902",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:45:30.000000+00:00",
+  "expires_at_utc": "2026-10-07T20:15:30.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nfrom pathlib import Path\n\nroot = Path.home() / \".do_again\" / \"projects\" / \"41857a676462\"\nstate = root / \"state\"\noutbox = state / \"browser_outbox\"\n\nreport = {\n    \"browser_status\": None,\n    \"pending_outbox\": [],\n    \"callback_error\": None,\n    \"recent_state_files\": [],\n}\n\nstatus = state / \"browser_status.json\"\nif status.exists():\n    report[\"browser_status\"] = json.loads(status.read_text())\n\nif outbox.exists():\n    for p in sorted(outbox.glob(\"*.json\")):\n        try:\n            report[\"pending_outbox\"].append({\"name\": p.name, \"receipt\": json.loads(p.read_text())})\n        except Exception as exc:\n            report[\"pending_outbox\"].append({\"name\": p.name, \"error\": str(exc)})\n\nerr = state / \"receipt_callback_error.json\"\nif err.exists():\n    report[\"callback_error\"] = json.loads(err.read_text())\n\nfor p in sorted(state.glob(\"*.json\"), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:\n    report[\"recent_state_files\"].append({\n        \"name\": p.name,\n        \"mtime\": p.stat().st_mtime,\n        \"size\": p.stat().st_size,\n    })\n\nprint(json.dumps(report, indent=2, sort_keys=True))\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 60
+  }
+}
