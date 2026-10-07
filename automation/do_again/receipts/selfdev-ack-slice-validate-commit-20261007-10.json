@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:47:14.971701+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "261596dc0c0f1fc6e85fff356068ca758f129b6eab0ec03d6e099566573d9ec4",
+  "request_id": "selfdev-ack-slice-validate-commit-20261007-10",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "261596dc0c0f1fc6e85fff356068ca758f129b6eab0ec03d6e099566573d9ec4",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-slice-validate-commit-20261007-10/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 2.736,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1796,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-slice-validate-commit-20261007-10/script.py",
+      "script_sha256": "4e9760e6e7725cc333f571379604c3f50b81894d3279fc9c34d5f18e2de409dd",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n\n=== focused stderr ===\n..E.......\n======================================================================\nERROR: test_continuation_is_normalized_and_fingerprinted (tests.test_operator_progress.OperatorProgressSchemaTests.test_continuation_is_normalized_and_fingerprinted)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 1432, in patched\n    return func(*newargs, **newkeywargs)\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_operator_progress.py\", line 38, in test_continuation_is_normalized_and_fingerprinted\n    normalized = validate_request(\n        request,\n        max_ttl_seconds=3600,\n        max_future_skew_seconds=300,\n    )\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/core/schema.py\", line 115, in validate_request\n    raise OperatorError(\"continuation.acknowledged_receipts must be valid request IDs\")\ndo_again.core.schema.OperatorError: continuation.acknowledged_receipts must be valid request IDs\n\n----------------------------------------------------------------------\nRan 10 tests in 0.234s\n\nFAILED (errors=1)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:47:11.419078+00:00",
+  "state": "failed",
+  "traceback": null
+}
