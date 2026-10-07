@@ -1182,6 +1182,97 @@ def stop_if_unused() -> bool:
 
 
 @_project_operation
+def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any]:
+    if not receipts:
+        return {"response": "nothing_to_deliver", "chat_url": ""}
+
+    record = project_record(repo)
+    chat_url = str(record.get("chat_url") or "")
+    if not chat_url:
+        raise BrowserError("project has no bound automation chat; run do-again setup")
+
+    rows: list[str] = []
+    ids: list[str] = []
+    for receipt in receipts:
+        request_id = str(receipt.get("request_id") or "")
+        state = str(receipt.get("state") or "")
+        ids.append(request_id)
+        rows.append(
+            f"- {request_id} state={state} "
+            f"path=automation/do_again/receipts/{request_id}.json"
+        )
+
+    batch_marker = "DO_AGAIN_RECEIPTS_READY request_ids=" + ",".join(ids)
+    newline = chr(10)
+    message = (
+        batch_marker
+        + ". Inspect these receipts on "
+        + str(record.get("control_branch", "operator-control"))
+        + " in order, continue the existing goal once across the batch, and use another scoped "
+        + "Do Again request only if more local work is needed:"
+        + newline
+        + newline.join(rows)
+    )
+
+    status = ensure_browser_running(verify_auth=True)
+    port = int(status["port"])
+    target = _find_chatgpt_target(port, chat_url)
+    if target is None:
+        target = cdp.create_target(port, chat_url, background=True)
+
+    warning = _context_limit_warning(target)
+    if warning:
+        if _assistant_snapshot(target).get("busy"):
+            raise BrowserError(
+                "context limit detected while ChatGPT is still busy; retrying later"
+            )
+        target, record = _rollover_project_chat(
+            repo,
+            record,
+            port=port,
+            old_target=target,
+        )
+
+    target, _ = wait_for_authenticated(
+        port,
+        chat_url=record["chat_url"],
+        timeout=30.0,
+        target=target,
+    )
+    if _assistant_snapshot(target).get("busy"):
+        raise BrowserError("ChatGPT is still generating; retry delivery later")
+
+    if _page_contains(target, batch_marker):
+        return {"response": "already_delivered", "chat_url": target.url}
+
+    try:
+        return send_message(
+            target,
+            message,
+            timeout=180.0,
+            wait_for_response=False,
+        )
+    except BrowserError:
+        warning = _context_limit_warning(target)
+        if not warning or _assistant_snapshot(target).get("busy"):
+            raise
+        target, _ = _rollover_project_chat(
+            repo,
+            project_record(repo),
+            port=port,
+            old_target=target,
+        )
+        if _page_contains(target, batch_marker):
+            return {"response": "already_delivered", "chat_url": target.url}
+        return send_message(
+            target,
+            message,
+            timeout=180.0,
+            wait_for_response=False,
+        )
+
+
+@_project_operation
 def notify_receipt(repo: Path, receipt: dict[str, Any]) -> dict[str, Any]:
     record = project_record(repo)
     chat_url = str(record.get("chat_url") or "")

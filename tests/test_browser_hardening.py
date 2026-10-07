@@ -270,7 +270,7 @@ class BrowserHardeningTests(unittest.TestCase):
             except Exception as exc:
                 errors.append(exc)
 
-        with patch.object(daemon, "activate_project"), patch.object(daemon, "ensure_browser_running"), patch.object(daemon, "notify_receipt") as send:
+        with patch.object(daemon, "activate_project"), patch.object(daemon, "ensure_browser_running"), patch.object(daemon, "notify_receipts") as send:
             threads = [threading.Thread(target=worker) for _ in range(2)]
             for thread in threads:
                 thread.start()

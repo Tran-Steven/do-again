@@ -50,7 +50,7 @@ class BrowserOutboxTests(unittest.TestCase):
                     _drain_browser_outbox(repo, state)
             self.assertTrue(path.is_file())
 
-    def test_one_blocked_receipt_does_not_stop_later_delivery(self) -> None:
+    def test_busy_batch_keeps_all_receipts_queued(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             state_dir = Path(tmp) / "state"
             first = _queue_receipt(state_dir, {"request_id": "first", "state": "succeeded"})
@@ -58,24 +58,50 @@ class BrowserOutboxTests(unittest.TestCase):
             repo = Path(tmp) / "repo"
             repo.mkdir()
 
-            def deliver(_repo, receipt):
-                if receipt["request_id"] == "first":
-                    raise BrowserError("ChatGPT is still generating; retry delivery later")
-                return {"response": "submitted"}
+            with (
+                patch("do_again.service.daemon.activate_project"),
+                patch("do_again.service.daemon.ensure_browser_running"),
+                patch(
+                    "do_again.service.daemon.notify_receipts",
+                    side_effect=BrowserError("ChatGPT is still generating; retry delivery later"),
+                ),
+            ):
+                delivered = _drain_browser_outbox_locked(repo, state_dir)
+
+            self.assertEqual(delivered, 0)
+            self.assertTrue(first.exists())
+            self.assertTrue(second.exists())
+            status = json.loads((state_dir / "browser_status.json").read_text())
+            self.assertEqual(status["state"], "recovering")
+            self.assertEqual(status["pending_receipts"], 2)
+
+    def test_successful_batch_removes_up_to_twenty_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            for index in range(25):
+                _queue_receipt(
+                    state_dir,
+                    {"request_id": f"req-{index:02d}", "state": "succeeded"},
+                )
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
 
             with (
                 patch("do_again.service.daemon.activate_project"),
                 patch("do_again.service.daemon.ensure_browser_running"),
-                patch("do_again.service.daemon.notify_receipt", side_effect=deliver),
+                patch(
+                    "do_again.service.daemon.notify_receipts",
+                    return_value={"response": "submitted"},
+                ) as notify,
             ):
                 delivered = _drain_browser_outbox_locked(repo, state_dir)
 
-            self.assertEqual(delivered, 1)
-            self.assertTrue(first.exists())
-            self.assertFalse(second.exists())
+            self.assertEqual(delivered, 20)
+            self.assertEqual(len(_pending_outbox(state_dir)), 5)
+            self.assertEqual(len(notify.call_args.args[1]), 20)
             status = json.loads((state_dir / "browser_status.json").read_text())
-            self.assertEqual(status["state"], "recovering")
-            self.assertEqual(status["pending_receipts"], 1)
+            self.assertEqual(status["state"], "queued")
+            self.assertEqual(status["pending_receipts"], 5)
 
     def test_nontransient_browser_error_still_aborts_drain(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,7 +135,10 @@ class BrowserOutboxTests(unittest.TestCase):
             with (
                 patch("do_again.service.daemon.ensure_browser_running"),
                 patch("do_again.service.daemon.activate_project"),
-                patch("do_again.service.daemon.notify_receipt"),
+                patch(
+                    "do_again.service.daemon.notify_receipts",
+                    return_value={"response": "submitted"},
+                ),
             ):
                 delivered = _drain_browser_outbox(repo, state)
             self.assertEqual(delivered, 1)

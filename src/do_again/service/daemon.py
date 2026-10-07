@@ -16,6 +16,7 @@ from ..browser import (
     deactivate_project,
     ensure_browser_running,
     notify_receipt,
+    notify_receipts,
     stop_if_unused,
 )
 from ..core.agent import Agent
@@ -99,28 +100,32 @@ def _drain_browser_outbox(repo: Path, state_dir: Path) -> int:
 def _drain_browser_outbox_locked(repo: Path, state_dir: Path) -> int:
     activate_project(repo)
     ensure_browser_running(verify_auth=True)
+
+    paths = _pending_outbox(state_dir)
+    if not paths:
+        _record_browser_state(state_dir, "ready")
+        return 0
+
+    batch_paths = paths[:20]
+    receipts = [_read_outbox(path) for path in batch_paths]
+    try:
+        notify_receipts(repo, receipts)
+    except BrowserError as exc:
+        if "ChatGPT is still generating; retry delivery later" not in str(exc):
+            raise
+        _record_browser_state(state_dir, "recovering", error=str(exc))
+        return 0
+
     delivered = 0
-    blocked = 0
-    last_error: str | None = None
-    for path in _pending_outbox(state_dir):
-        receipt = _read_outbox(path)
-        try:
-            notify_receipt(repo, receipt)
-        except BrowserError as exc:
-            if "ChatGPT is still generating; retry delivery later" not in str(exc):
-                raise
-            blocked += 1
-            last_error = str(exc)
-            continue
+    for path in batch_paths:
         try:
             path.unlink()
         except FileNotFoundError:
             pass
         delivered += 1
-    if blocked:
-        _record_browser_state(state_dir, "recovering", error=last_error)
-    else:
-        _record_browser_state(state_dir, "ready")
+
+    remaining = len(_pending_outbox(state_dir))
+    _record_browser_state(state_dir, "queued" if remaining else "ready")
     return delivered
 
 
