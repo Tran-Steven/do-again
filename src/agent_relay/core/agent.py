@@ -13,12 +13,8 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from control_plane.mac_operator import MacOperatorExecutor
-from control_plane.mac_operator.schema import (
+from .executor import MacOperatorExecutor
+from .schema import (
     OperatorError,
     atomic_json,
     read_json,
@@ -50,10 +46,10 @@ class Agent:
             state_dir=self.state_dir,
         )
         self.requests_dir = (
-            self.control_worktree / "automation/mac_operator/requests"
+            self.control_worktree / "automation/agent_relay/requests"
         )
         self.receipts_dir = (
-            self.control_worktree / "automation/mac_operator/receipts"
+            self.control_worktree / "automation/agent_relay/receipts"
         )
         self.ledger_dir = self.state_dir / "ledger"
         self.stop_requested = False
@@ -129,7 +125,7 @@ class Agent:
 
     def publish_status(self, state: str, **extra: Any) -> None:
         self.publish_json(
-            Path("automation/mac_operator/agent_status.json"),
+            Path("automation/agent_relay/agent_status.json"),
             self.status_payload(state, **extra),
             f"Mac operator {state}",
         )
@@ -138,7 +134,7 @@ class Agent:
         return self.ledger_dir / f"{request_id}.json"
 
     def receipt_relative(self, request_id: str) -> Path:
-        return Path(f"automation/mac_operator/receipts/{request_id}.json")
+        return Path(f"automation/agent_relay/receipts/{request_id}.json")
 
     def receipt_exists(self, request_id: str) -> bool:
         return (self.control_worktree / self.receipt_relative(request_id)).is_file()
