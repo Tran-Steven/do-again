@@ -3,13 +3,13 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
-  "last_request_id": "duplicate-queue-probe-7d2c5a91e4b8",
-  "last_request_state": "succeeded",
+  "last_request_id": "receipt-delivery-fastpath-2e7b4c19a6d3",
+  "last_request_state": "failed",
   "pid": 12820,
   "remote": "origin",
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-07T19:27:44.542634+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-07T20:12:53.565534+00:00"
+  "updated_at_utc": "2026-10-07T20:17:14.161778+00:00"
 }
