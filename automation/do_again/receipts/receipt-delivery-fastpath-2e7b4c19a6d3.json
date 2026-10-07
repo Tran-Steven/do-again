@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:17:11.800958+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "d3296263ed6ab788f602b7245e393c3c77405ac0596b6866fb090b4386a9139f",
+  "request_id": "receipt-delivery-fastpath-2e7b4c19a6d3",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "d3296263ed6ab788f602b7245e393c3c77405ac0596b6866fb090b4386a9139f",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-delivery-fastpath-2e7b4c19a6d3/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 61.151,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 5537,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-delivery-fastpath-2e7b4c19a6d3/script.py",
+      "script_sha256": "f6d01f097d8fcfb50aa7cce95019ebd9ce0bc0326588f7427608a94821978b97",
+      "stderr": "....E......E.......\n======================================================================\nERROR: test_context_limit_rolls_project_to_new_chat_before_receipt (tests.test_browser.BrowserRuntimeTests.test_context_limit_rolls_project_to_new_chat_before_receipt)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 1219, in notify_receipt\n    raise BrowserError(\"receipt notification was submitted but did not appear in the conversation\")\ndo_again.browser.errors.BrowserError: receipt notification was submitted but did not appear in the conversation\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_browser.py\", line 611, in test_context_limit_rolls_project_to_new_chat_before_receipt\n    value = notify_receipt(repo, {\"request_id\": \"req-roll\", \"state\": \"succeeded\"})\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 298, in wrapped\n    return function(repo, *args, **kwargs)\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 1240, in notify_receipt\n    raise BrowserError(\"receipt notification was submitted but did not appear in the conversation\")\ndo_again.browser.errors.BrowserError: receipt notification was submitted but did not appear in the conversation\n\n======================================================================\nERROR: test_notify_receipt_reuses_bound_chat (tests.test_browser.BrowserRuntimeTests.test_notify_receipt_reuses_bound_chat)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_browser.py\", line 273, in test_notify_receipt_reuses_bound_chat\n    notify_receipt(\n    ~~~~~~~~~~~~~~^\n        repo,\n        ^^^^^\n        {\"request_id\": \"req-1\", \"state\": \"succeeded\"},\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 298, in wrapped\n    return function(repo, *args, **kwargs)\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 1219, in notify_receipt\n    raise BrowserError(\"receipt notification was submitted but did not appear in the conversation\")\ndo_again.browser.errors.BrowserError: receipt notification was submitted but did not appear in the conversation\n\n----------------------------------------------------------------------\nRan 19 tests in 60.653s\n\nFAILED (errors=2)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-delivery-fastpath-2e7b4c19a6d3/script.py\", line 127, in <module>\n    subprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_browser\"], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'unittest', 'tests.test_browser']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:16:10.376801+00:00",
+  "state": "failed",
+  "traceback": null
+}
