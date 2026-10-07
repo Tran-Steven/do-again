@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-setup-stale-test-fix-20261007-18",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:57:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:27:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected_head = \"f108fa2765a922f800c9cc87e99eab11b629839e\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=check, env=env)\n\nhead = run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch = run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nif head != expected_head or branch != \"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected isolated state head={head} branch={branch}\")\n\ntest = wt / \"tests/test_cli.py\"\ntext = test.read_text()\nold = '            self.assertIn(\"SETUP_OK\", text)\\n'\nnew = (\n    '            self.assertIn(\"SETUP_CONFIGURED\", text)\\n'\n    '            self.assertIn(\"verification=not_run\", text)\\n'\n    '            self.assertNotIn(\"SETUP_OK\", text)\\n'\n)\nif old not in text:\n    raise SystemExit(\"stale SETUP_OK assertion not found\")\ntest.write_text(text.replace(old, new, 1))\n\nenv = os.environ.copy()\nenv[\"PYTHONPATH\"] = str(wt / \"src\")\n\nfocused = run([\"python3\",\"-m\",\"unittest\",\"tests.test_cli\"], check=False, env=env)\nprint(\"=== focused stdout ===\")\nprint(focused.stdout)\nprint(\"=== focused stderr ===\")\nprint(focused.stderr)\nprint(f\"focused_rc={focused.returncode}\")\nif focused.returncode != 0:\n    raise SystemExit(focused.returncode)\n\nrun([\"git\",\"add\",\"src/do_again/cli.py\",\"tests/test_cli.py\"])\ncommit = run([\"git\",\"commit\",\"-m\",\"Stop reporting unverified setup as ready\"], check=False)\nprint(\"=== commit stdout ===\")\nprint(commit.stdout)\nprint(\"=== commit stderr ===\")\nprint(commit.stderr)\nif commit.returncode != 0:\n    raise SystemExit(commit.returncode)\n\nprint(\"new_head=\" + run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\" + repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
