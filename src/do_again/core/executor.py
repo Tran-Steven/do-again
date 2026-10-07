@@ -510,7 +510,8 @@ class LocalExecutor:
         if script.suffix == ".py":
             argv = ["python3", str(script), *script_args]
         elif script.suffix in {".sh", ".bash", ".zsh"}:
-            argv = ["bash" if script.suffix != ".zsh" else "zsh", str(script), *script_args]
+            script_arg = script.as_posix() if os.name == "nt" else str(script)
+            argv = ["bash" if script.suffix != ".zsh" else "zsh", script_arg, *script_args]
         else:
             if not os.access(script, os.X_OK):
                 raise OperatorError("repo_script must be executable or use a supported script suffix")
@@ -1104,8 +1105,9 @@ class LocalExecutor:
 
         digest = hashlib.sha256(data).hexdigest()
         runner = "python3" if language == "python" else "bash"
+        script_arg = path.as_posix() if language == "bash" and os.name == "nt" else str(path)
         result = self._capture(
-            [runner, str(path), *values],
+            [runner, script_arg, *values],
             timeout=timeout,
             cwd=cwd,
             env=args.get("env"),

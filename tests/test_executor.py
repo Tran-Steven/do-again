@@ -480,11 +480,13 @@ class ExecutorTests(unittest.TestCase):
             )
 
     def test_extended_exec_rejects_file_outside_approved_roots(self):
+        outside = self.root / "outside.txt"
+        outside.write_text("outside", encoding="utf-8")
         with self.assertRaisesRegex(OperatorError, "outside approved roots"):
             self.executor.execute(
                 self.request(
                     "extended_exec",
-                    args={"argv": ["cat", "/etc/passwd"]},
+                    args={"argv": ["cat", str(outside)]},
                 )
             )
 
