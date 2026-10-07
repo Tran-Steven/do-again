@@ -1,0 +1,14 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": "OperatorError: authority fence mismatch for repo_head: expected 'd6114a1564542b17309f91423d533345c8056307', observed '1926138e8910a1d2ad9db68db0940f7584f4b092'",
+  "finished_at_utc": "2026-10-07T23:40:43.057500+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "2f1848049685f0f899c0e45c42b15533a62e95ab8321dd0ad31103d6e1349f54",
+  "request_id": "selfdev-ack-inspect-20261007-02",
+  "result": null,
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:40:42.890760+00:00",
+  "state": "blocked",
+  "traceback": null
+}
