@@ -1,0 +1,18 @@
+{
+  "args": {
+    "content": "from pathlib import Path\nexec(Path(\"/tmp/do_again_crossplatform_verify.py\").read_text(encoding=\"utf-8\"))\n",
+    "cwd": "$REPO",
+    "language": "python"
+  },
+  "expected": {
+    "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0"
+  },
+  "expires_at_utc": "2026-10-07T15:18:29.584460+00:00",
+  "issued_at_utc": "2026-10-07T14:48:29.584460+00:00",
+  "limits": {
+    "timeout_seconds": 900
+  },
+  "operation": "scratch_script",
+  "request_id": "selfhost-crossplatform-verify-001",
+  "schema_version": 1
+}
