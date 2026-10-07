@@ -1,0 +1,42 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:65082:1791394967:8425a6759c33",
+  "error": null,
+  "finished_at_utc": "2026-10-07T17:46:21.924416+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "extended_exec",
+  "request_fingerprint": "df133cad04987797bc452c4cda5fd9cad33f6b517c2e8d21fd4c7cc10a009d64",
+  "request_id": "browser-verify-251a6d3538d0",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6bc66295e052b62400844eb1ec158ab0538b4227"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6bc66295e052b62400844eb1ec158ab0538b4227"
+    },
+    "operation": "extended_exec",
+    "request_fingerprint": "df133cad04987797bc452c4cda5fd9cad33f6b517c2e8d21fd4c7cc10a009d64",
+    "result": {
+      "argv": [
+        "/usr/bin/git",
+        "status",
+        "--short"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.039,
+      "returncode": 0,
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "?? do-again-policy.json\n?? do-again.toml\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T17:46:21.637638+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
