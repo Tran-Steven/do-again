@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "claimed_at_utc": "2026-10-07T21:38:08.781717+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 12820,
+  "request_fingerprint": "1249cc050ed6ab28d6d14f4791069c0e787d16ac8ad73045fd56c3115c220711",
+  "request_id": "restart-batched-daemon-clean-tail-7c2e1a9d4b63",
+  "schema_version": 1
+}
