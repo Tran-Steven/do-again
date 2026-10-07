@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-batch-line-probe-6d1a9c3e7b42",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:05:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T21:35:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\np = Path(\"src/do_again/browser/runtime.py\")\nlines = p.read_text().splitlines()\nfor n in range(1265, 1325):\n    if n <= len(lines):\n        print(f\"{n:04d}: {lines[n-1]}\")\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 60
+  }
+}
