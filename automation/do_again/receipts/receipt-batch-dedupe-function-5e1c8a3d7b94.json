@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:16:48.673602+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "6dabe18a2158eee3794deb3388f9bb08c5af48e16ef54c1794d78ddc59b57384",
+  "request_id": "receipt-batch-dedupe-function-5e1c8a3d7b94",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "6dabe18a2158eee3794deb3388f9bb08c5af48e16ef54c1794d78ddc59b57384",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-dedupe-function-5e1c8a3d7b94/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.942,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 2552,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-dedupe-function-5e1c8a3d7b94/script.py",
+      "script_sha256": "56f34f29d03eefeab6aaf54955415601afaaae429202c5274fa8bafa594b97ce",
+      "stderr": "..........................E\n======================================================================\nERROR: test_successful_delivery_removes_outbox_item (tests.test_daemon.BrowserOutboxTests.test_successful_delivery_removes_outbox_item)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_daemon.py\", line 140, in test_successful_delivery_removes_outbox_item\n    delivered = _drain_browser_outbox(repo, state)\n  File \"/Users/steventran/do-again/src/do_again/service/daemon.py\", line 97, in _drain_browser_outbox\n    return _drain_browser_outbox_locked(repo, state_dir)\n  File \"/Users/steventran/do-again/src/do_again/service/daemon.py\", line 112, in _drain_browser_outbox_locked\n    notify_receipts(repo, receipts)\n    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 298, in wrapped\n    return function(repo, *args, **kwargs)\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 1192, in notify_receipts\n    raise BrowserError(\"project has no bound automation chat; run do-again setup\")\ndo_again.browser.errors.BrowserError: project has no bound automation chat; run do-again setup\n\n----------------------------------------------------------------------\nRan 27 tests in 0.232s\n\nFAILED (errors=1)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-dedupe-function-5e1c8a3d7b94/script.py\", line 38, in <module>\n    subprocess.run(\n    ~~~~~~~~~~~~~~^\n        [\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\"],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        check=True,\n        ^^^^^^^^^^^\n    )\n    ^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'unittest', 'tests.test_browser', 'tests.test_daemon']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:16:47.469654+00:00",
+  "state": "failed",
+  "traceback": null
+}
