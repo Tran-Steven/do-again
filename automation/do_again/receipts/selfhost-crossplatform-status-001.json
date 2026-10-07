@@ -1,0 +1,435 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:83817:1791383724",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:35:54.972304+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "status",
+  "request_fingerprint": "ddff2d17f83217a481056bde7f9f7b126be52f0837b226425fade29072b24be4",
+  "request_id": "selfhost-crossplatform-status-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": false,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": false,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "operation": "status",
+    "request_fingerprint": "ddff2d17f83217a481056bde7f9f7b126be52f0837b226425fade29072b24be4",
+    "result": {
+      "authority": {
+        "bundle_sha256": null,
+        "control_state": null,
+        "desired_mode": null,
+        "generation": null,
+        "lease_epoch": null,
+        "lease_id": null,
+        "repo_branch": "main",
+        "repo_dirty": false,
+        "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+        "revision": null
+      },
+      "checker": {
+        "actors": {
+          "com.steventran.direct-chat-cp1-bundle-activation-reconciler": {
+            "registered": true,
+            "running": false
+          },
+          "com.steventran.direct-chat-cp1-economic-sentinel": {
+            "registered": true,
+            "running": false
+          },
+          "com.steventran.direct-chat-cp1-keeper": {
+            "registered": true,
+            "running": true
+          },
+          "com.steventran.direct-chat-cp1-stage0": {
+            "registered": true,
+            "running": false
+          },
+          "com.steventran.direct-chat-cp1-supervisor": {
+            "registered": true,
+            "running": false
+          }
+        },
+        "bundle_sha256": "ae26f5184a0f12c0960ff202fdcb348014e508eb83bdd8ff2f27ccaf9ed170cb",
+        "checked_epoch": 1791259649.349302,
+        "generation_recovery_tax": {
+          "excessive": false,
+          "generation": null,
+          "seconds": 0.0,
+          "session_id": null,
+          "threshold_seconds": 600
+        },
+        "pending_intake": {
+          "count": 0,
+          "oldest_age_seconds": 0.0,
+          "oldest_request_id": null,
+          "stuck": false,
+          "threshold_seconds": 180
+        },
+        "status": "healthy"
+      },
+      "observed": {
+        "bundle_sha256": "ae26f5184a0f12c0960ff202fdcb348014e508eb83bdd8ff2f27ccaf9ed170cb",
+        "checked_epoch": 1791259657.243892,
+        "generation": 492,
+        "job": null,
+        "mode": "STOP",
+        "review_handoff_active": false,
+        "revision": 760,
+        "status": "reconciled"
+      },
+      "processes": {
+        "count": 460,
+        "relevant": [
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python tools/persona_annotation_app.py --tasks-dir /Users/steventran/llm-local-eval/persona_development_science/f1/sober_rereview_tasks --repo /Users/steventran/llm --submission-branch eval/persona-f1-sober-rereview-20261006 --reviewer Steven --host 127.0.0.1 --port 8771 --open",
+            "cpu_percent": 0.0,
+            "elapsed": "13:07:51",
+            "memory_percent": 0.0,
+            "pid": 1503,
+            "ppid": 67555,
+            "rss_kib": 1440
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/llm/tools/mac_operator_agent.py --repo /Users/steventran/llm --control-worktree /Users/steventran/.direct_chat_mac_operator/control --branch operator-control --policy /Users/steventran/llm/automation/mac_operator_policy.json --state-dir /Users/steventran/.direct_chat_mac_operator/state",
+            "cpu_percent": 0.0,
+            "elapsed": "10:41:41",
+            "memory_percent": 0.1,
+            "pid": 1643,
+            "ppid": 1,
+            "rss_kib": 13040
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python tools/persona_annotation_app.py --repo /tmp/llm-annotation-ui --tasks-dir /Users/steventran/llm-local-eval/persona_development_science/f1/judge_pilot_tasks --port 8768",
+            "cpu_percent": 0.0,
+            "elapsed": "01-14:29:33",
+            "memory_percent": 0.0,
+            "pid": 14853,
+            "ppid": 1,
+            "rss_kib": 1408
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python tools/persona_annotation_app.py --repo /tmp/llm-annotation-ui --tasks-dir /Users/steventran/llm-local-eval/persona_development_science/f1/judge_pilot_v2_tasks --port 8769",
+            "cpu_percent": 0.0,
+            "elapsed": "01-14:27:46",
+            "memory_percent": 0.0,
+            "pid": 18514,
+            "ppid": 1,
+            "rss_kib": 1408
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python tools/persona_annotation_app.py --repo /tmp/llm-annotation-ui --tasks-dir /Users/steventran/llm-local-eval/persona_development_science --port 8765 --open",
+            "cpu_percent": 0.0,
+            "elapsed": "01-19:55:15",
+            "memory_percent": 0.0,
+            "pid": 22856,
+            "ppid": 1,
+            "rss_kib": 1456
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.core.agent --repo /Users/steventran/jobpipe --control-worktree /Users/steventran/.do_again/jobpipe-control --branch operator-control --policy /Users/steventran/jobpipe/automation/do_again/policy.json --state-dir /Users/steventran/.do_again/jobpipe-state",
+            "cpu_percent": 0.7,
+            "elapsed": "30:43",
+            "memory_percent": 0.1,
+            "pid": 42322,
+            "ppid": 1,
+            "rss_kib": 10448
+          },
+          {
+            "command": "npm exec @wonderwhy-er/desktop-commander@latest remote",
+            "cpu_percent": 0.0,
+            "elapsed": "01-00:44:46",
+            "memory_percent": 0.0,
+            "pid": 67502,
+            "ppid": 1,
+            "rss_kib": 224
+          },
+          {
+            "command": "node /Users/steventran/.npm/_npx/4b4c857f6efdfb61/node_modules/.bin/desktop-commander remote",
+            "cpu_percent": 1.2,
+            "elapsed": "01-00:44:44",
+            "memory_percent": 0.4,
+            "pid": 67517,
+            "ppid": 67502,
+            "rss_kib": 65376
+          },
+          {
+            "command": "/Users/steventran/.nvm/versions/node/v24.14.0/bin/node /Users/steventran/.npm/_npx/4b4c857f6efdfb61/node_modules/@wonderwhy-er/desktop-commander/dist/index.js",
+            "cpu_percent": 1.3,
+            "elapsed": "01-00:44:41",
+            "memory_percent": 0.3,
+            "pid": 67555,
+            "ppid": 67517,
+            "rss_kib": 50816
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python tools/persona_annotation_app.py --tasks-dir /Users/steventran/llm-local-eval/persona_development_science/f1/checkpoint_review_tasks --repo /Users/steventran/llm --submission-branch eval/persona-f1-human-annotations-20261006 --reviewer Steven --host 127.0.0.1 --port 8770 --open",
+            "cpu_percent": 0.0,
+            "elapsed": "20:24:25",
+            "memory_percent": 0.0,
+            "pid": 77134,
+            "ppid": 67555,
+            "rss_kib": 1440
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python tools/persona_source_review_app.py --views /Users/steventran/llm-local-eval/persona_development_science/source_recovery/six_source_views_v2.jsonl --port 8766",
+            "cpu_percent": 0.0,
+            "elapsed": "01-20:22:19",
+            "memory_percent": 0.0,
+            "pid": 79141,
+            "ppid": 1,
+            "rss_kib": 1456
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.core.agent --repo /Users/steventran/do-again --control-worktree /Users/steventran/.do_again/projects/41857a676462/control --branch operator-control --policy /Users/steventran/.do_again/projects/41857a676462/policy.json --state-dir /Users/steventran/.do_again/projects/41857a676462/state",
+            "cpu_percent": 5.4,
+            "elapsed": "00:31",
+            "memory_percent": 0.2,
+            "pid": 83817,
+            "ppid": 1,
+            "rss_kib": 29264
+          }
+        ],
+        "top_cpu": [
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {471388aa-ff3e-4e41-afe8-6c9688540026} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1414891159 13 tab",
+            "cpu_percent": 51.7,
+            "elapsed": "02:10",
+            "memory_percent": 5.9,
+            "pid": 79040,
+            "ppid": 78669,
+            "rss_kib": 990512
+          },
+          {
+            "command": "/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer -daemon",
+            "cpu_percent": 27.2,
+            "elapsed": "02-17:56:28",
+            "memory_percent": 0.5,
+            "pid": 629,
+            "ppid": 1,
+            "rss_kib": 76768
+          },
+          {
+            "command": "/sbin/launchd",
+            "cpu_percent": 20.7,
+            "elapsed": "02-18:14:53",
+            "memory_percent": 0.1,
+            "pid": 1,
+            "ppid": 0,
+            "rss_kib": 20784
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/gpu-helper.app/Contents/MacOS/Firefox Developer Edition GPU Helper -parentBuildID 20261005090344 -prefsHandle 0:49568 -prefMapHandle 1:306166 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -ipcHandle 0 -initialChannelId {d2e55b2e-abff-4337-b767-ea93a9ea1fa3} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 2 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1531061615 1 gpu",
+            "cpu_percent": 14.5,
+            "elapsed": "02:15",
+            "memory_percent": 0.7,
+            "pid": 78681,
+            "ppid": 78669,
+            "rss_kib": 122144
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {6dae80c9-a4ad-49a8-9159-34d91544c1b1} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1752252556 11 tab",
+            "cpu_percent": 14.0,
+            "elapsed": "02:12",
+            "memory_percent": 5.6,
+            "pid": 78743,
+            "ppid": 78669,
+            "rss_kib": 943616
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:50567 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {f5f7321e-1250-449c-9130-aeb62e552364} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.941744116 6 tab",
+            "cpu_percent": 10.6,
+            "elapsed": "02:14",
+            "memory_percent": 4.8,
+            "pid": 78695,
+            "ppid": 78669,
+            "rss_kib": 803664
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
+            "cpu_percent": 6.9,
+            "elapsed": "02:15",
+            "memory_percent": 5.2,
+            "pid": 78669,
+            "ppid": 1,
+            "rss_kib": 868288
+          },
+          {
+            "command": "/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.core.agent --repo /Users/steventran/do-again --control-worktree /Users/steventran/.do_again/projects/41857a676462/control --branch operator-control --policy /Users/steventran/.do_again/projects/41857a676462/policy.json --state-dir /Users/steventran/.do_again/projects/41857a676462/state",
+            "cpu_percent": 5.4,
+            "elapsed": "00:31",
+            "memory_percent": 0.2,
+            "pid": 83817,
+            "ppid": 1,
+            "rss_kib": 29264
+          },
+          {
+            "command": "/usr/libexec/opendirectoryd",
+            "cpu_percent": 2.0,
+            "elapsed": "02-17:56:28",
+            "memory_percent": 0.1,
+            "pid": 596,
+            "ppid": 1,
+            "rss_kib": 9488
+          },
+          {
+            "command": "/usr/sbin/bluetoothd",
+            "cpu_percent": 1.6,
+            "elapsed": "02-17:56:28",
+            "memory_percent": 0.1,
+            "pid": 621,
+            "ppid": 1,
+            "rss_kib": 18688
+          }
+        ],
+        "top_memory": [
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {d94fbf37-7812-4a55-abb3-3aacddf44592} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1097656273 12 tab",
+            "cpu_percent": 1.3,
+            "elapsed": "02:11",
+            "memory_percent": 6.0,
+            "pid": 78815,
+            "ppid": 78669,
+            "rss_kib": 998800
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {471388aa-ff3e-4e41-afe8-6c9688540026} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1414891159 13 tab",
+            "cpu_percent": 51.7,
+            "elapsed": "02:10",
+            "memory_percent": 5.9,
+            "pid": 79040,
+            "ppid": 78669,
+            "rss_kib": 990512
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {6dae80c9-a4ad-49a8-9159-34d91544c1b1} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1752252556 11 tab",
+            "cpu_percent": 14.0,
+            "elapsed": "02:12",
+            "memory_percent": 5.6,
+            "pid": 78743,
+            "ppid": 78669,
+            "rss_kib": 943616
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/firefox",
+            "cpu_percent": 6.9,
+            "elapsed": "02:15",
+            "memory_percent": 5.2,
+            "pid": 78669,
+            "ppid": 1,
+            "rss_kib": 868288
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:50567 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {f5f7321e-1250-449c-9130-aeb62e552364} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.941744116 6 tab",
+            "cpu_percent": 10.6,
+            "elapsed": "02:14",
+            "memory_percent": 4.8,
+            "pid": 78695,
+            "ppid": 78669,
+            "rss_kib": 803664
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {b97c231f-bd9c-4657-ae36-6538cfe8977a} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1916602231 15 tab",
+            "cpu_percent": 0.0,
+            "elapsed": "01:35",
+            "memory_percent": 3.6,
+            "pid": 80600,
+            "ppid": 78669,
+            "rss_kib": 611344
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:57325 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {d32610b8-756e-4356-ae1f-97eec9d29b31} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1223520061 14 tab",
+            "cpu_percent": 0.0,
+            "elapsed": "02:10",
+            "memory_percent": 1.7,
+            "pid": 79045,
+            "ppid": 78669,
+            "rss_kib": 284160
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:49921 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {27bfa7bb-8e3e-4c08-973a-824b9a6faef9} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1817971930 5 tab",
+            "cpu_percent": 0.0,
+            "elapsed": "02:14",
+            "memory_percent": 1.4,
+            "pid": 78688,
+            "ppid": 78669,
+            "rss_kib": 233936
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container -isForBrowser -prefsHandle 0:69103 -prefMapHandle 1:306166 -jsInitHandle 2:162336 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -sbLevel 3 -parentBuildID 20261005090344 -ipcHandle 0 -initialChannelId {380acb02-bda2-4911-8582-ae243a75f611} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 3 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -greomni /Applications/Firefox Developer Edition.app/Contents/Resources/omni.ja -appomni /Applications/Firefox Developer Edition.app/Contents/Resources/browser/omni.ja -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.233899186 10 tab",
+            "cpu_percent": 0.0,
+            "elapsed": "02:12",
+            "memory_percent": 1.4,
+            "pid": 78725,
+            "ppid": 78669,
+            "rss_kib": 231040
+          },
+          {
+            "command": "/Applications/Firefox Developer Edition.app/Contents/MacOS/gpu-helper.app/Contents/MacOS/Firefox Developer Edition GPU Helper -parentBuildID 20261005090344 -prefsHandle 0:49568 -prefMapHandle 1:306166 -sbStartup -sbAppPath /Applications/Firefox Developer Edition.app -ipcHandle 0 -initialChannelId {d2e55b2e-abff-4337-b767-ea93a9ea1fa3} -parentPid 78669 -crashHelperPid 78673 -crashHelperSend 2 -crashHelperRecv 0 -crashReporter gecko-crash-server-pipe.78669 -appDir /Applications/Firefox Developer Edition.app/Contents/Resources/browser -profile /Users/steventran/Library/Application Support/Firefox/Profiles/ev0amkvt.dev-edition-default org.mozilla.machname.1531061615 1 gpu",
+            "cpu_percent": 14.5,
+            "elapsed": "02:15",
+            "memory_percent": 0.7,
+            "pid": 78681,
+            "ppid": 78669,
+            "rss_kib": 122144
+          }
+        ]
+      },
+      "supervisor": {
+        "active_failure_class": "bridge_process_failure",
+        "autoheal_blocked_reason": "Recoverable bridge circuit exhausted 3 attributed process recycles for generation 492.",
+        "bundle_sha256": "ae26f5184a0f12c0960ff202fdcb348014e508eb83bdd8ff2f27ccaf9ed170cb",
+        "last_error": null,
+        "last_exit_code": 1,
+        "last_generation_seen": 492,
+        "last_progress_utc": "2026-10-02T02:57:57+00:00",
+        "phase": "session_complete",
+        "pid": 8580,
+        "status": "STOPPED_CLEAN",
+        "updated_utc": "2026-10-04T20:49:12+00:00"
+      },
+      "system": {
+        "disk": {
+          "available_bytes": 29895057408,
+          "filesystem": "/dev/disk3s1s1",
+          "mount": "/",
+          "total_bytes": 245107195904,
+          "used_bytes": 12644438016,
+          "used_percent": "30%"
+        },
+        "memory": {
+          "active_bytes": 3751411712,
+          "compressed_bytes": 942014464,
+          "free_bytes": 3982999552,
+          "inactive_bytes": 5483462656,
+          "page_size": 16384,
+          "total_bytes": 17179869184,
+          "wired_bytes": 2317107200
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:35:54.489885+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
