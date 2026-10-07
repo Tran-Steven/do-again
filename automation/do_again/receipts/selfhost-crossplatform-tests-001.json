@@ -1,0 +1,61 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:83817:1791383724",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:42:27.599921+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "run_tests",
+  "request_fingerprint": "7a8b52812a76d875016246d13bfa90c02f99b677be2f1efcc0d3ff7658565aab",
+  "request_id": "selfhost-crossplatform-tests-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "operation": "run_tests",
+    "request_fingerprint": "7a8b52812a76d875016246d13bfa90c02f99b677be2f1efcc0d3ff7658565aab",
+    "result": {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 21.196,
+      "returncode": 0,
+      "stderr": "..............................................\n----------------------------------------------------------------------\nRan 46 tests in 20.874s\n\nOK\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:42:06.102132+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
