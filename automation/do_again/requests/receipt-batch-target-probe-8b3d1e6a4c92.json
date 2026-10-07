@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-batch-target-probe-8b3d1e6a4c92",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:11:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T21:41:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\n\np = Path(\"src/do_again/browser/runtime.py\")\nlines = p.read_text().splitlines()\n\nfor i, line in enumerate(lines, 1):\n    if \"def notify_receipts\" in line or line.strip() == \"message = (\" or \"Do Again request only if more local work is needed\" in line:\n        print(f\"{i}: {line}\")\n\nprint(\"=== 1288-1312 ===\")\nfor n in range(1288, 1313):\n    if n <= len(lines):\n        print(f\"{n}: {lines[n-1]}\")\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 60
+  }
+}
