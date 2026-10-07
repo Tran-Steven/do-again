@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "request_id": "delivery-probe-20261007T191948-f194",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:20:09.747Z",
+  "expires_at_utc": "2026-10-07T19:35:09.747Z",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nfrom pathlib import Path\nsys.path.insert(0, str(Path.cwd() / \"src\"))\nfrom do_again.browser import cdp\nfrom do_again.browser.runtime import browser_status, project_record, _MESSAGE_NODES_JS\nfrom do_again.service.runtime import runtime_layout\nrepo = Path.cwd()\nlayout = runtime_layout(repo)\nstatus = browser_status()\nids = [\"live-e2e-20261007T191505-b6c9\",\"live-confirm-20261007T191718-a28f\"]\nout = {\"state_dir\":str(layout.state_dir),\"mode\":status.get(\"mode\"),\"bound_chat\":project_record(repo).get(\"chat_url\"),\"outbox\":[p.stem for p in (layout.state_dir/\"browser_outbox\").glob(\"*.json\")],\"targets\":[]}\nfor name in (\"browser_status.json\",\"receipt_callback_error.json\"):\n    p=layout.state_dir/name\n    if p.exists():\n        out[name]=json.loads(p.read_text())\nfor t in cdp.targets(int(status[\"port\"])):\n    if \"/c/\" not in t.url:\n        continue\n    js=\"(() => {\"+_MESSAGE_NODES_JS+\"const ids=\"+json.dumps(ids)+\";const nodes=messageNodes('user');return {roles:Array.from(new Set(Array.from(document.querySelectorAll('[data-conversation-role],[data-message-author-role]')).map(x=>x.getAttribute('data-conversation-role')||x.getAttribute('data-message-author-role')))),user_count:nodes.length,found:ids.map(id=>({id,user:nodes.some(n=>(n.innerText||'').includes(id)),body:document.body.innerText.includes(id)}))};})()\"\n    try:\n        value=cdp.evaluate(t,js,timeout=10)\n    except Exception as e:\n        value={\"error\":str(e)}\n    out[\"targets\"].append({\"url\":t.url,\"probe\":value})\nprint(json.dumps(out),flush=True)\n"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
