@@ -5,7 +5,7 @@ import json
 import os
 import re
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +64,12 @@ def atomic_json(path: Path, value: Any) -> None:
             pass
 
 
-def validate_request(request: Any, *, max_ttl_seconds: int) -> dict[str, Any]:
+def validate_request(
+    request: Any,
+    *,
+    max_ttl_seconds: int,
+    max_future_skew_seconds: int = 300,
+) -> dict[str, Any]:
     if not isinstance(request, dict):
         raise OperatorError("request must be an object")
     if request.get("schema_version") != 1:
@@ -77,12 +82,17 @@ def validate_request(request: Any, *, max_ttl_seconds: int) -> dict[str, Any]:
         raise OperatorError("invalid operation")
     issued = parse_utc(request.get("issued_at_utc"))
     expires = parse_utc(request.get("expires_at_utc"))
+    now = utc_now()
+    if issued > now + timedelta(seconds=max_future_skew_seconds):
+        raise OperatorError(
+            f"request issued_at_utc is more than {max_future_skew_seconds}s in the future"
+        )
     if expires <= issued:
         raise OperatorError("request expiry must follow issuance")
     ttl = (expires - issued).total_seconds()
     if ttl > max_ttl_seconds:
         raise OperatorError(f"request TTL exceeds {max_ttl_seconds}s")
-    if utc_now() > expires:
+    if now > expires:
         raise OperatorError("request expired")
     args = request.get("args", {})
     expected = request.get("expected", {})

@@ -31,6 +31,8 @@ class ServiceError(RuntimeError):
 class RuntimeLayout:
     repo: Path
     branch: str
+    remote: str
+    policy_source: Path | None
     key: str
     label: str
     root: Path
@@ -69,23 +71,81 @@ def find_repo(path: str | Path = ".") -> Path:
     return Path(proc.stdout.strip()).resolve()
 
 
-def _config_branch(repo: Path) -> str:
+def _project_config(repo: Path) -> dict[str, Any]:
     config = repo / "do-again.toml"
     if not config.is_file():
-        return "operator-control"
+        return {}
     try:
         value = tomllib.loads(config.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise ServiceError(f"invalid Do Again config: {config}: {exc}") from exc
-    branch = str(value.get("do_again", {}).get("control_branch", "operator-control")).strip()
-    if not re.fullmatch(r"[A-Za-z0-9._/-]{1,120}", branch) or branch.startswith("-") or ".." in branch:
+    section = value.get("do_again", {})
+    if not isinstance(section, dict):
+        raise ServiceError(f"invalid [do_again] config section: {config}")
+    return section
+
+
+def _config_branch(repo: Path) -> str:
+    section = _project_config(repo)
+    branch = str(section.get("control_branch", "operator-control")).strip()
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._/-]{1,120}", branch)
+        or branch.startswith("-")
+        or ".." in branch
+        or branch in {"main", "master", "trunk"}
+    ):
+        raise ServiceError(f"invalid or unsafe control branch: {branch!r}")
+
+    check = _run(["git", "check-ref-format", "--branch", branch], check=False)
+    if check.returncode != 0:
         raise ServiceError(f"invalid control branch: {branch!r}")
+
+    current = _run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        check=False,
+    )
+    if current.returncode == 0 and current.stdout.strip() == branch:
+        raise ServiceError(
+            f"control branch must be dedicated and cannot be the checked-out branch: {branch!r}"
+        )
     return branch
 
+
+def _config_remote(repo: Path) -> str:
+    section = _project_config(repo)
+    remote = str(section.get("remote", "origin")).strip()
+    if (
+        not remote
+        or remote.startswith("-")
+        or not re.fullmatch(r"[A-Za-z0-9._/-]{1,120}", remote)
+        or ".." in remote
+    ):
+        raise ServiceError(f"invalid Git remote: {remote!r}")
+    return remote
+
+
+def _config_policy_source(repo: Path) -> Path | None:
+    section = _project_config(repo)
+    raw = section.get("policy")
+    if raw is None or not str(raw).strip():
+        return None
+    candidate = Path(str(raw)).expanduser()
+    if not candidate.is_absolute():
+        candidate = repo / candidate
+    source = candidate.resolve()
+    try:
+        source.relative_to(repo.resolve())
+    except ValueError as exc:
+        raise ServiceError("configured policy must be inside the repository") from exc
+    if not source.is_file():
+        raise ServiceError(f"configured policy does not exist: {source}")
+    return source
 
 def runtime_layout(repo: Path) -> RuntimeLayout:
     repo = repo.resolve()
     branch = _config_branch(repo)
+    remote = _config_remote(repo)
+    policy_source = _config_policy_source(repo)
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     label = f"io.github.tran-steven.do-again.{key}"
     home = Path(os.environ.get("DO_AGAIN_HOME", str(Path.home() / ".do_again"))).expanduser().resolve()
@@ -93,6 +153,8 @@ def runtime_layout(repo: Path) -> RuntimeLayout:
     return RuntimeLayout(
         repo=repo,
         branch=branch,
+        remote=remote,
+        policy_source=policy_source,
         key=key,
         label=label,
         root=root,
@@ -116,12 +178,12 @@ def _default_policy() -> dict[str, Any]:
 
 def _ensure_remote_control_branch(layout: RuntimeLayout) -> None:
     remote = _run(
-        ["git", "-C", str(layout.repo), "ls-remote", "--exit-code", "--heads", "origin", layout.branch],
+        ["git", "-C", str(layout.repo), "ls-remote", "--exit-code", "--heads", layout.remote, layout.branch],
         check=False,
     )
     if remote.returncode != 0:
-        _run(["git", "-C", str(layout.repo), "push", "origin", f"HEAD:refs/heads/{layout.branch}"])
-    _run(["git", "-C", str(layout.repo), "fetch", "--quiet", "origin", layout.branch])
+        _run(["git", "-C", str(layout.repo), "push", layout.remote, f"HEAD:refs/heads/{layout.branch}"])
+    _run(["git", "-C", str(layout.repo), "fetch", "--quiet", layout.remote, layout.branch])
 
 
 def _ensure_control_worktree(layout: RuntimeLayout) -> None:
@@ -138,6 +200,9 @@ def _ensure_control_worktree(layout: RuntimeLayout) -> None:
         return
     layout.control_worktree.parent.mkdir(parents=True, exist_ok=True)
     _run(
+        ["git", "-C", str(layout.repo), "fetch", "--quiet", layout.remote, layout.branch]
+    )
+    _run(
         [
             "git",
             "-C",
@@ -146,7 +211,7 @@ def _ensure_control_worktree(layout: RuntimeLayout) -> None:
             "add",
             "--detach",
             str(layout.control_worktree),
-            f"origin/{layout.branch}",
+            "FETCH_HEAD",
         ]
     )
 
@@ -171,7 +236,19 @@ def prepare_runtime(repo: Path) -> RuntimeLayout:
     _ensure_remote_control_branch(layout)
     _ensure_control_worktree(layout)
 
-    policy = _default_policy()
+    if layout.policy_source is not None:
+        try:
+            policy = json.loads(
+                layout.policy_source.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ServiceError(
+                f"invalid configured policy: {layout.policy_source}: {exc}"
+            ) from exc
+        if not isinstance(policy, dict):
+            raise ServiceError("configured policy must be a JSON object")
+    else:
+        policy = _default_policy()
     policy["control_branch"] = layout.branch
     policy["agent_launchd_label"] = layout.label
     policy["agent_service_label"] = layout.label
@@ -182,9 +259,13 @@ def prepare_runtime(repo: Path) -> RuntimeLayout:
         "schema_version": 1,
         "repo": str(layout.repo),
         "control_branch": layout.branch,
+        "remote": layout.remote,
         "control_worktree": str(layout.control_worktree),
         "state_dir": str(layout.state_dir),
         "policy": str(layout.policy_path),
+        "policy_source": (
+            str(layout.policy_source) if layout.policy_source else None
+        ),
         "service_label": layout.label,
     }
     layout.metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -202,6 +283,8 @@ def _agent_argv(layout: RuntimeLayout) -> list[str]:
         str(layout.control_worktree),
         "--branch",
         layout.branch,
+        "--remote",
+        layout.remote,
         "--policy",
         str(layout.policy_path),
         "--state-dir",

@@ -13,7 +13,8 @@
     "src/do_again/**/*.py",
     "README.md",
     "LICENSE",
-    "src/do_again/default_policy.json"
+    "src/do_again/default_policy.json",
+    "ROADMAP.md"
   ],
   "engines": {
     "node": ">=18"

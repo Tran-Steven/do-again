@@ -43,7 +43,7 @@ npm install -g do-again
 or run it without a global install:
 
 ```bash
-npx do-again doctor
+npx do-again setup
 ```
 
 Both distributions expose the same command:
@@ -56,11 +56,25 @@ The npm package ships the same Python runtime from this repository behind a smal
 
 ## Quick start
 
+From the Git repository you want an agent to work on:
+
 ```bash
-do-again doctor
-do-again init
-do-again install
+do-again setup
+```
+
+That one command checks the repository and Git remote, creates the project config and policy if they do not exist, creates the dedicated control branch, installs the user-level background agent, and verifies that it is running.
+
+Then:
+
+```bash
 do-again status
+```
+
+For attended use or advanced setup without a background service:
+
+```bash
+do-again setup --no-service
+do-again run
 ```
 
 ## Service lifecycle
@@ -78,7 +92,15 @@ For attended use, or when a native service manager is unavailable, run the agent
     do-again run
     do-again run --once
 
-Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under ~/.do_again. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits.
+Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under ~/.do_again. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits. do-again init also creates do-again-policy.json for project-specific operation, binary, root, timeout, and execution controls. The control branch must be dedicated and cannot be main, master, trunk, or the currently checked-out branch.
+
+## ChatGPT browser bridge
+
+The public package currently sets up the local execution runtime and Git-backed request/receipt transport. It does **not** yet install or automate a ChatGPT browser session.
+
+A private predecessor has a working dedicated-Chrome/CDP flow for one-time ChatGPT sign-in, browser verification, conversation binding, and safe chat rollover. That code is being generalized before it is exposed publicly so Do Again does not inherit project-specific assumptions or foreground-focus behavior.
+
+The target experience is still one-command onboarding: browser automation will be optional and layered on top of `do-again setup`, not a required pile of extra commands. See `ROADMAP.md`.
 
 ## Why Do Again
 

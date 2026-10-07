@@ -10,6 +10,9 @@ from unittest.mock import patch
 from do_again.platforms.base import PlatformInfo
 from do_again.service.runtime import (
     ServiceError,
+    _config_branch,
+    _config_policy_source,
+    _config_remote,
     _default_policy,
     _launchd_plist,
     _posix_launcher_text,
@@ -22,6 +25,78 @@ from do_again.service.runtime import (
 
 
 class ServiceRuntimeTests(unittest.TestCase):
+    def test_control_branch_rejects_main(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            subprocess.run(
+                ["git", "init", "-b", "main"],
+                cwd=repo,
+                check=True,
+                capture_output=True,
+            )
+            (repo / "do-again.toml").write_text(
+                '[do_again]\ncontrol_branch = "main"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ServiceError, "unsafe control branch"):
+                _config_branch(repo)
+
+    def test_custom_remote_is_read_from_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            (repo / "do-again.toml").write_text(
+                '[do_again]\n'
+                'control_branch = "operator-control"\n'
+                'remote = "automation"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(_config_remote(repo), "automation")
+
+    def test_invalid_remote_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            (repo / "do-again.toml").write_text(
+                '[do_again]\n'
+                'control_branch = "operator-control"\n'
+                'remote = "../bad"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ServiceError, "invalid Git remote"):
+                _config_remote(repo)
+
+    def test_custom_policy_source_is_project_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            policy = repo / "policy.json"
+            policy.write_text('{"schema_version": 1}\n', encoding="utf-8")
+            (repo / "do-again.toml").write_text(
+                '[do_again]\n'
+                'control_branch = "operator-control"\n'
+                'policy = "policy.json"\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(_config_policy_source(repo), policy.resolve())
+
+    def test_custom_policy_cannot_escape_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            outside = root / "outside.json"
+            outside.write_text('{"schema_version": 1}\n', encoding="utf-8")
+            (repo / "do-again.toml").write_text(
+                '[do_again]\n'
+                'control_branch = "operator-control"\n'
+                'policy = "../outside.json"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ServiceError, "inside the repository"):
+                _config_policy_source(repo)
+
     def test_runtime_layout_is_stable_and_project_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
