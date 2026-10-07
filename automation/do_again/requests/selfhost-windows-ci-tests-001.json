@@ -1,0 +1,18 @@
+{
+  "args": {
+    "discover": true,
+    "pattern": "test_*.py",
+    "start_directory": "tests"
+  },
+  "expected": {
+    "repo_head": "6982e06c4832c3b8630a50b29a8270e8ecc91902"
+  },
+  "expires_at_utc": "2026-10-07T15:23:11.074987+00:00",
+  "issued_at_utc": "2026-10-07T14:53:11.074987+00:00",
+  "limits": {
+    "timeout_seconds": 300
+  },
+  "operation": "run_tests",
+  "request_id": "selfhost-windows-ci-tests-001",
+  "schema_version": 1
+}
