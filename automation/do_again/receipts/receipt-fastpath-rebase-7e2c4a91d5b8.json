@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:35:17.179767+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "47c20930a1a8f86fb683ef4ebc192ef1be2f1db0c629070ae9804c9939074059",
+  "request_id": "receipt-fastpath-rebase-7e2c4a91d5b8",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "58ebf9f4c2261650be9b2edf056e802d7744cc9f"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "47c20930a1a8f86fb683ef4ebc192ef1be2f1db0c629070ae9804c9939074059",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-fastpath-rebase-7e2c4a91d5b8/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 39.434,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 668,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-fastpath-rebase-7e2c4a91d5b8/script.py",
+      "script_sha256": "fd4f975fd4a9cab058ab1f1805f1a31479949e5d238b0c377cc464161f1ab7f7",
+      "stderr": "From https://github.com/Tran-Steven/do-again\n * branch            main       -> FETCH_HEAD\n   ad65a4c..65f1b2d  main       -> origin/main\nRebasing (1/1)\nSuccessfully rebased and updated refs/heads/main.\n...................\n----------------------------------------------------------------------\nRan 19 tests in 0.295s\n\nOK\n...........................do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n............................................................................................................\n----------------------------------------------------------------------\nRan 135 tests in 35.529s\n\nOK\nTo https://github.com/Tran-Steven/do-again.git\n   65f1b2d..a207be9  main -> main\n",
+      "stderr_truncated": false,
+      "stdout": "\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp2lkt9rw4/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp2zdw73bw/repo with spaces/do-again.toml\nSETUP_OK\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp2zdw73bw/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp2zdw73bw/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp2zdw73bw/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp2zdw73bw/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\nHEAD=a207be9aeb56d101835471c828584dbdad86005f\nORIGIN=a207be9aeb56d101835471c828584dbdad86005f\nSTATUS=\n?? do-again-policy.json\n?? do-again.toml\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:34:37.454906+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
