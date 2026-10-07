@@ -1,0 +1,59 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:83817:1791383724",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:46:06.758063+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "16ff25f1814dc891f48d17e6f57d68b269b6562010f2d546d77f5b5600775ae7",
+  "request_id": "selfhost-public-cleanup-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "4aab81f1eb80539672a98a06abfb359a8895a3e0",
+      "revision": null
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "16ff25f1814dc891f48d17e6f57d68b269b6562010f2d546d77f5b5600775ae7",
+    "result": {
+      "argv": [
+        "python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-public-cleanup-001/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.111,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 104,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-public-cleanup-001/script.py",
+      "script_sha256": "5daf612773db3469e89bf95883bc00ce6835ce35e9e5a37927ec011d70c65474",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "cleaned public status/policy and made executor process handling cross-platform\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:46:06.320247+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
