@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:45:29.066784+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "f8c67133ecc1893e1d549c8992bc1e5996aba5da12315439e3090b92158c8b9e",
+  "request_id": "selfdev-ack-slice-implement-20261007-08",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "f8c67133ecc1893e1d549c8992bc1e5996aba5da12315439e3090b92158c8b9e",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-slice-implement-20261007-08/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 1.424,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 13133,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-slice-implement-20261007-08/script.py",
+      "script_sha256": "7e54cac71521e3e55fa7691909f31acf9127c4332cd4f146598cdfdb18a84022",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== focused stdout ===\n\n=== focused stderr ===\nEEFF......\n======================================================================\nERROR: test_progress_is_durable_and_receipt_echoes_semantics (tests.test_operator_progress.OperatorProgressAgentTests.test_progress_is_durable_and_receipt_echoes_semantics)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_operator_progress.py\", line 125, in test_progress_is_durable_and_receipt_echoes_semantics\n    agent.record_operator_progress(\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'Agent' object has no attribute 'record_operator_progress'\n\n======================================================================\nERROR: test_progress_requires_durable_acknowledged_receipts (tests.test_operator_progress.OperatorProgressAgentTests.test_progress_requires_durable_acknowledged_receipts)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_operator_progress.py\", line 96, in test_progress_requires_durable_acknowledged_receipts\n    agent.record_operator_progress(\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'Agent' object has no attribute 'record_operator_progress'\n\n======================================================================\nFAIL: test_continuation_is_normalized_and_fingerprinted (tests.test_operator_progress.OperatorProgressSchemaTests.test_continuation_is_normalized_and_fingerprinted)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 1432, in patched\n    return func(*newargs, **newkeywargs)\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_operator_progress.py\", line 43, in test_continuation_is_normalized_and_fingerprinted\n    self.assertEqual(\n    ~~~~~~~~~~~~~~~~^\n        normalized[\"continuation\"],\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<5 lines>...\n        },\n        ^^\n    )\n    ^\nAssertionError: {'ack[72 chars], 'goal_id': 'goal-alpha', 'summary': ' verified first slice '} != {'ack[72 chars], 'goal_id': 'goal-alpha', 'summary': 'verified first slice'}\n  {'acknowledged_receipts': ['prior-1', 'prior-2'],\n   'goal_id': 'goal-alpha',\n   'goal_state': 'in_progress',\n-  'summary': ' verified first slice '}\n?              -                    -\n\n+  'summary': 'verified first slice'}\n\n======================================================================\nFAIL: test_duplicate_acknowledgements_are_rejected (tests.test_operator_progress.OperatorProgressSchemaTests.test_duplicate_acknowledgements_are_rejected)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 1432, in patched\n    return func(*newargs, **newkeywargs)\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_operator_progress.py\", line 65, in test_duplicate_acknowledgements_are_rejected\n    with self.assertRaises(OperatorError):\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^\nAssertionError: OperatorError not raised\n\n----------------------------------------------------------------------\nRan 10 tests in 0.243s\n\nFAILED (failures=2, errors=2)\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:45:27.312939+00:00",
+  "state": "failed",
+  "traceback": null
+}
