@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "live-e2e-inspect-9c41f0f2e3ab",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:17:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T19:32:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nroot=Path('src/do_again/browser')\nfor p in root.glob('*.py'):\n    text=p.read_text()\n    for needle in ['def send_message','assistant','innerText','ChatGPT said']:\n        if needle in text:\n            print(f'FILE={p} NEEDLE={needle}')\n            i=text.find(needle)\n            print(text[max(0,i-1800):i+4200])\n            print('---')\n"
+  },
+  "expected": {
+    "repo_head": "8eae388d769b54a11c0250b3a3fb075d62a8542e"
+  },
+  "limits": {
+    "timeout_seconds": 60
+  }
+}
