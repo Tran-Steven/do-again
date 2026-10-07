@@ -477,6 +477,29 @@ class BrowserRuntimeTests(unittest.TestCase):
                 stop_mock.assert_called_once_with(force=True)
                 launch_mock.assert_called_once()
 
+    def test_page_contains_falls_back_to_current_conversation_user_label(self) -> None:
+        target = cdp.Target(
+            "target",
+            "https://chatgpt.com/c/project",
+            "",
+            "ws://127.0.0.1/x",
+        )
+        captured = {}
+
+        def evaluate(_target, expression, **kwargs):
+            captured["expression"] = expression
+            return True
+
+        with patch("do_again.browser.runtime.cdp.evaluate", side_effect=evaluate):
+            self.assertTrue(
+                __import__("do_again.browser.runtime", fromlist=["_page_contains"])._page_contains(
+                    target,
+                    "DO_AGAIN_RECEIPT_READY request_id=req-dup state=",
+                )
+            )
+        self.assertIn("You said:", captured["expression"])
+        self.assertIn('aria-label="Conversation"', captured["expression"])
+
     def test_duplicate_receipt_marker_is_not_sent_twice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"

@@ -901,8 +901,19 @@ def browser_self_test(*, target: cdp.Target | None = None) -> dict[str, Any]:
 def _page_contains(target: cdp.Target, text: str) -> bool:
     needle = json.dumps(text)
     expression = (
-        "(() => {" + _MESSAGE_NODES_JS + "const users = messageNodes('user'); "
-        f"return users.some(el => (el.innerText || '').includes({needle})); }})()"
+        "(() => {" + _MESSAGE_NODES_JS + r"""
+const needle = """ + needle + r""";
+const users = messageNodes('user');
+if (users.some(el => (el.innerText || el.textContent || '').includes(needle))) return true;
+const conversation = document.querySelector('[aria-label="Conversation"]') || document.body;
+if (!conversation) return false;
+const raw = (conversation.innerText || conversation.textContent || '').replace(/
+/g, '
+');
+const labeled = 'You said:
+' + needle;
+return raw.includes(labeled);
+})()"""
     )
     return bool(cdp.evaluate(target, expression, timeout=10.0))
 
