@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ack-fixture-fix-commit-20261007-12",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:51:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:21:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected_head = \"d6114a1564542b17309f91423d533345c8056307\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=check, env=env)\n\nhead = run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch = run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nif head != expected_head or branch != \"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected worktree state head={head} branch={branch}\")\n\ntest = wt / \"tests/test_operator_progress.py\"\ntext = test.read_text()\ntext = text.replace('\"prior-1\"', '\"prior-001\"')\ntext = text.replace('\"prior-2\"', '\"prior-002\"')\ntest.write_text(text)\n\nenv = os.environ.copy()\nenv[\"PYTHONPATH\"] = str(wt / \"src\")\n\ncompile_run = run([\n    \"python3\",\"-m\",\"py_compile\",\n    \"src/do_again/core/schema.py\",\n    \"src/do_again/core/agent.py\",\n    \"tests/test_operator_progress.py\",\n], env=env)\nprint(\"py_compile=ok\")\n\nfocused = run([\n    \"python3\",\"-m\",\"unittest\",\n    \"tests.test_operator_progress\",\n    \"tests.test_request_fingerprints\",\n], check=False, env=env)\nprint(\"=== focused stdout ===\")\nprint(focused.stdout)\nprint(\"=== focused stderr ===\")\nprint(focused.stderr)\nprint(f\"focused_rc={focused.returncode}\")\nif focused.returncode != 0:\n    raise SystemExit(focused.returncode)\n\nrun([\"git\",\"add\",\n     \"src/do_again/core/schema.py\",\n     \"src/do_again/core/agent.py\",\n     \"tests/test_operator_progress.py\"])\ncommit = run([\"git\",\"commit\",\"-m\",\"Track operator acknowledgement and goal progress\"], check=False)\nprint(\"=== commit stdout ===\")\nprint(commit.stdout)\nprint(\"=== commit stderr ===\")\nprint(commit.stderr)\nif commit.returncode != 0:\n    raise SystemExit(commit.returncode)\n\nprint(\"new_head=\" + run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\" + repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
