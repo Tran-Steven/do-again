@@ -1,0 +1,18 @@
+{
+  "args": {
+    "content": "from pathlib import Path\nexec(Path(\"/tmp/do_again_prepare_021.py\").read_text(encoding=\"utf-8\"))\n",
+    "cwd": "$REPO",
+    "language": "python"
+  },
+  "expected": {
+    "repo_head": "f77bc8d40babc78852209c5a55e5c41210081695"
+  },
+  "expires_at_utc": "2026-10-07T15:27:44.227313+00:00",
+  "issued_at_utc": "2026-10-07T14:57:44.227313+00:00",
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "operation": "scratch_script",
+  "request_id": "selfhost-prepare-021-001",
+  "schema_version": 1
+}
