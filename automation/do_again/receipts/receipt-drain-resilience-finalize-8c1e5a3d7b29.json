@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:48:15.799572+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "6b785cd7afbfe04c184ce8a83d1129f12aeab5e6a1a142de56174dd1042e4df4",
+  "request_id": "receipt-drain-resilience-finalize-8c1e5a3d7b29",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "6b785cd7afbfe04c184ce8a83d1129f12aeab5e6a1a142de56174dd1042e4df4",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-resilience-finalize-8c1e5a3d7b29/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 37.271,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1743,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-resilience-finalize-8c1e5a3d7b29/script.py",
+      "script_sha256": "eb3b6bfdc22aeca454e6b79ae79deae2b0b512bd096cec8ff5fe0b66ca5a655f",
+      "stderr": ".....\n----------------------------------------------------------------------\nRan 5 tests in 0.042s\n\nOK\n...........................do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n..........F..................................................................................................\n======================================================================\nFAIL: test_missing_chat_does_not_drop_durable_receipt (test_browser_hardening.BrowserHardeningTests.test_missing_chat_does_not_drop_durable_receipt)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_browser_hardening.py\", line 243, in test_missing_chat_does_not_drop_durable_receipt\n    with self.assertRaises(browser.BrowserError):\n         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: BrowserError not raised\n\n----------------------------------------------------------------------\nRan 136 tests in 36.174s\n\nFAILED (failures=1)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-drain-resilience-finalize-8c1e5a3d7b29/script.py\", line 32, in <module>\n    subprocess.run([\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp0mzpmxc_/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpht_0n749/repo with spaces/do-again.toml\nSETUP_OK\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpht_0n749/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpht_0n749/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpht_0n749/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpht_0n749/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:47:38.207527+00:00",
+  "state": "failed",
+  "traceback": null
+}
