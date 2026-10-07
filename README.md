@@ -112,7 +112,7 @@ do-again doctor
 
 ## Release model
 
-Releases use semantic versioning. Pushing a version tag such as `v0.2.0` validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
+Releases use semantic versioning. Pushing a version tag such as `v0.2.1` validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
 
 PyPI distribution name: `do-again`
 
