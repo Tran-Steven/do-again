@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:39:58.394926+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "bbd6899c1ab9c7d3763208de8df2dbde09a11ba171743bbb4e71c6bbb0fac4f5",
+  "request_id": "selfdev-status-policy-20261007-01",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "bbd6899c1ab9c7d3763208de8df2dbde09a11ba171743bbb4e71c6bbb0fac4f5",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-status-policy-20261007-01/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.336,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 893,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-status-policy-20261007-01/script.py",
+      "script_sha256": "a83eccca1ff5e3ed8ad74c1d2cad045f87c38a439432fa5000e02c8b2dc9bce2",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"worktree\": \"/Users/steventran/.do_again/selfdev-20261007\",\n  \"branch\": \"feat/self-dogfood-20261007\",\n  \"head\": \"d6114a1564542b17309f91423d533345c8056307\",\n  \"status_porcelain\": \"\",\n  \"origin_main\": \"d6114a1564542b17309f91423d533345c8056307\",\n  \"remote\": \"origin\\thttps://github.com/Tran-Steven/do-again.git (fetch)\\norigin\\thttps://github.com/Tran-Steven/do-again.git (push)\",\n  \"files\": {\n    \"do-again-policy.json\": {\n      \"exists\": false,\n      \"size\": null\n    },\n    \"do-again.toml\": {\n      \"exists\": false,\n      \"size\": null\n    },\n    \"pyproject.toml\": {\n      \"exists\": true,\n      \"size\": 1300\n    }\n  }\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:39:57.811169+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
