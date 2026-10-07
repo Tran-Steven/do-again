@@ -30,9 +30,9 @@ const labeled = """ + str(labeled).lower() + """;
 const editor = document.querySelector('[contenteditable]');
 const addMessage = (role, text) => {
   const node = document.createElement('div');
-  if (labeled && role === 'user') {
+  if (labeled) {
     const heading = document.createElement('h4');
-    heading.textContent = 'You said:';
+    heading.textContent = role === 'user' ? 'You said:' : 'ChatGPT said:';
     node.append(heading);
   } else if (modern) {
     const heading = document.createElement('h4');
