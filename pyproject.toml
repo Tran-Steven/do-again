@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-relay"
+version = "0.1.0"
+description = "Cross-platform relay for securely executing agent-driven development tasks on a local machine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [{name = "Steven Tran"}]
+dependencies = []
+
+[project.scripts]
+agent-relay = "agent_relay.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_relay"]
