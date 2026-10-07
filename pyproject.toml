@@ -3,14 +3,35 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-relay"
+name = "agent-relay-bridge"
 version = "0.1.0"
 description = "Cross-platform relay for securely executing agent-driven development tasks on a local machine"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 authors = [{name = "Steven Tran"}]
+keywords = ["agents", "automation", "developer-tools", "github", "relay", "orchestration"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Software Development :: Version Control :: Git",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/Tran-Steven/agent-relay"
+Repository = "https://github.com/Tran-Steven/agent-relay"
+Issues = "https://github.com/Tran-Steven/agent-relay/issues"
 
 [project.scripts]
 agent-relay = "agent_relay.cli:main"
