@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "installed-runtime-batch-probe-6b1d9c3e7a42",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:40:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T22:10:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nfrom pathlib import Path\n\nhome = Path.home()\nruntime_root = home / \".do_again/projects/41857a676462/runtime\"\ndaemon = runtime_root / \"do_again/service/daemon.py\"\nbrowser = runtime_root / \"do_again/browser/runtime.py\"\n\ndef info(path):\n    if not path.exists():\n        return {\"exists\": False}\n    text = path.read_text()\n    return {\n        \"exists\": True,\n        \"path\": str(path),\n        \"has_notify_receipts\": \"notify_receipts\" in text,\n        \"has_batch_limit_20\": \"paths[:20]\" in text,\n        \"has_wait_for_response_false\": \"wait_for_response=False\" in text,\n    }\n\nprint(json.dumps({\n    \"runtime_root\": str(runtime_root),\n    \"daemon\": info(daemon),\n    \"browser\": info(browser),\n}, indent=2))\n"
+  },
+  "expected": {
+    "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
