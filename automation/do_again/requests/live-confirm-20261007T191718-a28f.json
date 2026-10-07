@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "request_id": "live-confirm-20261007T191718-a28f",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T19:17:18.019Z",
+  "expires_at_utc": "2026-10-07T19:32:18.019Z",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nimport time\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\nfrom do_again.browser import cdp\nfrom do_again.browser.runtime import browser_status, browser_self_test, project_record, _find_chatgpt_target, _page_contains\nfrom do_again.service.runtime import runtime_layout\n\nresult = browser_self_test()\nraw = result.get(\"response\", \"\").strip()\nlabel = \"ChatGPT said:\"\nbody = raw[len(label):].strip() if raw.startswith(label) else raw\nreport = {\"authenticated_round_trip\": {\"passed\": body == \"DO_AGAIN_BROWSER_OK\", \"raw_response\": raw, \"message_body\": body, \"chat_url\": result.get(\"chat_url\")}}\n\nlayout = runtime_layout(repo)\nreceipt_id = \"live-e2e-20261007T191505-b6c9\"\noutbox = layout.state_dir / \"browser_outbox\" / (receipt_id + \".json\")\ndeadline = time.monotonic() + 60\ndelivery = {}\nwhile True:\n    status = browser_status()\n    record = project_record(repo)\n    target = _find_chatgpt_target(int(status[\"port\"]), record.get(\"chat_url\")) if status.get(\"running\") else None\n    posted = bool(target and _page_contains(target, \"DO_AGAIN_RECEIPT_READY request_id=\" + receipt_id + \" state=\"))\n    pending = outbox.exists()\n    delivery = {\"marker_posted\": posted, \"receipt_still_queued\": pending, \"chat_url\": record.get(\"chat_url\"), \"browser_mode\": status.get(\"mode\")}\n    if posted and not pending:\n        break\n    if time.monotonic() >= deadline:\n        break\n    time.sleep(2)\ndelivery[\"passed\"] = delivery[\"marker_posted\"] and not delivery[\"receipt_still_queued\"]\nstate_path = layout.state_dir / \"browser_status.json\"\ndelivery[\"delivery_state\"] = json.loads(state_path.read_text()) if state_path.exists() else None\nreport[\"automatic_receipt_delivery\"] = delivery\nreport[\"passed\"] = report[\"authenticated_round_trip\"][\"passed\"] and delivery[\"passed\"]\nprint(\"DO_AGAIN_LIVE_CONFIRMATION=\" + json.dumps(report), flush=True)\nsys.exit(0 if report[\"passed\"] else 1)\n"
+  },
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
