@@ -908,7 +908,10 @@ if (users.some(el => (el.innerText || el.textContent || '').includes(needle))) r
 const conversation = document.querySelector('[aria-label="Conversation"]') || document.body;
 if (!conversation) return false;
 const raw = String(conversation.innerText || conversation.textContent || '');
-return raw.includes('You said:' + String.fromCharCode(10) + needle);
+const lines = raw.split(String.fromCharCode(10)).map(line => line.trim()).filter(Boolean);
+return lines.some((line, index) =>
+  line === 'You said:' && (lines[index + 1] || '').startsWith(needle)
+);
 })()"""
     )
     return bool(cdp.evaluate(target, expression, timeout=10.0))
