@@ -1,0 +1,16 @@
+{
+  "args": {
+    "content": "from pathlib import Path\nexec(Path(\"/tmp/do_again_verify_lifecycle.py\").read_text(encoding=\"utf-8\"))\n",
+    "cwd": "$REPO",
+    "language": "python"
+  },
+  "expected": {},
+  "expires_at_utc": "2026-10-07T15:13:18.170458+00:00",
+  "issued_at_utc": "2026-10-07T14:28:18.170458+00:00",
+  "limits": {
+    "timeout_seconds": 600
+  },
+  "operation": "scratch_script",
+  "request_id": "dogfood-lifecycle-e2e-002",
+  "schema_version": 1
+}
