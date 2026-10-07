@@ -100,15 +100,27 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path) -> int:
     activate_project(repo)
     ensure_browser_running(verify_auth=True)
     delivered = 0
+    blocked = 0
+    last_error: str | None = None
     for path in _pending_outbox(state_dir):
         receipt = _read_outbox(path)
-        notify_receipt(repo, receipt)
+        try:
+            notify_receipt(repo, receipt)
+        except BrowserError as exc:
+            if "ChatGPT is still generating; retry delivery later" not in str(exc):
+                raise
+            blocked += 1
+            last_error = str(exc)
+            continue
         try:
             path.unlink()
         except FileNotFoundError:
             pass
         delivered += 1
-    _record_browser_state(state_dir, "ready")
+    if blocked:
+        _record_browser_state(state_dir, "recovering", error=last_error)
+    else:
+        _record_browser_state(state_dir, "ready")
     return delivered
 
 
