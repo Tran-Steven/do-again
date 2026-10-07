@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:52987:1791409098:020bfc276004",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:42:10.250066+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "609b8c64ace3c4f3a9d21dad2cafd8140339f832a8a6320a6c93e4d96474703e",
+  "request_id": "installed-runtime-batch-probe-6b1d9c3e7a42",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "609b8c64ace3c4f3a9d21dad2cafd8140339f832a8a6320a6c93e4d96474703e",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/installed-runtime-batch-probe-6b1d9c3e7a42/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.124,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 718,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/installed-runtime-batch-probe-6b1d9c3e7a42/script.py",
+      "script_sha256": "55722886a8879c3ebc93e93f32d4c6a68966ea4480a43b14005cf489b4fdc2a5",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"runtime_root\": \"/Users/steventran/.do_again/projects/41857a676462/runtime\",\n  \"daemon\": {\n    \"exists\": true,\n    \"path\": \"/Users/steventran/.do_again/projects/41857a676462/runtime/do_again/service/daemon.py\",\n    \"has_notify_receipts\": false,\n    \"has_batch_limit_20\": false,\n    \"has_wait_for_response_false\": false\n  },\n  \"browser\": {\n    \"exists\": true,\n    \"path\": \"/Users/steventran/.do_again/projects/41857a676462/runtime/do_again/browser/runtime.py\",\n    \"has_notify_receipts\": false,\n    \"has_batch_limit_20\": false,\n    \"has_wait_for_response_false\": false\n  }\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:42:09.863442+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
