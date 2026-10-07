@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:45:48.532053+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "25f3af02733fa9b528136e0de3319287af3d4f8f08df276ed3b71a1856845e2e",
+  "request_id": "verify-installed-runtime-after-restart-4b8d1c7e5a62",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "25f3af02733fa9b528136e0de3319287af3d4f8f08df276ed3b71a1856845e2e",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/verify-installed-runtime-after-restart-4b8d1c7e5a62/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.097,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 649,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/verify-installed-runtime-after-restart-4b8d1c7e5a62/script.py",
+      "script_sha256": "244c04d4f09c5a57ea02da92032f775d639dfde28ac41df7a7fe9e5391ad2fd3",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"daemon\": {\n    \"exists\": true,\n    \"has_notify_receipts\": true,\n    \"has_batch_limit_20\": true,\n    \"has_wait_for_response_false\": false\n  },\n  \"browser\": {\n    \"exists\": true,\n    \"has_notify_receipts\": true,\n    \"has_batch_limit_20\": false,\n    \"has_wait_for_response_false\": true\n  }\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:45:48.185473+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
