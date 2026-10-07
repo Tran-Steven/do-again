@@ -233,6 +233,8 @@ def setup_project(
             value = install_service(repo)
             if not value.get("installed") or not value.get("running"):
                 raise ServiceError("background service did not start; run do-again status for diagnostics")
+            if browser:
+                browser_info = ensure_browser_running(verify_auth=True)
         else:
             value = service_status(repo)
     except (

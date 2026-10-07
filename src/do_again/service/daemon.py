@@ -171,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if browser_enabled:
         activate_project(repo)
+        _record_browser_state(state_dir, "starting")
         try:
             ensure_browser_running(verify_auth=True)
             _record_browser_state(state_dir, "ready")

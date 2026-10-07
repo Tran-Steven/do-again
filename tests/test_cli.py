@@ -98,6 +98,19 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertNotIn("SETUP_OK", output.getvalue())
             self.assertIn("did not start", error.getvalue())
 
+    def test_setup_verifies_browser_again_after_service_install(self) -> None:
+        from do_again.browser import BrowserError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            error = io.StringIO()
+            output = io.StringIO()
+            with patch("do_again.cli.setup_browser", return_value={"running": True}), patch("do_again.cli.ensure_project_chat", return_value={"chat_url": "https://chatgpt.com/c/project"}), patch("do_again.cli.install_service", return_value={"installed": True, "running": True}), patch("do_again.cli.ensure_browser_running", side_effect=BrowserError("browser failed after service restart")), redirect_stderr(error), redirect_stdout(output):
+                rc = setup_project(str(repo), browser=True)
+            self.assertEqual(rc, 1)
+            self.assertNotIn("SETUP_OK", output.getvalue())
+            self.assertIn("after service restart", error.getvalue())
+
 
     def test_setup_browser_path_is_integrated_without_duplicate_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
