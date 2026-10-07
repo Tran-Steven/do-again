@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-backlog-final-drain-3f7a1c9e5b24",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T20:36:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T21:06:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.service.daemon import _drain_browser_outbox, _pending_outbox\nfrom do_again.service.runtime import runtime_layout\n\nstate = runtime_layout(repo).state_dir\nbefore = [p.name for p in _pending_outbox(state)]\ndelivered = _drain_browser_outbox(repo, state)\nafter = [p.name for p in _pending_outbox(state)]\n\nprint(json.dumps({\n    \"before_count\": len(before),\n    \"before\": before,\n    \"delivered\": delivered,\n    \"after_count\": len(after),\n    \"after\": after,\n}, indent=2))\n\nraise SystemExit(0 if not after else 1)\n"
+  },
+  "expected": {
+    "repo_head": "a207be9aeb56d101835471c828584dbdad86005f"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
