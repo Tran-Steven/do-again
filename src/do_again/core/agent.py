@@ -90,15 +90,28 @@ class Agent:
         status = self.require_git("status", "--porcelain")
         if status.strip():
             raise OperatorError("operator control worktree is dirty")
+        remote_ref = f"refs/heads/{self.branch}"
+        remote = self.require_git("ls-remote", "--heads", self.remote, self.branch)
+        matches = [
+            line.split("\t", 1)[0]
+            for line in remote.splitlines()
+            if line.endswith(f"\t{remote_ref}")
+        ]
+        if len(matches) != 1:
+            raise OperatorError(f"control branch {self.branch!r} is missing from remote {self.remote!r}")
+        local_head = self.require_git("rev-parse", "HEAD").strip()
+        if matches[0] == local_head:
+            return
         self.require_git("fetch", "--quiet", self.remote, self.branch)
         self.require_git("rebase", "FETCH_HEAD")
+        fetched_head = self.require_git("rev-parse", "FETCH_HEAD").strip()
+        if self.require_git("rev-parse", "HEAD").strip() == fetched_head:
+            return
         push = self.git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
         if push.returncode != 0:
             self.require_git("fetch", "--quiet", self.remote, self.branch)
             self.require_git("rebase", "FETCH_HEAD")
-            self.require_git(
-                "push", self.remote, f"HEAD:{self.branch}", timeout=90
-            )
+            self.require_git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
 
     def publish_json(self, relative: Path, value: dict[str, Any], message: str) -> None:
         for attempt in range(4):
@@ -115,7 +128,7 @@ class Agent:
                             f"git commit failed rc={commit.returncode}: "
                             f"{(commit.stderr or commit.stdout).strip()}"
                         )
-                self.require_git("push", "origin", f"HEAD:{self.branch}", timeout=90)
+                self.require_git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
                 return
             except Exception:
                 if attempt == 3:
