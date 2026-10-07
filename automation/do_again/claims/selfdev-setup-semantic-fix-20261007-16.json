@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:52:03.056322+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "2b015c2c08fdd93f73832f6d49fc0210e87f67efe4fda80f10eb090bc82da0d4",
+  "request_id": "selfdev-setup-semantic-fix-20261007-16",
+  "schema_version": 1
+}
