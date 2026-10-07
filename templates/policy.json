@@ -11,49 +11,33 @@
     "read_file",
     "run_tests",
     "repo_script",
-    "control_plane_launcher",
-    "deploy_cp1_bundle_at_stop",
     "scratch_script",
     "extended_exec",
-    "process_signal",
-    "launchctl_action",
-    "self_update",
     "artifact_get",
-    "artifact_put",
-    "capture_screenshot",
-    "full_process_list"
+    "artifact_put"
   ],
   "approved_cwd_roots": [
     "$REPO",
-    "$HOME/.do_again_control_plane",
-    "$HOME/.do_again_bridge",
-    "$HOME/.do_again",
-    "/tmp"
+    "$HOME/.do_again"
   ],
   "read_roots": [
     "$REPO",
-    "$HOME/.do_again_control_plane",
-    "$HOME/.do_again_bridge",
-    "$HOME/.do_again",
-    "/tmp"
+    "$HOME/.do_again"
   ],
   "repo_script_prefixes": [
     "tools/",
-    "control_plane/",
-    "scripts/"
-  ],
-  "allowed_launcher_subcommands": [
-    "session-intake",
-    "session-resolution"
+    "scripts/",
+    "control_plane/"
   ],
   "extended_exec_binaries": [
     "python3",
+    "python",
+    "python.exe",
+    "py",
     "git",
     "bash",
     "zsh",
     "sh",
-    "ps",
-    "jq",
     "cat",
     "tail",
     "head",
@@ -74,10 +58,7 @@
     "pwd",
     "uname",
     "df",
-    "du",
-    "lsof",
-    "vm_stat",
-    "networkQuality"
+    "du"
   ],
   "git_allowed_subcommands": [
     "status",
@@ -95,15 +76,6 @@
     "cat-file",
     "ls-tree",
     "remote"
-  ],
-  "launchctl_allowed_subcommands": [
-    "print",
-    "kickstart",
-    "bootstrap",
-    "bootout"
-  ],
-  "launchctl_label_prefixes": [
-    "io.github.tran-steven."
   ],
   "process_signal_allowlist": [
     "TERM",
@@ -133,5 +105,12 @@
   "max_inline_artifact_bytes": 450000,
   "max_screenshot_width": 1440,
   "screenshot_jpeg_quality": 55,
-  "agent_launchd_label": "io.github.tran-steven.do-again"
+  "agent_launchd_label": "io.github.tran-steven.do-again",
+  "agent_service_label": "io.github.tran-steven.do-again",
+  "launchctl_label_prefixes": [
+    "io.github.tran-steven."
+  ],
+  "service_label_prefixes": [
+    "io.github.tran-steven."
+  ]
 }

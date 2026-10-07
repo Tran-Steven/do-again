@@ -65,7 +65,7 @@ do-again status
 
 ## Service lifecycle
 
-On macOS, Do Again can install a per-repository launchd agent:
+Do Again can install a per-repository background agent using the native user-level service manager:
 
     do-again install
     do-again status
@@ -73,7 +73,7 @@ On macOS, Do Again can install a per-repository launchd agent:
     do-again stop
     do-again uninstall
 
-For attended or cross-platform use, run the agent in the foreground:
+For attended use, or when a native service manager is unavailable, run the agent in the foreground:
 
     do-again run
     do-again run --once
@@ -95,10 +95,10 @@ Each repository gets an isolated runtime, control worktree, state directory, pol
 | Platform | Status | Service backend |
 | --- | --- | --- |
 | macOS | Service lifecycle working | launchd |
-| Linux | Foreground runner working; service adapter scaffolded | systemd user service |
-| Windows | Foreground runner working; service adapter scaffolded | Windows service |
+| Linux | Service lifecycle working | systemd user service |
+| Windows | Service lifecycle working | Task Scheduler |
 
-Do Again is currently alpha software. The foreground runner works across the supported Python platforms; macOS is the first platform with an installable background service while Linux and Windows service integration are being completed behind the same interface.
+Do Again is currently alpha software. The foreground runner and per-repository background service lifecycle are implemented on macOS, Linux, and Windows. Linux uses a systemd user service; Windows uses a per-user Task Scheduler task so administrator privileges are not required.
 
 ## Development
 

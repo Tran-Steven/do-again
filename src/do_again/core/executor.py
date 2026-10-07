@@ -5,10 +5,12 @@ import hashlib
 import json
 import mimetypes
 import os
+import platform
 import shlex
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -38,9 +40,6 @@ class LocalExecutor:
             self.read_roots.append(self.state_dir)
 
     def authority_snapshot(self) -> dict[str, Any]:
-        control = self._optional_json(self.repo / "automation/direct_chat_chatgpt_control.json")
-        desired = self._optional_json(self.repo / "automation/control_plane_desired.json")
-        lease = self._optional_json(self.repo / "automation/direct_chat_controller_lease.json")
         head = self._capture(["git", "-C", str(self.repo), "rev-parse", "HEAD"], timeout=15)
         branch = self._capture(
             ["git", "-C", str(self.repo), "branch", "--show-current"], timeout=15
@@ -48,22 +47,38 @@ class LocalExecutor:
         dirty = self._capture(
             ["git", "-C", str(self.repo), "status", "--porcelain"], timeout=15
         )
-        return {
+        result: dict[str, Any] = {
             "repo_head": head["stdout"].strip() if head["returncode"] == 0 else None,
             "repo_branch": branch["stdout"].strip() if branch["returncode"] == 0 else None,
             "repo_dirty": bool(dirty["stdout"].strip()) if dirty["returncode"] == 0 else None,
-            "generation": control.get("generation"),
-            "control_state": control.get("state"),
-            "revision": desired.get("revision"),
-            "desired_mode": desired.get("mode"),
-            "bundle_sha256": desired.get("bundle_sha256"),
-            "lease_id": desired.get("ownership", {}).get("lease_id")
-            or lease.get("lease_id")
-            or lease.get("controller_lease_id"),
-            "lease_epoch": desired.get("ownership", {}).get("epoch")
-            or lease.get("epoch")
-            or lease.get("controller_lease_epoch"),
         }
+
+        # Compatibility only: older private control planes carried additional
+        # authority documents. Do not surface those fields unless the repository
+        # explicitly contains those documents.
+        control_path = self.repo / "automation/direct_chat_chatgpt_control.json"
+        desired_path = self.repo / "automation/control_plane_desired.json"
+        lease_path = self.repo / "automation/direct_chat_controller_lease.json"
+        if control_path.is_file() or desired_path.is_file() or lease_path.is_file():
+            control = self._optional_json(control_path)
+            desired = self._optional_json(desired_path)
+            lease = self._optional_json(lease_path)
+            result.update(
+                {
+                    "generation": control.get("generation"),
+                    "control_state": control.get("state"),
+                    "revision": desired.get("revision"),
+                    "desired_mode": desired.get("mode"),
+                    "bundle_sha256": desired.get("bundle_sha256"),
+                    "lease_id": desired.get("ownership", {}).get("lease_id")
+                    or lease.get("lease_id")
+                    or lease.get("controller_lease_id"),
+                    "lease_epoch": desired.get("ownership", {}).get("epoch")
+                    or lease.get("epoch")
+                    or lease.get("controller_lease_epoch"),
+                }
+            )
+        return result
 
     def execute(self, request: dict[str, Any]) -> dict[str, Any]:
         operation = request["operation"]
@@ -178,6 +193,15 @@ class LocalExecutor:
             "LC_ALL",
             "LC_CTYPE",
             "TMPDIR",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "SYSTEMROOT",
+            "WINDIR",
+            "COMSPEC",
+            "PATHEXT",
             "SSH_AUTH_SOCK",
             "GIT_SSH_COMMAND",
             "TERM",
@@ -208,16 +232,19 @@ class LocalExecutor:
         env: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = time.time()
+        popen_kwargs: dict[str, Any] = {
+            "cwd": str(cwd or self.repo),
+            "env": self._base_env(env),
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "text": True,
+        }
+        if os.name == "nt":
+            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        else:
+            popen_kwargs["start_new_session"] = True
         try:
-            proc = subprocess.Popen(
-                argv,
-                cwd=str(cwd or self.repo),
-                env=self._base_env(env),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                start_new_session=True,
-            )
+            proc = subprocess.Popen(argv, **popen_kwargs)
         except OSError as exc:
             raise OperatorError(f"failed to start {argv[0]!r}: {exc}") from exc
         timed_out = False
@@ -225,11 +252,17 @@ class LocalExecutor:
             stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             timed_out = True
-            os.killpg(proc.pid, signal.SIGTERM)
+            if os.name == "nt":
+                proc.terminate()
+            else:
+                os.killpg(proc.pid, signal.SIGTERM)
             try:
                 stdout, stderr = proc.communicate(timeout=5)
             except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
+                if os.name == "nt":
+                    proc.kill()
+                else:
+                    os.killpg(proc.pid, signal.SIGKILL)
                 stdout, stderr = proc.communicate()
         stdout, stdout_truncated = self._truncate(stdout or "")
         stderr, stderr_truncated = self._truncate(stderr or "")
@@ -432,25 +465,19 @@ class LocalExecutor:
         return result
 
     def _status(self, timeout: float) -> dict[str, Any]:
-        supervisor = self._optional_json(
-            Path.home() / ".direct_chat_chatgpt_bridge/supervisor_status.json"
-        )
-        observed = self._optional_json(
-            Path.home() / ".direct_chat_control_plane/state/observed.json"
-        )
-        checker = self._optional_json(
-            Path.home() / ".direct_chat_control_plane/state/checker.json"
-        )
+        disk = shutil.disk_usage(self.repo)
         return {
             "authority": self.authority_snapshot(),
-            "supervisor": self._compact_supervisor(supervisor),
-            "observed": self._compact_observed(observed),
-            "checker": self._compact_checker(checker),
-            "system": {
-                "memory": self._memory_summary(),
-                "disk": self._disk_summary(),
+            "runtime": {
+                "platform": platform.system().lower() or "unknown",
+                "python_version": platform.python_version(),
+                "python_executable": sys.executable,
             },
-            "processes": self._process_summary(timeout),
+            "disk": {
+                "total_bytes": disk.total,
+                "used_bytes": disk.used,
+                "available_bytes": disk.free,
+            },
         }
 
     def _full_process_list(self, timeout: float) -> dict[str, Any]:
@@ -486,13 +513,13 @@ class LocalExecutor:
         modules = args.get("modules")
         discover = bool(args.get("discover", False))
         if discover:
-            start = str(args.get("start_directory", "control_plane/tests"))
+            start = str(args.get("start_directory", "tests"))
             pattern = str(args.get("pattern", "test_*.py"))
-            argv = ["python3", "-m", "unittest", "discover", "-s", start, "-p", pattern]
+            argv = [sys.executable, "-m", "unittest", "discover", "-s", start, "-p", pattern]
         else:
             if not isinstance(modules, list) or not modules:
                 raise OperatorError("run_tests requires modules or discover=true")
-            argv = ["python3", "-m", "unittest", *[str(value) for value in modules]]
+            argv = [sys.executable, "-m", "unittest", *[str(value) for value in modules]]
         return self._capture(argv, timeout=timeout, cwd=self.repo)
 
     def _repo_script(self, args: dict[str, Any], timeout: float) -> dict[str, Any]:
@@ -509,7 +536,7 @@ class LocalExecutor:
         if not isinstance(script_args, list) or not all(isinstance(value, str) for value in script_args):
             raise OperatorError("repo_script argv must be a string list")
         if script.suffix == ".py":
-            argv = ["python3", str(script), *script_args]
+            argv = [sys.executable, str(script), *script_args]
         elif script.suffix in {".sh", ".bash", ".zsh"}:
             script_arg = str(script)
             argv = ["bash" if script.suffix != ".zsh" else "zsh", script_arg, *script_args]
@@ -1107,7 +1134,7 @@ class LocalExecutor:
         os.chmod(path, 0o600)
 
         digest = hashlib.sha256(data).hexdigest()
-        runner = "python3" if language == "python" else "bash"
+        runner = sys.executable if language == "python" else "bash"
         script_arg = str(path)
         result = self._capture(
             [runner, script_arg, *values],
@@ -1174,7 +1201,7 @@ class LocalExecutor:
             path = expand_path(script, repo=self.repo)
             if not path_within(path, self.cwd_roots) or not path.is_file():
                 raise OperatorError("shell script must be inside an approved root")
-        elif binary == "python3":
+        elif binary in {"python3", "python", "python.exe", "py"}:
             if "-c" in tail or "-" in tail:
                 raise OperatorError("inline Python execution is not allowed")
             if "-m" in tail:

@@ -25,5 +25,5 @@ class PlatformDetectionTests(unittest.TestCase):
         with patch("platform.system", return_value="Windows"):
             value = detect_platform()
         self.assertEqual(value.name, "windows")
-        self.assertEqual(value.service_manager, "windows-service")
+        self.assertEqual(value.service_manager, "task-scheduler")
         self.assertTrue(value.supported)

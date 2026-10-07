@@ -637,12 +637,12 @@ class ExecutorTests(unittest.TestCase):
     def test_successful_self_update_schedules_restart_after_receipt(self):
         agent_module = load_agent_module()
         control = self.root / "control-restart"
-        (control / "automation/mac_operator/requests").mkdir(parents=True)
-        (control / "automation/mac_operator/receipts").mkdir(parents=True)
+        (control / "automation/do_again/requests").mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
         request = self.request("self_update")
         request_path = (
             control
-            / "automation/mac_operator/requests"
+            / "automation/do_again/requests"
             / f"{request['request_id']}.json"
         )
         atomic_json(request_path, request)
@@ -672,12 +672,12 @@ class ExecutorTests(unittest.TestCase):
     def test_ambiguous_started_request_is_not_replayed(self):
         agent_module = load_agent_module()
         control = self.root / "control"
-        (control / "automation/mac_operator/requests").mkdir(parents=True)
-        (control / "automation/mac_operator/receipts").mkdir(parents=True)
+        (control / "automation/do_again/requests").mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
         request = self.request("status")
         request_path = (
             control
-            / "automation/mac_operator/requests"
+            / "automation/do_again/requests"
             / f"{request['request_id']}.json"
         )
         atomic_json(request_path, request)

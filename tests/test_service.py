@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,11 @@ from do_again.service.runtime import (
     ServiceError,
     _default_policy,
     _launchd_plist,
+    _posix_launcher_text,
+    _systemd_unit,
+    _windows_launcher_text,
     runtime_layout,
+    service_status,
 )
 
 
@@ -35,6 +40,11 @@ class ServiceRuntimeTests(unittest.TestCase):
         self.assertIn("scratch_script", policy["allowed_operations"])
         self.assertTrue(policy["agent_launchd_label"].startswith("io.github.tran-steven.do-again"))
 
+        self.assertNotIn("control_plane_launcher", policy["allowed_operations"])
+        self.assertNotIn("deploy_cp1_bundle_at_stop", policy["allowed_operations"])
+        self.assertNotIn("launchctl_action", policy["allowed_operations"])
+        self.assertNotIn("capture_screenshot", policy["allowed_operations"])
+
     def test_launchd_plist_uses_copied_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -49,13 +59,93 @@ class ServiceRuntimeTests(unittest.TestCase):
             self.assertIn("do_again.core.agent", value["ProgramArguments"])
             self.assertTrue(value["KeepAlive"])
 
+    def test_systemd_unit_uses_user_scoped_copied_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo with spaces"
+            repo.mkdir()
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": str(root / "home")}):
+                layout = runtime_layout(repo)
+            launcher = _posix_launcher_text(layout)
+            unit = _systemd_unit(layout)
+            self.assertIn("PYTHONPATH=", launcher)
+            self.assertIn(str(layout.runtime_source), launcher)
+            self.assertIn("do_again.core.agent", launcher)
+            self.assertIn("Restart=always", unit)
+            self.assertIn(str(layout.root / "run-agent.sh"), unit)
+            self.assertIn(str(repo.resolve()), unit)
+
+    def test_windows_launcher_uses_copied_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": str(root / "home")}):
+                layout = runtime_layout(repo)
+            launcher = _windows_launcher_text(layout)
+            self.assertIn("PYTHONPATH=", launcher)
+            self.assertIn(str(layout.runtime_source), launcher)
+            self.assertIn("do_again.core.agent", launcher)
+            self.assertIn("PYTHONDONTWRITEBYTECODE", launcher)
+
+    @patch("do_again.service.runtime._linux_pid", return_value=4321)
+    @patch("do_again.service.runtime._linux_running", return_value=True)
+    @patch("do_again.service.runtime.linux_service_definition_path")
     @patch("do_again.service.runtime.detect_platform")
-    def test_background_lifecycle_rejects_non_macos(self, detect) -> None:
-        detect.return_value = PlatformInfo(name="linux", service_manager="systemd", supported=True)
-        from do_again.service.runtime import install_service
+    @patch("do_again.service.runtime.find_repo")
+    def test_linux_status_reports_installed_running(
+        self, find_repo_mock, detect, unit_path, running, pid
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            find_repo_mock.return_value = repo.resolve()
+            detect.return_value = PlatformInfo(name="linux", service_manager="systemd", supported=True)
+            unit = root / "do-again.service"
+            unit.write_text("[Service]\n")
+            unit_path.return_value = unit
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": str(root / "home")}):
+                value = service_status(repo)
+            self.assertTrue(value["installed"])
+            self.assertTrue(value["running"])
+            self.assertEqual(value["pid"], 4321)
+
+    @patch("do_again.service.runtime._windows_running", return_value=True)
+    @patch("do_again.service.runtime._windows_task_exists", return_value=True)
+    @patch("do_again.service.runtime.detect_platform")
+    @patch("do_again.service.runtime.find_repo")
+    def test_windows_status_reports_task_state(
+        self, find_repo_mock, detect, exists, running
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir()
+            find_repo_mock.return_value = repo.resolve()
+            detect.return_value = PlatformInfo(name="windows", service_manager="task-scheduler", supported=True)
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": str(root / "home")}):
+                value = service_status(repo)
+            self.assertTrue(value["installed"])
+            self.assertTrue(value["running"])
+            self.assertIsNone(value["pid"])
+
+    @patch("do_again.service.runtime.detect_platform")
+    def test_background_lifecycle_rejects_unknown_platform(self, detect) -> None:
+        detect.return_value = PlatformInfo(name="plan9", service_manager="unknown", supported=False)
+        from do_again.service.runtime import _require_supported_background_platform
 
         with self.assertRaises(ServiceError):
-            install_service(".")
+            _require_supported_background_platform()
+
+    def test_run_error_wraps_missing_binary(self) -> None:
+        from do_again.service.runtime import _run
+
+        with patch("do_again.service.runtime.subprocess.run", side_effect=FileNotFoundError("missing")):
+            proc = _run(["missing"], check=False)
+            self.assertEqual(proc.returncode, 127)
+            with self.assertRaises(ServiceError):
+                _run(["missing"])
 
 
 if __name__ == "__main__":
