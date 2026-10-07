@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import argparse
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 from .platforms.detect import detect_platform
+from .service.runtime import (
+    ServiceError,
+    find_repo,
+    install_service,
+    restart_service,
+    run_foreground,
+    service_status,
+    stop_service,
+    uninstall_service,
+)
 
 
 def doctor() -> int:
@@ -23,10 +32,36 @@ def doctor() -> int:
     return 0 if all(checks.values()) else 1
 
 
-def status() -> int:
+def _print_service_status(value: dict[str, object]) -> None:
+    for key in (
+        "platform",
+        "service_manager",
+        "repo",
+        "label",
+        "installed",
+        "running",
+        "pid",
+        "runtime_dir",
+        "control_worktree",
+    ):
+        if key in value:
+            print(f"{key}={value[key]}")
+
+
+def status(path: str = ".") -> int:
     info = detect_platform()
-    print(f"platform={info.name}")
-    print(f"service_manager={info.service_manager}")
+    try:
+        repo = find_repo(path)
+    except ServiceError:
+        print(f"platform={info.name}")
+        print(f"service_manager={info.service_manager}")
+        return 0
+    try:
+        value = service_status(repo)
+    except ServiceError as exc:
+        print(f"do-again: {exc}", file=sys.stderr)
+        return 1
+    _print_service_status(value)
     return 0
 
 
@@ -42,20 +77,59 @@ def init_project(path: str) -> int:
     return 0
 
 
+def _service_action(action: str, path: str) -> int:
+    try:
+        if action == "install":
+            value = install_service(path)
+        elif action == "stop":
+            value = stop_service(path)
+        elif action == "restart":
+            value = restart_service(path)
+        elif action == "uninstall":
+            value = uninstall_service(path)
+        else:
+            raise ServiceError(f"unsupported service action: {action}")
+    except ServiceError as exc:
+        print(f"do-again: {exc}", file=sys.stderr)
+        return 1
+    _print_service_status(value)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="do-again")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor")
-    sub.add_parser("status")
+
+    status_parser = sub.add_parser("status")
+    status_parser.add_argument("path", nargs="?", default=".")
+
     init_parser = sub.add_parser("init")
     init_parser.add_argument("path", nargs="?", default=".")
+
+    for name in ("install", "stop", "restart", "uninstall"):
+        command = sub.add_parser(name)
+        command.add_argument("path", nargs="?", default=".")
+
+    run_parser = sub.add_parser("run")
+    run_parser.add_argument("path", nargs="?", default=".")
+    run_parser.add_argument("--once", action="store_true")
+
     args = parser.parse_args()
     if args.command == "doctor":
         return doctor()
     if args.command == "status":
-        return status()
+        return status(args.path)
     if args.command == "init":
         return init_project(args.path)
+    if args.command in {"install", "stop", "restart", "uninstall"}:
+        return _service_action(args.command, args.path)
+    if args.command == "run":
+        try:
+            return run_foreground(args.path, once=args.once)
+        except ServiceError as exc:
+            print(f"do-again: {exc}", file=sys.stderr)
+            return 1
     return 2
 
 

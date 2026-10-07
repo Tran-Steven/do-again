@@ -59,8 +59,26 @@ The npm package ships the same Python runtime from this repository behind a smal
 ```bash
 do-again doctor
 do-again init
+do-again install
 do-again status
 ```
+
+## Service lifecycle
+
+On macOS, Do Again can install a per-repository launchd agent:
+
+    do-again install
+    do-again status
+    do-again restart
+    do-again stop
+    do-again uninstall
+
+For attended or cross-platform use, run the agent in the foreground:
+
+    do-again run
+    do-again run --once
+
+Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under ~/.do_again. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits.
 
 ## Why Do Again
 
@@ -76,11 +94,11 @@ do-again status
 
 | Platform | Status | Service backend |
 | --- | --- | --- |
-| macOS | Core working | launchd |
-| Linux | Adapter scaffolded | systemd user service |
-| Windows | Adapter scaffolded | Windows service |
+| macOS | Service lifecycle working | launchd |
+| Linux | Foreground runner working; service adapter scaffolded | systemd user service |
+| Windows | Foreground runner working; service adapter scaffolded | Windows service |
 
-Do Again is currently alpha software. macOS is the first active service platform while Linux and Windows service integration are being completed behind the same interface.
+Do Again is currently alpha software. The foreground runner works across the supported Python platforms; macOS is the first platform with an installable background service while Linux and Windows service integration are being completed behind the same interface.
 
 ## Development
 
@@ -94,7 +112,7 @@ do-again doctor
 
 ## Release model
 
-Releases use semantic versioning. Pushing a version tag such as `v0.1.1` validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
+Releases use semantic versioning. Pushing a version tag such as `v0.2.0` validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
 
 PyPI distribution name: `do-again`
 

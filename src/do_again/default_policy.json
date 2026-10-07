@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "control_branch": "operator-control",
+  "poll_seconds": 3,
+  "max_request_ttl_seconds": 3600,
+  "default_timeout_seconds": 120,
+  "absolute_timeout_seconds": 3600,
+  "max_output_bytes": 262144,
+  "allowed_operations": [
+    "status",
+    "read_file",
+    "run_tests",
+    "repo_script",
+    "control_plane_launcher",
+    "deploy_cp1_bundle_at_stop",
+    "scratch_script",
+    "extended_exec",
+    "process_signal",
+    "launchctl_action",
+    "self_update",
+    "artifact_get",
+    "artifact_put",
+    "capture_screenshot",
+    "full_process_list"
+  ],
+  "approved_cwd_roots": [
+    "$REPO",
+    "$HOME/.do_again_control_plane",
+    "$HOME/.do_again_bridge",
+    "$HOME/.do_again",
+    "/tmp"
+  ],
+  "read_roots": [
+    "$REPO",
+    "$HOME/.do_again_control_plane",
+    "$HOME/.do_again_bridge",
+    "$HOME/.do_again",
+    "/tmp"
+  ],
+  "repo_script_prefixes": [
+    "tools/",
+    "control_plane/",
+    "scripts/"
+  ],
+  "allowed_launcher_subcommands": [
+    "session-intake",
+    "session-resolution"
+  ],
+  "extended_exec_binaries": [
+    "python3",
+    "git",
+    "bash",
+    "zsh",
+    "sh",
+    "ps",
+    "jq",
+    "cat",
+    "tail",
+    "head",
+    "grep",
+    "rg",
+    "find",
+    "sed",
+    "ls",
+    "stat",
+    "shasum",
+    "date",
+    "sleep",
+    "wc",
+    "sort",
+    "uniq",
+    "cut",
+    "tr",
+    "pwd",
+    "uname",
+    "df",
+    "du",
+    "lsof",
+    "vm_stat",
+    "networkQuality"
+  ],
+  "git_allowed_subcommands": [
+    "status",
+    "fetch",
+    "pull",
+    "log",
+    "show",
+    "diff",
+    "rev-parse",
+    "branch",
+    "switch",
+    "checkout",
+    "worktree",
+    "merge-base",
+    "cat-file",
+    "ls-tree",
+    "remote"
+  ],
+  "launchctl_allowed_subcommands": [
+    "print",
+    "kickstart",
+    "bootstrap",
+    "bootout"
+  ],
+  "launchctl_label_prefixes": [
+    "io.github.tran-steven."
+  ],
+  "process_signal_allowlist": [
+    "TERM",
+    "INT",
+    "HUP",
+    "KILL"
+  ],
+  "python_allowed_modules": [
+    "unittest",
+    "py_compile"
+  ],
+  "hard_denied_binaries": [
+    "sudo",
+    "su",
+    "doas",
+    "rm",
+    "dd",
+    "diskutil",
+    "fdisk",
+    "mkfs",
+    "mount",
+    "umount",
+    "docker",
+    "podman"
+  ],
+  "max_scratch_script_bytes": 65536,
+  "max_inline_artifact_bytes": 450000,
+  "max_screenshot_width": 1440,
+  "screenshot_jpeg_quality": 55,
+  "agent_launchd_label": "io.github.tran-steven.do-again"
+}
