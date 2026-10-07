@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:22:24.110126+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "f9a9c902eeb6e8fca027a1ffb717b7a3ce492b58b90b8cb69b3ad16ecaf0b794",
+  "request_id": "receipt-submit-fastpath2-5a1d8e3c7b94",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "ad65a4ccf678078843ae1961581d14432a43cd12"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "f9a9c902eeb6e8fca027a1ffb717b7a3ce492b58b90b8cb69b3ad16ecaf0b794",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-submit-fastpath2-5a1d8e3c7b94/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.105,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 4805,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-submit-fastpath2-5a1d8e3c7b94/script.py",
+      "script_sha256": "f8ed8c24954758d333a5249675b4320262801c06b3e8f04a60eaed56ff261c80",
+      "stderr": "acceptance anchor not found\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:22:23.746796+00:00",
+  "state": "failed",
+  "traceback": null
+}
