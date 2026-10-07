@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-setup-audit-20261007-14",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:53:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:23:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"f108fa2765a922f800c9cc87e99eab11b629839e\"\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nstatus = subprocess.check_output([\"git\",\"status\",\"--porcelain=v1\"], cwd=wt, text=True).strip()\nif head != expected or status:\n    raise SystemExit(f\"unexpected worktree state head={head} status={status!r}\")\n\ntargets = [\n    wt/\"src/do_again/cli.py\",\n    wt/\"src/do_again/service/runtime.py\",\n    wt/\"tests/test_cli.py\",\n    wt/\"tests/test_service.py\",\n]\nneedles = (\"SETUP_OK\", \"setup\", \"verify\", \"browser_enabled\", \"run_iteration_test\", \"self-test\", \"status\")\n\nfor p in targets:\n    if not p.exists():\n        continue\n    print(f\"=== {p.relative_to(wt)} ===\")\n    lines = p.read_text().splitlines()\n    hits = [i for i,l in enumerate(lines,1) if any(n in l for n in needles)]\n    seen=set()\n    for hit in hits:\n        start=max(1,hit-6); end=min(len(lines),hit+20)\n        if (start,end) in seen: continue\n        seen.add((start,end))\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start,end+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
