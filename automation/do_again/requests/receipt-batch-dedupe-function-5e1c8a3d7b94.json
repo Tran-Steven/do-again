@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "receipt-batch-dedupe-function-5e1c8a3d7b94",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:14:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T21:44:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nruntime = Path(\"src/do_again/browser/runtime.py\")\ntext = runtime.read_text()\n\nmarker = \"@_project_operation\\ndef notify_receipts\"\npositions = []\nstart = 0\nwhile True:\n    i = text.find(marker, start)\n    if i == -1:\n        break\n    positions.append(i)\n    start = i + 1\n\nif len(positions) != 2:\n    raise SystemExit(f\"expected exactly 2 notify_receipts definitions, found {len(positions)}\")\n\nsecond = positions[1]\nnext_notify = text.find(\"@_project_operation\\ndef notify_receipt\", second + len(marker))\nif next_notify == -1:\n    raise SystemExit(\"notify_receipt anchor after duplicate not found\")\n\ntext = text[:second] + text[next_notify:]\nruntime.write_text(text)\n\nremaining = runtime.read_text().count(\"def notify_receipts(\")\nif remaining != 1:\n    raise SystemExit(f\"expected 1 notify_receipts definition after cleanup, found {remaining}\")\n\nsubprocess.run([\n    \"python3\", \"-m\", \"py_compile\",\n    \"src/do_again/browser/runtime.py\",\n    \"src/do_again/service/daemon.py\",\n], check=True)\n\nsubprocess.run(\n    [\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\"],\n    check=True,\n)\nsubprocess.run(\n    [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"],\n    check=True,\n)\n\nsubprocess.run([\n    \"git\", \"add\",\n    \"src/do_again/browser/runtime.py\",\n    \"src/do_again/browser/__init__.py\",\n    \"src/do_again/service/daemon.py\",\n    \"tests/test_browser.py\",\n    \"tests/test_daemon.py\",\n], check=True)\n\nsubprocess.run([\"git\", \"commit\", \"-m\", \"Batch browser receipt notifications\"], check=True)\n\npush = subprocess.run([\"git\", \"push\", \"origin\", \"main\"])\nif push.returncode != 0:\n    subprocess.run([\"git\", \"fetch\", \"origin\", \"main\"], check=True)\n    subprocess.run([\"git\", \"rebase\", \"origin/main\"], check=True)\n    subprocess.run([\n        \"python3\", \"-m\", \"py_compile\",\n        \"src/do_again/browser/runtime.py\",\n        \"src/do_again/service/daemon.py\",\n    ], check=True)\n    subprocess.run(\n        [\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\"],\n        check=True,\n    )\n    subprocess.run(\n        [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \"tests\", \"-p\", \"test_*.py\"],\n        check=True,\n    )\n    subprocess.run([\"git\", \"push\", \"origin\", \"main\"], check=True)\n\nprint(\"HEAD=\" + subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip())\nprint(\"NOTIFY_RECEIPTS_COUNT=\" + str(runtime.read_text().count(\"def notify_receipts(\")))\nprint(\"STATUS=\")\nprint(subprocess.check_output([\"git\", \"status\", \"--short\"], text=True))\n"
+  },
+  "expected": {
+    "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+  },
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
