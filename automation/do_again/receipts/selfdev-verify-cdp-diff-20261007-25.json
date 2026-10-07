@@ -1,0 +1,14 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": "OperatorError: request issued_at_utc is more than 300s in the future",
+  "finished_at_utc": "2026-10-07T23:58:55.948953+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "3a32678d9d3c21c0d95fa426c9418af0f57a60a661e416de8100f2a9c1db1939",
+  "request_id": "selfdev-verify-cdp-diff-20261007-25",
+  "result": null,
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:58:55.948531+00:00",
+  "state": "blocked",
+  "traceback": null
+}
