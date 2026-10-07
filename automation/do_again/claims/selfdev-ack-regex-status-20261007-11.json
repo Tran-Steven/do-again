@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:47:56.761255+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "13c190b0edb158e1f171b182ebfcfcb394d1d8ac70d34fa5511f1151ce10b12c",
+  "request_id": "selfdev-ack-regex-status-20261007-11",
+  "schema_version": 1
+}
