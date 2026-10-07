@@ -1,0 +1,61 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:62872:1791383011",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:23:50.640323+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "run_tests",
+  "request_fingerprint": "cbcaf6ef4910a622e1c243a4579fb1c809936ebe68689308161aec7d81b5fdc6",
+  "request_id": "dogfood-lifecycle-tests-001",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "53f8242fd9ae38bce58381254be678d1b5669d70",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "53f8242fd9ae38bce58381254be678d1b5669d70",
+      "revision": null
+    },
+    "operation": "run_tests",
+    "request_fingerprint": "cbcaf6ef4910a622e1c243a4579fb1c809936ebe68689308161aec7d81b5fdc6",
+    "result": {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests",
+        "-p",
+        "test_*.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 14.824,
+      "returncode": 1,
+      "stderr": ".......................................FF\n======================================================================\nFAIL: test_launchd_plist_uses_copied_runtime (test_service.ServiceRuntimeTests.test_launchd_plist_uses_copied_runtime)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_service.py\", line 47, in test_launchd_plist_uses_copied_runtime\n    self.assertEqual(value[\"WorkingDirectory\"], str(repo))\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: '/private/tmp/tmpn0e4u1nb/repo' != '/tmp/tmpn0e4u1nb/repo'\n- /private/tmp/tmpn0e4u1nb/repo\n? --------\n+ /tmp/tmpn0e4u1nb/repo\n\n\n======================================================================\nFAIL: test_runtime_layout_is_stable_and_project_scoped (test_service.ServiceRuntimeTests.test_runtime_layout_is_stable_and_project_scoped)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/do-again/tests/test_service.py\", line 30, in test_runtime_layout_is_stable_and_project_scoped\n    self.assertEqual(first.root.parent, root / \"home\" / \"projects\")\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: PosixPath('/private/tmp/tmprd0d8ucg/home/projects') != PosixPath('/tmp/tmprd0d8ucg/home/projects')\n\n----------------------------------------------------------------------\nRan 41 tests in 14.539s\n\nFAILED (failures=2)\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:23:35.604321+00:00",
+  "state": "failed",
+  "traceback": null
+}
