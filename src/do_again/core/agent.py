@@ -412,6 +412,37 @@ class Agent:
     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:
         atomic_json(self.ledger_path(request_id), value)
 
+    def record_operator_progress(
+        self,
+        request: dict[str, Any],
+        *,
+        request_id: str,
+        fingerprint: str,
+    ) -> None:
+        continuation = request.get("continuation")
+        if not isinstance(continuation, dict):
+            return
+        acknowledged = list(continuation.get("acknowledged_receipts", []))
+        missing = [value for value in acknowledged if not self.receipt_exists(value)]
+        if missing:
+            raise OperatorError(
+                "continuation acknowledges receipts that are not durably published: "
+                + ", ".join(missing)
+            )
+        atomic_json(
+            self.state_dir / "operator_progress.json",
+            {
+                "schema_version": 1,
+                "request_id": request_id,
+                "request_fingerprint": fingerprint,
+                "acknowledged_receipts": acknowledged,
+                "goal_state": continuation.get("goal_state", "in_progress"),
+                "goal_id": continuation.get("goal_id"),
+                "summary": continuation.get("summary"),
+                "recorded_at_utc": utc_now().isoformat(),
+            },
+        )
+
     @staticmethod
     def _request_matches_fingerprint(request: dict[str, Any], fingerprint: str) -> bool:
         if request_fingerprint(request) == fingerprint:
@@ -431,7 +462,7 @@ class Agent:
         error: str | None = None,
         traceback_text: str | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": 1,
             "request_id": request.get("request_id"),
             "request_fingerprint": request_fingerprint(request),
@@ -445,6 +476,10 @@ class Agent:
             "error": error,
             "traceback": traceback_text,
         }
+        continuation = request.get("continuation")
+        if isinstance(continuation, dict):
+            payload["operator_progress"] = continuation
+        return payload
 
     def result_succeeded(self, payload: dict[str, Any]) -> bool:
         result = payload.get("result")
@@ -607,6 +642,11 @@ class Agent:
                     max_future_skew_seconds=int(
                         self.policy.get("max_future_skew_seconds", 300)
                     ),
+                )
+                self.record_operator_progress(
+                    raw,
+                    request_id=request_id,
+                    fingerprint=fingerprint,
                 )
                 self.write_ledger(
                     request_id,
