@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:34524:1791384962",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:57:48.325805+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "8276b1b9db5231b506f58e6458811c2ba1667eda18b82f88bcd293abf4a4f904",
+  "request_id": "selfhost-prepare-021-001",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f77bc8d40babc78852209c5a55e5c41210081695"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": false,
+      "repo_head": "f77bc8d40babc78852209c5a55e5c41210081695"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "8276b1b9db5231b506f58e6458811c2ba1667eda18b82f88bcd293abf4a4f904",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-prepare-021-001/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.094,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 96,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfhost-prepare-021-001/script.py",
+      "script_sha256": "8061ceb770454b7be0d73631342a7e2935ee2ad5a3465100c2fb7f729a5b5976",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "prepared 0.2.1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:57:47.923166+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
