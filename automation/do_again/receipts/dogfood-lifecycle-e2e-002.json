@@ -1,0 +1,59 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:71469:1791383299",
+  "error": null,
+  "finished_at_utc": "2026-10-07T14:28:34.840622+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "4079208606ee89a432a39e021864b9b8c1be99e07c3f8f0c455486747666a0f9",
+  "request_id": "dogfood-lifecycle-e2e-002",
+  "result": {
+    "authority_after": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "53f8242fd9ae38bce58381254be678d1b5669d70",
+      "revision": null
+    },
+    "authority_before": {
+      "bundle_sha256": null,
+      "control_state": null,
+      "desired_mode": null,
+      "generation": null,
+      "lease_epoch": null,
+      "lease_id": null,
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "53f8242fd9ae38bce58381254be678d1b5669d70",
+      "revision": null
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "4079208606ee89a432a39e021864b9b8c1be99e07c3f8f0c455486747666a0f9",
+    "result": {
+      "argv": [
+        "python3",
+        "/Users/steventran/.do_again/dogfood-do-again/state/scratch/dogfood-lifecycle-e2e-002/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 11.509,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 101,
+      "script_path": "/Users/steventran/.do_again/dogfood-do-again/state/scratch/dogfood-lifecycle-e2e-002/script.py",
+      "script_sha256": "3caa6d83b1710b8481f901ee7f6fe77be3bbc867f2fb3571f103d906ed00f683",
+      "stderr": "npm notice\nnpm notice 📦  do-again@0.1.1\nnpm notice Tarball Contents\nnpm notice 1.1kB LICENSE\nnpm notice 4.0kB README.md\nnpm notice 2.6kB bin/do-again.js\nnpm notice 931B package.json\nnpm notice 0B src/do_again/__init__.py\nnpm notice 3.7kB src/do_again/cli.py\nnpm notice 0B src/do_again/core/__init__.py\nnpm notice 14.5kB src/do_again/core/agent.py\nnpm notice 54.6kB src/do_again/core/executor.py\nnpm notice 3.9kB src/do_again/core/schema.py\nnpm notice 2.4kB src/do_again/default_policy.json\nnpm notice 0B src/do_again/platforms/__init__.py\nnpm notice 175B src/do_again/platforms/base.py\nnpm notice 594B src/do_again/platforms/detect.py\nnpm notice 187B src/do_again/platforms/linux.py\nnpm notice 183B src/do_again/platforms/macos.py\nnpm notice 89B src/do_again/platforms/windows.py\nnpm notice 272B src/do_again/service/__init__.py\nnpm notice 12.4kB src/do_again/service/runtime.py\nnpm notice Tarball Details\nnpm notice name: do-again\nnpm notice version: 0.1.1\nnpm notice filename: do-again-0.1.1.tgz\nnpm notice package size: 24.0 kB\nnpm notice unpacked size: 101.7 kB\nnpm notice shasum: 631e2bb9ebe3c52dcf34441c81598a9d3a2b2fef\nnpm notice integrity: sha512-PolrIk16yBWit[...]rLtFx/525HrmQ==\nnpm notice total files: 19\nnpm notice\nTo /tmp/do-again-lifecycle-e2e-origin.git\n * [new branch]      main -> main\n",
+      "stderr_truncated": false,
+      "stdout": "+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli --help\nusage: do-again [-h]\n                {doctor,status,init,install,stop,restart,uninstall,run} ...\n\npositional arguments:\n  {doctor,status,init,install,stop,restart,uninstall,run}\n\noptions:\n  -h, --help            show this help message and exit\n+ npm test\n\n> do-again@0.1.1 test\n> node --test npm-tests/*.test.js\n\n✔ npm launcher runs the bundled Python CLI (388.223583ms)\n✔ npm launcher reports a missing configured Python cleanly (72.832209ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 573.62675\n+ npm pack --dry-run --ignore-scripts\ndo-again-0.1.1.tgz\n+ git init --bare /tmp/do-again-lifecycle-e2e-origin.git\nInitialized empty Git repository in /private/tmp/do-again-lifecycle-e2e-origin.git/\n+ git init -b main\nInitialized empty Git repository in /private/tmp/do-again-lifecycle-e2e/.git/\n+ git config user.name Do Again E2E\n+ git config user.email e2e@example.invalid\n+ git add README.md\n+ git commit -m Initial\n[main (root-commit) d4601cc] Initial\n 1 file changed, 1 insertion(+)\n create mode 100644 README.md\n+ git remote add origin /tmp/do-again-lifecycle-e2e-origin.git\n+ git push -u origin main\nbranch 'main' set up to track 'origin/main'.\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli install /tmp/do-again-lifecycle-e2e\nplatform=macos\nservice_manager=launchd\nrepo=/private/tmp/do-again-lifecycle-e2e\nlabel=io.github.tran-steven.do-again.dc161dc0ded7\ninstalled=True\nrunning=True\npid=71665\nruntime_dir=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7\ncontrol_worktree=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7/control\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli status /tmp/do-again-lifecycle-e2e\nplatform=macos\nservice_manager=launchd\nrepo=/private/tmp/do-again-lifecycle-e2e\nlabel=io.github.tran-steven.do-again.dc161dc0ded7\ninstalled=True\nrunning=True\npid=71665\nruntime_dir=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7\ncontrol_worktree=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7/control\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli restart /tmp/do-again-lifecycle-e2e\nplatform=macos\nservice_manager=launchd\nrepo=/private/tmp/do-again-lifecycle-e2e\nlabel=io.github.tran-steven.do-again.dc161dc0ded7\ninstalled=True\nrunning=True\npid=72074\nruntime_dir=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7\ncontrol_worktree=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7/control\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli stop /tmp/do-again-lifecycle-e2e\nplatform=macos\nservice_manager=launchd\nrepo=/private/tmp/do-again-lifecycle-e2e\nlabel=io.github.tran-steven.do-again.dc161dc0ded7\ninstalled=True\nrunning=False\npid=None\nruntime_dir=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7\ncontrol_worktree=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7/control\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli run --once /tmp/do-again-lifecycle-e2e\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli uninstall /tmp/do-again-lifecycle-e2e\nrepo=/private/tmp/do-again-lifecycle-e2e\nlabel=io.github.tran-steven.do-again.dc161dc0ded7\ninstalled=False\nrunning=False\n+ /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 -m do_again.cli status /tmp/do-again-lifecycle-e2e\nplatform=macos\nservice_manager=launchd\nrepo=/private/tmp/do-again-lifecycle-e2e\nlabel=io.github.tran-steven.do-again.dc161dc0ded7\ninstalled=False\nrunning=False\npid=None\nruntime_dir=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7\ncontrol_worktree=/private/tmp/do-again-lifecycle-e2e-home/projects/dc161dc0ded7/control\nLIFECYCLE_E2E_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T14:28:23.062446+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
