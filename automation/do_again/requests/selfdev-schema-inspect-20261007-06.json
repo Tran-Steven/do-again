@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-schema-inspect-20261007-06",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:45:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:15:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nif head != \"d6114a1564542b17309f91423d533345c8056307\":\n    raise SystemExit(f\"unexpected head {head}\")\n\nfor rel in [\n    \"src/do_again/core/schema.py\",\n    \"tests/test_schema.py\",\n    \"tests/test_agent.py\",\n]:\n    p = wt / rel\n    print(f\"=== {rel} ===\")\n    lines = p.read_text().splitlines()\n    for n,line in enumerate(lines,1):\n        if any(k in line for k in [\"validate_request\", \"request_fingerprint\", \"schema_version\", \"operation\", \"expected\", \"limits\", \"request_id\"]):\n            start=max(1,n-5); end=min(len(lines),n+16)\n            print(f\"--- {start}-{end} ---\")\n            for i in range(start,end+1):\n                print(f\"{i:04d}: {lines[i-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
