@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:47:58.947049+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "13c190b0edb158e1f171b182ebfcfcb394d1d8ac70d34fa5511f1151ce10b12c",
+  "request_id": "selfdev-ack-regex-status-20261007-11",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "13c190b0edb158e1f171b182ebfcfcb394d1d8ac70d34fa5511f1151ce10b12c",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-regex-status-20261007-11/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.184,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 811,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-regex-status-20261007-11/script.py",
+      "script_sha256": "3d3a08d8383c926fc652fe0cd4b743d14aaaba4418e39e8312b23c219a5bf15c",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=d6114a1564542b17309f91423d533345c8056307\nstatus:\n M src/do_again/core/agent.py\n M src/do_again/core/schema.py\n?? tests/test_operator_progress.py\n\nschema:12: REQUEST_ID_RE = re.compile(r\"^[A-Za-z0-9._-]{8,160}$\")\nschema:78:     if not isinstance(request_id, str) or not REQUEST_ID_RE.fullmatch(request_id):\nschema:112:             not isinstance(value, str) or not REQUEST_ID_RE.fullmatch(value)\nschema:123:             not isinstance(goal_id, str) or not REQUEST_ID_RE.fullmatch(goal_id)\ntest:17:             \"request_id\": \"next-step\",\ntest:33:             \"acknowledged_receipts\": [\"prior-1\", \"prior-2\"],\ntest:35:             \"goal_id\": \"goal-alpha\",\ntest:46:                 \"acknowledged_receipts\": [\"prior-1\", \"prior-2\"],\ntest:48:                 \"goal_id\": \"goal-alpha\",\ntest:63:             \"acknowledged_receipts\": [\"prior-1\", \"prior-1\"],\ntest:98:                     request_id=\"next-step\",\ntest:105:             prior = agent.control_worktree / agent.receipt_relative(\"prior-1\")\ntest:107:             prior.write_text(json.dumps({\"request_id\": \"prior-1\", \"state\": \"succeeded\"}))\ntest:110:                 \"request_id\": \"next-step\",\ntest:118:                     \"acknowledged_receipts\": [\"prior-1\"],\ntest:120:                     \"goal_id\": \"goal-alpha\",\ntest:127:                 request_id=\"next-step\",\ntest:131:             self.assertEqual(progress[\"acknowledged_receipts\"], [\"prior-1\"])\ntest:133:             self.assertEqual(progress[\"goal_id\"], \"goal-alpha\")\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:47:58.502532+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
