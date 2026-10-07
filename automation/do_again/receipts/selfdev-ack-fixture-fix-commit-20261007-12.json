@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-07T23:48:38.588324+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "56dedefd3711c8fff567e954a121384572d619123b852fe520be5301e61e3f85",
+  "request_id": "selfdev-ack-fixture-fix-commit-20261007-12",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "56dedefd3711c8fff567e954a121384572d619123b852fe520be5301e61e3f85",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-fixture-fix-commit-20261007-12/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 1.074,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1930,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ack-fixture-fix-commit-20261007-12/script.py",
+      "script_sha256": "268cd1082d7c0aa977cb99f5111033b84f056aa69241d41674522164645404cd",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n\n=== focused stderr ===\n..........\n----------------------------------------------------------------------\nRan 10 tests in 0.191s\n\nOK\n\nfocused_rc=0\n=== commit stdout ===\n[feat/self-dogfood-20261007 f108fa2] Track operator acknowledgement and goal progress\n 3 files changed, 222 insertions(+), 1 deletion(-)\n create mode 100644 tests/test_operator_progress.py\n\n=== commit stderr ===\n\nnew_head=f108fa2765a922f800c9cc87e99eab11b629839e\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T23:48:37.255448+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
