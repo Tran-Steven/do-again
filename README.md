@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/do-again.svg?cacheSeconds=300)](https://pypi.org/project/do-again/)
+[![npm](https://img.shields.io/npm/v/do-again.svg?cacheSeconds=300)](https://www.npmjs.com/package/do-again)
 [![Python](https://img.shields.io/pypi/pyversions/do-again.svg?cacheSeconds=300)](https://pypi.org/project/do-again/)
 [![License](https://img.shields.io/github/license/Tran-Steven/do-again.svg?cacheSeconds=300)](LICENSE)
 
@@ -93,7 +94,7 @@ do-again doctor
 
 ## Release model
 
-Releases use semantic versioning. Pushing a version tag such as `v0.1.0` builds and validates a wheel and source distribution, publishes them to PyPI through Trusted Publishing, and creates the matching GitHub Release.
+Releases use semantic versioning. Pushing a version tag such as `v0.1.1` validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
 
 PyPI distribution name: `do-again`
 
