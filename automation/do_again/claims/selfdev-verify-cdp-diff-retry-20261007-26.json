@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:59:34.892398+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "213ce37539c353df9cb42bb6be9510c835931363181bef76521aa5878598e658",
+  "request_id": "selfdev-verify-cdp-diff-retry-20261007-26",
+  "schema_version": 1
+}
