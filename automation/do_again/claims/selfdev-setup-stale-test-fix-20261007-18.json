@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:53:36.032231+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "2035e0a92a85fa80daf14e519e4130a7eef53394002ee2dac4d93ed8edbf7104",
+  "request_id": "selfdev-setup-stale-test-fix-20261007-18",
+  "schema_version": 1
+}
