@@ -165,7 +165,7 @@ def main() -> int:
                 wait_title(cdp, fixture, "Do Again Browser Smoke")
                 prompt = "DO_AGAIN_RECEIPT_READY request_id=smoke state=succeeded. Quoted: maximum length for this conversation."
                 result = send_message(fixture, prompt, timeout=15.0)
-                if "DO_AGAIN_BROWSER_OK" not in result.get("response", ""):
+                if result.get("response") != "DO_AGAIN_BROWSER_OK":
                     raise RuntimeError(f"{variant} composer/response fixture failed")
                 if not _page_contains(fixture, "DO_AGAIN_RECEIPT_READY request_id=smoke state="):
                     raise RuntimeError(f"{variant} receipt acknowledgement was not detected")
