@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-07T23:58:11.573292+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "4632f583e55d60a6d28ef40db843ec935f755ad848b815d464042f453b4a2297",
+  "request_id": "selfdev-verify-import-fix-20261007-24",
+  "schema_version": 1
+}
