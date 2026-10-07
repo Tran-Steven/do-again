@@ -808,6 +808,7 @@ def send_message(
     text: str,
     *,
     timeout: float = 180.0,
+    wait_for_response: bool = True,
 ) -> dict[str, Any]:
     baseline = _assistant_snapshot(target)
     if baseline.get("busy"):
@@ -867,6 +868,12 @@ return el && !(el.value || el.innerText || '').trim();
     if not accepted:
         if cdp.evaluate(target, click, timeout=10.0, user_gesture=True) != "clicked":
             raise BrowserError("ChatGPT did not accept the submitted prompt")
+
+    if not wait_for_response:
+        return {
+            "response": "submitted",
+            "chat_url": target.url,
+        }
 
     deadline = time.monotonic() + timeout
     last = baseline
@@ -1216,7 +1223,12 @@ def notify_receipt(repo: Path, receipt: dict[str, Any]) -> dict[str, Any]:
         return {"response": "already_delivered", "chat_url": target.url}
 
     try:
-        return send_message(target, message, timeout=180.0)
+        return send_message(
+            target,
+            message,
+            timeout=180.0,
+            wait_for_response=False,
+        )
     except BrowserError:
         # A conversation can cross the limit exactly when the continuation is
         # submitted. Detect that case, roll over once, and retry safely.
@@ -1231,4 +1243,9 @@ def notify_receipt(repo: Path, receipt: dict[str, Any]) -> dict[str, Any]:
         )
         if _page_contains(target, marker + " state="):
             return {"response": "already_delivered", "chat_url": target.url}
-        return send_message(target, message, timeout=180.0)
+        return send_message(
+            target,
+            message,
+            timeout=180.0,
+            wait_for_response=False,
+        )

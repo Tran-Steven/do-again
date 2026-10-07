@@ -500,6 +500,40 @@ class BrowserRuntimeTests(unittest.TestCase):
         self.assertIn("You said:", captured["expression"])
         self.assertIn('aria-label="Conversation"', captured["expression"])
 
+    def test_notify_receipt_does_not_wait_for_assistant_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir()
+            target = cdp.Target(
+                "target",
+                "https://chatgpt.com/c/project",
+                "",
+                "ws://127.0.0.1/x",
+            )
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": str(Path(tmp) / "home")}):
+                register_project(
+                    repo,
+                    remote_url="https://github.com/example/repo.git",
+                    control_branch="operator-control",
+                    chat_url="https://chatgpt.com/c/project",
+                )
+                with (
+                    patch("do_again.browser.runtime.ensure_browser_running", return_value={"port": 9223}),
+                    patch("do_again.browser.runtime._find_chatgpt_target", return_value=target),
+                    patch("do_again.browser.runtime.wait_for_authenticated", return_value=(target, {"prompt": True})),
+                    patch("do_again.browser.runtime._assistant_snapshot", return_value={"busy": False}),
+                    patch("do_again.browser.runtime._context_limit_warning", return_value=""),
+                    patch("do_again.browser.runtime._page_contains", return_value=False),
+                    patch(
+                        "do_again.browser.runtime.send_message",
+                        return_value={"response": "submitted", "chat_url": target.url},
+                    ) as send_mock,
+                ):
+                    value = notify_receipt(repo, {"request_id": "req-fast", "state": "succeeded"})
+            self.assertEqual(value["response"], "submitted")
+            self.assertEqual(send_mock.call_count, 1)
+            self.assertFalse(send_mock.call_args.kwargs["wait_for_response"])
+
     def test_duplicate_receipt_marker_is_not_sent_twice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
