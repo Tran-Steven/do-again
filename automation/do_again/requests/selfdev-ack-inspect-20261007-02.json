@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ack-inspect-20261007-02",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:41:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:11:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport json\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\ntargets = [\n    wt / \"src/do_again/browser/runtime.py\",\n    wt / \"src/do_again/service/daemon.py\",\n    wt / \"tests/test_browser.py\",\n    wt / \"tests/test_daemon.py\",\n]\nneedles = [\n    \"notify_receipt\",\n    \"notify_receipts\",\n    \"browser_status\",\n    \"pending_receipts\",\n    \"response\",\n    \"receipt\",\n    \"ack\",\n    \"history\",\n]\nfor path in targets:\n    print(f\"=== {path.relative_to(wt)} ===\")\n    lines = path.read_text().splitlines()\n    hits = []\n    for i, line in enumerate(lines, 1):\n        if any(n in line for n in needles):\n            hits.append(i)\n    windows = []\n    seen = set()\n    for hit in hits[:80]:\n        start = max(1, hit - 4)\n        end = min(len(lines), hit + 8)\n        key = (start, end)\n        if key in seen:\n            continue\n        seen.add(key)\n        windows.append((start, end))\n    for start, end in windows[:24]:\n        print(f\"--- lines {start}-{end} ---\")\n        for n in range(start, end + 1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {
+    "repo_head": "d6114a1564542b17309f91423d533345c8056307"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
