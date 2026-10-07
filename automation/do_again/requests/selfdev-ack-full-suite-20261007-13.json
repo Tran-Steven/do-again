@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ack-full-suite-20261007-13",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:52:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:32:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected_head = \"f108fa2765a922f800c9cc87e99eab11b629839e\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=check, env=env)\n\nhead = run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch = run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nstatus = run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip()\nif head != expected_head or branch != \"feat/self-dogfood-20261007\" or status:\n    raise SystemExit(f\"unexpected isolated state head={head} branch={branch} status={status!r}\")\n\nenv = os.environ.copy()\nenv[\"PYTHONPATH\"] = str(wt / \"src\")\n\nsuite = run([\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests\"], check=False, env=env)\nprint(\"=== full stdout ===\")\nprint(suite.stdout)\nprint(\"=== full stderr ===\")\nprint(suite.stderr)\nprint(f\"full_rc={suite.returncode}\")\nif suite.returncode != 0:\n    raise SystemExit(suite.returncode)\n\nprint(\"head=\" + run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status=\" + repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 900
+  }
+}
