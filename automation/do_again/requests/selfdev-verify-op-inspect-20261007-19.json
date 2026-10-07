@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-verify-op-inspect-20261007-19",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T23:58:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:28:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\nimport subprocess\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"61ffe358c866c419b4af7f369f6446eed3f072f7\"\nhead = subprocess.check_output([\"git\",\"rev-parse\",\"HEAD\"], cwd=wt, text=True).strip()\nstatus = subprocess.check_output([\"git\",\"status\",\"--porcelain=v1\"], cwd=wt, text=True).strip()\nif head != expected or status:\n    raise SystemExit(f\"unexpected worktree state head={head} status={status!r}\")\n\nfor rel in [\"src/do_again/core/executor.py\",\"tests/test_executor.py\",\"README.md\"]:\n    p = wt/rel\n    print(f\"=== {rel} ===\")\n    lines = p.read_text().splitlines()\n    for n,line in enumerate(lines,1):\n        if any(k in line for k in [\"operation\", \"status\", \"scratch_script\", \"read_file\", \"git_status\", \"allow\"]):\n            start=max(1,n-5); end=min(len(lines),n+16)\n            print(f\"--- {start}-{end} ---\")\n            for i in range(start,end+1):\n                print(f\"{i:04d}: {lines[i-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
