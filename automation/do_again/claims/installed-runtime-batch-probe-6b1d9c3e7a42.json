@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:52987:1791409098:020bfc276004",
+  "claimed_at_utc": "2026-10-07T21:42:06.409866+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 52987,
+  "request_fingerprint": "609b8c64ace3c4f3a9d21dad2cafd8140339f832a8a6320a6c93e4d96474703e",
+  "request_id": "installed-runtime-batch-probe-6b1d9c3e7a42",
+  "schema_version": 1
+}
