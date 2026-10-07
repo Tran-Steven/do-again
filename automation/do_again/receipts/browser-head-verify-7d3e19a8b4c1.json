@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:65082:1791394967:8425a6759c33",
+  "error": null,
+  "finished_at_utc": "2026-10-07T17:46:47.533353+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "extended_exec",
+  "request_fingerprint": "e74fa3ffcd04c806b70f3aceee5a86903d9e526e40bfa645c80ef6eda6a8203e",
+  "request_id": "browser-head-verify-7d3e19a8b4c1",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6bc66295e052b62400844eb1ec158ab0538b4227"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6bc66295e052b62400844eb1ec158ab0538b4227"
+    },
+    "operation": "extended_exec",
+    "request_fingerprint": "e74fa3ffcd04c806b70f3aceee5a86903d9e526e40bfa645c80ef6eda6a8203e",
+    "result": {
+      "argv": [
+        "/usr/bin/git",
+        "show",
+        "--stat",
+        "--oneline",
+        "--decorate",
+        "HEAD"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.071,
+      "returncode": 0,
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "6bc6629 (HEAD -> main, origin/main, origin/HEAD) Add shared headless-first browser runtime and durable ChatGPT continuation\n .github/workflows/ci.yml         |   34 ++\n .gitignore                       |    2 +\n README.md                        |   99 +++-\n ROADMAP.md                       |   49 +-\n package-lock.json                |    4 +-\n package.json                     |    2 +-\n pyproject.toml                   |    2 +-\n src/do_again/browser/__init__.py |   35 ++\n src/do_again/browser/cdp.py      |  370 ++++++++++++\n src/do_again/browser/errors.py   |    6 +\n src/do_again/browser/runtime.py  | 1190 ++++++++++++++++++++++++++++++++++++++\n src/do_again/cli.py              |  343 ++++++++++-\n src/do_again/core/agent.py       |   21 +-\n src/do_again/service/daemon.py   |  239 ++++++++\n src/do_again/service/runtime.py  |   42 +-\n tests/test_browser.py            |  575 ++++++++++++++++++\n tests/test_browser_hardening.py  |  253 ++++++++\n tests/test_cdp.py                |   59 ++\n tests/test_cli.py                |  111 +++-\n tests/test_daemon.py             |   80 +++\n tests/test_service.py            |   26 +-\n tools/browser_smoke.py           |  234 ++++++++\n tools/verify_artifacts.py        |   62 ++\n 23 files changed, 3746 insertions(+), 92 deletions(-)\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T17:46:47.153671+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
