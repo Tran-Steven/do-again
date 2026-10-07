@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "claimed_at_utc": "2026-10-07T20:25:08.078225+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 12820,
+  "request_fingerprint": "5799a98488779237f19ada6173f9658e856512c1a7f16be4006f03cbd09077be",
+  "request_id": "receipt-local-source-probe-6c2f9a1d8e47",
+  "schema_version": 1
+}
