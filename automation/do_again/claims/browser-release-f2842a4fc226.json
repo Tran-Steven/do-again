@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:65082:1791394967:8425a6759c33",
+  "claimed_at_utc": "2026-10-07T17:43:48.475632+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 65082,
+  "request_fingerprint": "267b89f783f9a1d72a5930ab2168297aee1f5404e3e12f5ee0c440c4142312cf",
+  "request_id": "browser-release-f2842a4fc226",
+  "schema_version": 1
+}
