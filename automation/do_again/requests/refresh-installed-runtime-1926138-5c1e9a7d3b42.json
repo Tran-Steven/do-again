@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "refresh-installed-runtime-1926138-5c1e9a7d3b42",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:43:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T22:13:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport os\nimport shutil\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsrc_pkg = repo / \"src\" / \"do_again\"\nruntime_root = Path.home() / \".do_again/projects/41857a676462/runtime\"\ndst_pkg = runtime_root / \"do_again\"\n\nif not src_pkg.is_dir():\n    raise SystemExit(f\"missing source package: {src_pkg}\")\n\nruntime_root.mkdir(parents=True, exist_ok=True)\nif dst_pkg.exists():\n    shutil.rmtree(dst_pkg)\nshutil.copytree(src_pkg, dst_pkg)\n\ndef info(path):\n    text = path.read_text()\n    return {\n        \"exists\": path.exists(),\n        \"has_notify_receipts\": \"notify_receipts\" in text,\n        \"has_batch_limit_20\": \"paths[:20]\" in text,\n        \"has_wait_for_response_false\": \"wait_for_response=False\" in text,\n    }\n\ndaemon = dst_pkg / \"service\" / \"daemon.py\"\nbrowser = dst_pkg / \"browser\" / \"runtime.py\"\n\nsubprocess.run([\n    \"python3\", \"-m\", \"py_compile\",\n    str(daemon),\n    str(browser),\n], check=True)\n\nuid = os.getuid()\nlabel = \"io.github.tran-steven.do-again.41857a676462\"\nsubprocess.run(\n    [\"launchctl\", \"kickstart\", \"-k\", f\"gui/{uid}/{label}\"],\n    check=True,\n)\n\nprint(json.dumps({\n    \"repo_head\": subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip(),\n    \"runtime_root\": str(runtime_root),\n    \"daemon\": info(daemon),\n    \"browser\": info(browser),\n    \"restart\": \"ok\",\n    \"label\": label,\n}, indent=2))\n"
+  },
+  "expected": {
+    "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+  },
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
