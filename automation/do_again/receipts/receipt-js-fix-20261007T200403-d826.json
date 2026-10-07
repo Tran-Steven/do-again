@@ -1,0 +1,14 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": "OperatorError: authority fence mismatch for repo_head: expected '9f23e3d4f6467662ae735e113e6d2743828249dc', observed 'ad65a4ccf678078843ae1961581d14432a43cd12'",
+  "finished_at_utc": "2026-10-07T20:04:13.252017+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "b5ae29d111b01fefcf5dabf43217b5869aa13297017b1757b2fc193278b3c71b",
+  "request_id": "receipt-js-fix-20261007T200403-d826",
+  "result": null,
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:04:13.127156+00:00",
+  "state": "blocked",
+  "traceback": null
+}
