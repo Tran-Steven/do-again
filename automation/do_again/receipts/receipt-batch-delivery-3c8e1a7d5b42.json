@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T20:58:59.967721+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "b0b039e297fc6c51bbc31c1b76ee0285319590e71b09d912e580526d7598d7bd",
+  "request_id": "receipt-batch-delivery-3c8e1a7d5b42",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a46d79947217e1e417c90533ff36ea8f48f31e88"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "b0b039e297fc6c51bbc31c1b76ee0285319590e71b09d912e580526d7598d7bd",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-delivery-3c8e1a7d5b42/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.554,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 13012,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-delivery-3c8e1a7d5b42/script.py",
+      "script_sha256": "cda50d15f53d9336fa5aa3043f5c944693f6726cdf7c9dfb58844c796a95532c",
+      "stderr": "Traceback (most recent call last):\n  File \"<frozen runpy>\", line 203, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/__main__.py\", line 18, in <module>\n    main(module=None)\n    ~~~~^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/main.py\", line 103, in __init__\n    self.parseArgs(argv)\n    ~~~~~~~~~~~~~~^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/main.py\", line 142, in parseArgs\n    self.createTests()\n    ~~~~~~~~~~~~~~~~^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/main.py\", line 153, in createTests\n    self.test = self.testLoader.loadTestsFromNames(self.testNames,\n                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\n                                                   self.module)\n                                                   ^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/loader.py\", line 214, in loadTestsFromNames\n    suites = [self.loadTestsFromName(name, module) for name in names]\n              ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\n  File \"/Users/steventran/do-again/tests/test_browser.py\", line 10, in <module>\n    from do_again.browser import cdp\n  File \"/Users/steventran/do-again/src/do_again/browser/__init__.py\", line 1, in <module>\n    from .runtime import (\n    ...<15 lines>...\n    )\n  File \"/Users/steventran/do-again/src/do_again/browser/runtime.py\", line 1210\n    \"Do Again request only if more local work is needed:\n    ^\nSyntaxError: unterminated string literal (detected at line 1210)\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-delivery-3c8e1a7d5b42/script.py\", line 317, in <module>\n    subprocess.run([\"python3\", \"-m\", \"unittest\", \"tests.test_browser\", \"tests.test_daemon\"], check=True)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/subprocess.py\", line 577, in run\n    raise CalledProcessError(retcode, process.args,\n                             output=stdout, stderr=stderr)\nsubprocess.CalledProcessError: Command '['python3', '-m', 'unittest', 'tests.test_browser', 'tests.test_daemon']' returned non-zero exit status 1.\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T20:58:59.060260+00:00",
+  "state": "failed",
+  "traceback": null
+}
