@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:12820:1791401264:a8b66daa474d",
+  "error": null,
+  "finished_at_utc": "2026-10-07T21:28:43.967583+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "16f0deb3d8a782c76c602bdb06535adb31fdb910f86e3912755c5e693835d31f",
+  "request_id": "receipt-batch-live-drain-1926138-6c1e9a3d7b42",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "16f0deb3d8a782c76c602bdb06535adb31fdb910f86e3912755c5e693835d31f",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-live-drain-1926138-6c1e9a3d7b42/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 171.548,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 587,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/receipt-batch-live-drain-1926138-6c1e9a3d7b42/script.py",
+      "script_sha256": "9c031766c661d38aa80f34a0f53f78d3c4e61ffc410621330f416eb1798db977",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"before_count\": 35,\n  \"before\": [\n    \"live-final-20261007T192139-93cd.json\",\n    \"fingerprint-fix-20261007T192651-b54a.json\",\n    \"fingerprint-live-20261007T192814-c173.json\",\n    \"duplicate-receipt-inspect-4f10b7a9c2d3.json\",\n    \"duplicate-receipt-inspect-2-6a31d8c4f902.json\",\n    \"duplicate-dom-probe-8b2f4c91d7e6.json\",\n    \"duplicate-dedupe-fix-5e7c1a93b4d8.json\",\n    \"duplicate-dedupe-live-verify-1c7a5e92d4b0.json\",\n    \"duplicate-dedupe-jsfix-3b6d7c9e1a20.json\",\n    \"duplicate-dedupe-jsfix2-6f0a9c2d1b47.json\",\n    \"receipt-js-fix-20261007T200403-d826.json\",\n    \"duplicate-dedupe-live-verify2-4a8f2c6e1d93.json\",\n    \"receipt-js-verify-20261007T200625-83e4.json\",\n    \"duplicate-queue-probe-7d2c5a91e4b8.json\",\n    \"receipt-delivery-fastpath-2e7b4c19a6d3.json\",\n    \"receipt-submit-fastpath-9c4d2e7b1a65.json\",\n    \"receipt-submit-fastpath2-5a1d8e3c7b94.json\",\n    \"receipt-local-source-probe-6c2f9a1d8e47.json\",\n    \"receipt-local-diff-probe-2b7e4c9a1d63.json\",\n    \"receipt-fastpath-finalize-4d8a1c7e2b95.json\",\n    \"receipt-fastpath-rebase-7e2c4a91d5b8.json\",\n    \"receipt-drain-resilience-6e4b1a9d2c73.json\",\n    \"receipt-drain-diff-probe-1f6c8a2e4d95.json\",\n    \"receipt-drain-resilience-finalize-8c1e5a3d7b29.json\",\n    \"receipt-drain-transient-only-5b2d8c1e7a94.json\",\n    \"receipt-backlog-drain-a46d799-8e2b4c1d7a95.json\",\n    \"receipt-batch-delivery-3c8e1a7d5b42.json\",\n    \"receipt-batch-local-probe-7a1d4c9e2b63.json\",\n    \"receipt-batch-finalize-4e9a1c7d2b65.json\",\n    \"receipt-batch-line-probe-6d1a9c3e7b42.json\",\n    \"receipt-batch-syntaxsafe-2c7e1a9d4b63.json\",\n    \"receipt-batch-target-probe-8b3d1e6a4c92.json\",\n    \"receipt-batch-dedupe-function-5e1c8a3d7b94.json\",\n    \"receipt-batch-testfix-9a2e1c7d4b63.json\",\n    \"receipt-batch-hardening-testfix-1d7a3c9e5b62.json\"\n  ],\n  \"delivered\": 20,\n  \"after_count\": 15,\n  \"after\": [\n    \"receipt-fastpath-rebase-7e2c4a91d5b8.json\",\n    \"receipt-drain-resilience-6e4b1a9d2c73.json\",\n    \"receipt-drain-diff-probe-1f6c8a2e4d95.json\",\n    \"receipt-drain-resilience-finalize-8c1e5a3d7b29.json\",\n    \"receipt-drain-transient-only-5b2d8c1e7a94.json\",\n    \"receipt-backlog-drain-a46d799-8e2b4c1d7a95.json\",\n    \"receipt-batch-delivery-3c8e1a7d5b42.json\",\n    \"receipt-batch-local-probe-7a1d4c9e2b63.json\",\n    \"receipt-batch-finalize-4e9a1c7d2b65.json\",\n    \"receipt-batch-line-probe-6d1a9c3e7b42.json\",\n    \"receipt-batch-syntaxsafe-2c7e1a9d4b63.json\",\n    \"receipt-batch-target-probe-8b3d1e6a4c92.json\",\n    \"receipt-batch-dedupe-function-5e1c8a3d7b94.json\",\n    \"receipt-batch-testfix-9a2e1c7d4b63.json\",\n    \"receipt-batch-hardening-testfix-1d7a3c9e5b62.json\"\n  ]\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-07T21:25:52.153321+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
