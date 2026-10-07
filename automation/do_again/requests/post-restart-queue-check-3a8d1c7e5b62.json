@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "request_id": "post-restart-queue-check-3a8d1c7e5b62",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-07T21:39:00.000000+00:00",
+  "expires_at_utc": "2026-10-07T22:09:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport os\nimport subprocess\nimport sys\nfrom pathlib import Path\n\nrepo = Path.cwd()\nsys.path.insert(0, str(repo / \"src\"))\n\nfrom do_again.service.daemon import _pending_outbox, _read_outbox\nfrom do_again.service.runtime import runtime_layout\n\nstate = runtime_layout(repo).state_dir\nitems = []\nfor path in _pending_outbox(state):\n    receipt = _read_outbox(path)\n    items.append({\n        \"file\": path.name,\n        \"request_id\": receipt.get(\"request_id\"),\n        \"state\": receipt.get(\"state\"),\n    })\n\nuid = os.getuid()\nlabel = \"io.github.tran-steven.do-again.41857a676462\"\nproc = subprocess.run(\n    [\"launchctl\", \"print\", f\"gui/{uid}/{label}\"],\n    text=True,\n    capture_output=True,\n)\n\nprint(json.dumps({\n    \"head\": subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip(),\n    \"outbox_count\": len(items),\n    \"outbox\": items,\n    \"launchctl_rc\": proc.returncode,\n    \"launchctl_excerpt\": proc.stdout[:2500],\n}, indent=2))\n"
+  },
+  "expected": {
+    "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
