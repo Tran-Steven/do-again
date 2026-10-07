@@ -907,12 +907,8 @@ const users = messageNodes('user');
 if (users.some(el => (el.innerText || el.textContent || '').includes(needle))) return true;
 const conversation = document.querySelector('[aria-label="Conversation"]') || document.body;
 if (!conversation) return false;
-const raw = (conversation.innerText || conversation.textContent || '').replace(/
-/g, '
-');
-const labeled = 'You said:
-' + needle;
-return raw.includes(labeled);
+const raw = String(conversation.innerText || conversation.textContent || '');
+return raw.includes('You said:' + String.fromCharCode(10) + needle);
 })()"""
     )
     return bool(cdp.evaluate(target, expression, timeout=10.0))
