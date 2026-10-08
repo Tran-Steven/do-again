@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:22:48.347115+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "29d03ce220f0e43ed4b2fdf17dcb4edc03427c1745aae5d01f75d846ab5bfef0",
+  "request_id": "selfdev-diagnostics-ledger-audit-retry-20261007-51",
+  "schema_version": 1
+}
