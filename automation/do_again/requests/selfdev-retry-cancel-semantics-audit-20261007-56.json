@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-retry-cancel-semantics-audit-20261007-56",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:27:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:57:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"6f219b829fac59a7ca0e0b27cdff81b9d04c365b\"\n\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).strip()\nif head != expected or status:\n    raise SystemExit(f\"unexpected isolated state head={head} status={status!r}\")\n\nfor rel in [\n    \"src/do_again/core/schema.py\",\n    \"src/do_again/core/agent.py\",\n    \"src/do_again/cli.py\",\n    \"src/do_again/service/runtime.py\",\n]:\n    p=wt/rel\n    print(f\"=== {rel} ===\")\n    lines=p.read_text().splitlines()\n    needles=[\n        \"def validate_request\", \"def request_fingerprint\", \"expires_at_utc\",\n        \"issued_at_utc\", \"operation\", \"continuation\", \"publish_json\",\n        \"def sync\", \"require_git\", \"git push\", \"_ensure_control_worktree\",\n        \"_sync\", \"control_worktree\"\n    ]\n    hits=[]\n    for i,line in enumerate(lines,1):\n        if any(n.lower() in line.lower() for n in needles):\n            hits.append(i)\n    seen=set()\n    for i in hits[:45]:\n        start=max(1,i-7); end=min(len(lines),i+24)\n        if any(n in seen for n in range(start,end+1)):\n            continue\n        seen.update(range(start,end+1))\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start,end+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
