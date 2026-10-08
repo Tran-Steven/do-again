@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:58649:1791438167:1983e93cf2fc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T05:45:07.864449+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "ee4925eb8e2c535e3ff4fb52ac2d77627a54fd13fa5f96215395d4de8ed57eac",
+  "request_id": "selfdev-live-stall-dedupe-acceptance-20261007-116",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "7bee017a4893ce2ad6f05113bcec9d4f5817c5b7"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "7bee017a4893ce2ad6f05113bcec9d4f5817c5b7"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "ee4925eb8e2c535e3ff4fb52ac2d77627a54fd13fa5f96215395d4de8ed57eac",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-stall-dedupe-acceptance-20261007-116/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 2.587,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1017,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-stall-dedupe-acceptance-20261007-116/script.py",
+      "script_sha256": "b3ea661c70f3586e6d4334ecf9ab69f25e7c78886f56156a93a2fa8d41e9a229",
+      "stderr": "first report did not dedupe to existing issue: {'next_report_at': 1791441905.3403552, 'issue_report': 'created', 'issue_number': 30}\n",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"first\": {\n    \"issue_number\": 30,\n    \"issue_report\": \"created\",\n    \"next_report_at\": 1791441905.3403552\n  },\n  \"second\": {\n    \"issue_number\": 30,\n    \"issue_report\": \"existing\",\n    \"next_report_at\": 1791441907.051497\n  }\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T05:45:04.904847+00:00",
+  "state": "failed",
+  "traceback": null
+}
