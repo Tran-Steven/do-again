@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:35:51.892465+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "bab037f7f6114cdfb3ffae45a2bfbd64b5611a0b73d18e72eb228127e1aac151",
+  "request_id": "selfdev-sonary-outbox-reconcile-preflight-20261008-130",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "bab037f7f6114cdfb3ffae45a2bfbd64b5611a0b73d18e72eb228127e1aac151",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-outbox-reconcile-preflight-20261008-130/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.111,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 951,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-outbox-reconcile-preflight-20261008-130/script.py",
+      "script_sha256": "eed7bb94410ec891ccc0f6a3abd21c26b20d4b3928a4d37058d01e6692371417",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 1,\n    \"recorded_at_utc\": \"2026-10-08T13:33:11.554740+00:00\",\n    \"state\": \"queued\"\n  },\n  \"outbox_items\": [\n    {\n      \"mtime\": 1791466391.5421174,\n      \"name\": \"sonary-daw-typecheck-stage-isolation-20261008-143.json\",\n      \"payload\": {\n        \"agent_instance_id\": \"Stevens-Mac-mini.local:90867:1791466383:97ad9bfca1ee\",\n        \"error\": \"A prior agent instance began this request but did not durably record its completion. Refusing automatic replay.\",\n        \"finished_at_utc\": \"2026-10-08T13:33:07.938674+00:00\",\n        \"host\": \"Stevens-Mac-mini.local\",\n        \"operation\": \"scratch_script\",\n        \"request_fingerprint\": \"39a758cd7c796c8a55abffb21b3de8b60f1a7ac9ed7a73c2e707630127ab4ffc\",\n        \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n        \"result\": null,\n        \"schema_version\": 1,\n        \"started_at_utc\": \"2026-10-08T05:15:39.586694+00:00\",\n        \"state\": \"blocked_ambiguous_replay\",\n        \"traceback\": null\n      }\n    }\n  ],\n  \"uncertain\": null,\n  \"uncertain_exists\": false\n}\nSONARY_OUTBOX_RECONCILIATION_PREFLIGHT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:35:51.438975+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
