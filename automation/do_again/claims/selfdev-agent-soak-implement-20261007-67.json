@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:40:39.505642+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "5092e10cdcca2becc7bd8b9b199a6cd91fe7fc961cd79e06bbabbd8ae5e4d9fd",
+  "request_id": "selfdev-agent-soak-implement-20261007-67",
+  "schema_version": 1
+}
