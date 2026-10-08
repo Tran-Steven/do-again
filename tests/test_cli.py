@@ -8,7 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from do_again.cli import list_projects, main, setup_project
+from do_again.cli import list_projects, main, setup_project, verify_project
 
 
 def git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -147,6 +147,75 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertIn("browser_mode=headless", output.getvalue())
             self.assertIn("automation_chat=https://chatgpt.com/c/test-project", output.getvalue())
             self.assertIn("browser = true", (repo / "do-again.toml").read_text())
+
+    def test_verify_reports_setup_ok_only_after_matching_success_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = self.make_repo(root)
+            (repo / "do-again.toml").write_text(
+                '[do_again]\n'
+                'control_branch = "operator-control"\n'
+                'remote = "origin"\n'
+                'browser = true\n',
+                encoding="utf-8",
+            )
+            control = root / "control"
+            request_dir = control / "automation/do_again/requests"
+            receipt_dir = control / "automation/do_again/receipts"
+            request_dir.mkdir(parents=True)
+            receipt_dir.mkdir(parents=True)
+
+            class Layout:
+                browser_enabled = True
+                branch = "operator-control"
+                remote = "origin"
+                control_worktree = control
+
+            captured = {}
+
+            def fake_send(target, prompt, **kwargs):
+                match = __import__("re").search(r'"request_id": "(verify-[a-f0-9]+)"', prompt)
+                self.assertIsNotNone(match)
+                request_id = match.group(1)
+                captured["request_id"] = request_id
+                (request_dir / f"{request_id}.json").write_text("{}")
+                (receipt_dir / f"{request_id}.json").write_text(
+                    __import__("json").dumps({"request_id": request_id, "state": "succeeded"})
+                )
+                return {"response": "submitted", "chat_url": "https://chatgpt.com/c/project"}
+
+            fake_proc = subprocess.CompletedProcess([], 0, "", "")
+            output = io.StringIO()
+            with (
+                patch("do_again.cli.runtime_layout", return_value=Layout()),
+                patch("do_again.cli.service_status", return_value={"running": True}),
+                patch("do_again.cli.project_record", return_value={"chat_url": "https://chatgpt.com/c/project"}),
+                patch("do_again.cli.ensure_browser_running", return_value={"port": 9223}),
+                patch("do_again.cli.cdp.create_target", return_value=object()),
+                patch("do_again.cli.send_message", side_effect=fake_send),
+                patch("do_again.cli.subprocess.run", return_value=fake_proc),
+                redirect_stdout(output),
+            ):
+                rc = verify_project(str(repo), timeout_seconds=1.0)
+            self.assertEqual(rc, 0)
+            self.assertIn("SETUP_OK", output.getvalue())
+            self.assertIn("verification=end_to_end", output.getvalue())
+            self.assertIn(captured["request_id"], output.getvalue())
+
+    def test_verify_fails_actionably_when_browser_is_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+
+            class Layout:
+                browser_enabled = False
+
+            error = io.StringIO()
+            with patch("do_again.cli.runtime_layout", return_value=Layout()), redirect_stderr(error):
+                rc = verify_project(str(repo), timeout_seconds=0.01)
+            self.assertEqual(rc, 1)
+            self.assertIn("requires browser automation", error.getvalue())
+            self.assertNotIn("SETUP_OK", error.getvalue())
+
 
     def test_setup_no_browser_disables_existing_browser_setting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

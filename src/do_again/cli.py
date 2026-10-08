@@ -7,6 +7,8 @@ import shutil
 import re
 import subprocess
 import sys
+import time
+import uuid
 from pathlib import Path
 
 from .browser import (
@@ -23,8 +25,9 @@ from .browser import (
     stop_browser,
     stop_if_unused,
 )
+from .browser import cdp
 from .platforms.detect import detect_platform
-from .browser.runtime import use_background_fallback
+from .browser.runtime import send_message, use_background_fallback
 from .service.runtime import (
     ServiceError,
     _default_policy,
@@ -274,6 +277,117 @@ def setup_project(
     return 0
 
 
+def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
+    try:
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        if not layout.browser_enabled:
+            raise ServiceError(
+                "end-to-end verification requires browser automation; "
+                "enable it with do-again setup"
+            )
+        service = service_status(repo)
+        if not service.get("running"):
+            raise ServiceError("background service is not running; run do-again start")
+        record = project_record(repo)
+        chat_url = str(record.get("chat_url") or "")
+        if not chat_url:
+            raise ServiceError("project has no bound automation chat; run do-again setup")
+        browser = ensure_browser_running(verify_auth=True)
+        port = int(browser.get("port") or 0)
+        if not port:
+            raise BrowserError("automation browser did not report a CDP port")
+
+        request_id = "verify-" + uuid.uuid4().hex[:16]
+        issued = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+        expires = issued + __import__("datetime").timedelta(minutes=5)
+        request = {
+            "schema_version": 1,
+            "request_id": request_id,
+            "operation": "status",
+            "issued_at_utc": issued.isoformat(),
+            "expires_at_utc": expires.isoformat(),
+            "args": {},
+            "expected": {},
+            "limits": {"timeout_seconds": 30},
+        }
+        request_path = f"automation/do_again/requests/{request_id}.json"
+        receipt_path = f"automation/do_again/receipts/{request_id}.json"
+        prompt = (
+            "Do Again setup verification. Create exactly one control request at "
+            + request_path
+            + " on "
+            + layout.branch
+            + " with this exact JSON, then do not create any other request for this verification: "
+            + json.dumps(request, sort_keys=True)
+        )
+
+        target = cdp.create_target(port, chat_url, background=True)
+        send_message(target, prompt, timeout=180.0, wait_for_response=False)
+
+        control = layout.control_worktree
+        deadline = time.monotonic() + timeout_seconds
+        request_seen = False
+        last_sync_error = None
+        while time.monotonic() < deadline:
+            sync = subprocess.run(
+                ["git", "-C", str(control), "fetch", "--quiet", layout.remote, layout.branch],
+                text=True,
+                capture_output=True,
+            )
+            if sync.returncode == 0:
+                reset = subprocess.run(
+                    ["git", "-C", str(control), "reset", "--hard", "FETCH_HEAD"],
+                    text=True,
+                    capture_output=True,
+                )
+                if reset.returncode != 0:
+                    last_sync_error = (reset.stderr or reset.stdout).strip()
+                else:
+                    request_seen = request_seen or (control / request_path).is_file()
+                    receipt_file = control / receipt_path
+                    if receipt_file.is_file():
+                        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
+                        if receipt.get("request_id") != request_id:
+                            raise ServiceError("verification receipt request_id mismatch")
+                        if receipt.get("state") != "succeeded":
+                            raise ServiceError(
+                                "verification request completed with state "
+                                + str(receipt.get("state"))
+                                + ": "
+                                + str(receipt.get("error") or "no error detail")
+                            )
+                        print("SETUP_OK")
+                        print("verification=end_to_end")
+                        print(f"verification_request_id={request_id}")
+                        print(f"automation_chat={chat_url}")
+                        return 0
+            else:
+                last_sync_error = (sync.stderr or sync.stdout).strip()
+            time.sleep(1.0)
+
+        if not request_seen:
+            raise ServiceError(
+                "verification timed out before ChatGPT published the control request; "
+                "check the bound automation chat and browser session"
+            )
+        detail = f": {last_sync_error}" if last_sync_error else ""
+        raise ServiceError(
+            "verification request reached the control branch but no matching receipt "
+            "was published before timeout; check do-again status and agent logs" + detail
+        )
+    except (
+        ServiceError,
+        BrowserError,
+        BrowserAuthRequired,
+        subprocess.TimeoutExpired,
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
+        print(f"do-again: verify failed: {exc}", file=sys.stderr)
+        return 1
+
+
 def _ensure_project_browser(repo: Path) -> None:
     layout = runtime_layout(repo)
     if not layout.browser_enabled:
@@ -428,7 +542,7 @@ def main() -> int:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{setup,start,status,stop,restart,list,doctor,browser}",
+        metavar="{setup,verify,start,status,stop,restart,list,doctor,browser}",
     )
 
     sub.add_parser("doctor", help="Check runtime prerequisites")
@@ -453,6 +567,17 @@ def main() -> int:
         choices=("auto", "headless", "background"),
         default="auto",
         help="Advanced: choose browser runtime mode (default: auto)",
+    )
+    verify_parser = sub.add_parser(
+        "verify",
+        help="Verify the ChatGPT-to-control-to-local-to-receipt round trip",
+    )
+    verify_parser.add_argument("path", nargs="?", default=".")
+    verify_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=90.0,
+        help="Maximum seconds to wait for the end-to-end verification receipt",
     )
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
@@ -511,6 +636,8 @@ def main() -> int:
             browser=not args.no_browser,
             browser_mode=args.browser_mode,
         )
+    if args.command == "verify":
+        return verify_project(args.path, timeout_seconds=args.timeout)
     if args.command == "status":
         return status(args.path)
     if args.command == "list":
