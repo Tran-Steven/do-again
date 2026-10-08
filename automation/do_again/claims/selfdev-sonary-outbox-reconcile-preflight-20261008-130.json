@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:35:49.611451+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "bab037f7f6114cdfb3ffae45a2bfbd64b5611a0b73d18e72eb228127e1aac151",
+  "request_id": "selfdev-sonary-outbox-reconcile-preflight-20261008-130",
+  "schema_version": 1
+}
