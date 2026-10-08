@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T02:10:19.470977+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "28c7878b46f416f37fcfea35ddaf63e162c76a7f4beeef40f7af8600bd58b3ac",
+  "request_id": "selfdev-rollout-full-gate-20261007-89",
+  "schema_version": 1
+}
