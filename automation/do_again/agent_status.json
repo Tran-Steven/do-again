@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
-  "last_request_id": "selfdev-diagnostics-ledger-audit-20261007-50",
+  "last_request_id": "selfdev-diagnostics-ledger-audit-retry-20261007-51",
   "last_request_state": "failed",
   "pid": 60491,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-07T21:45:13.727579+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T00:22:11.295951+00:00"
+  "updated_at_utc": "2026-10-08T00:22:53.043010+00:00"
 }
