@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T03:13:31.078831+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "d9ebdad0cac1ad886ba2c50d06a02a3d6684bb8412be275f6957cd0ff15aa4cd",
+  "request_id": "selfdev-ci-lifecycle-failure-audit-20261007-95",
+  "schema_version": 1
+}
