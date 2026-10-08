@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:08:04.549458+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "53bc1689fb03f1ca28edb28c1a1ba8fc99a8f55c34a99c645f95f27c1034734f",
+  "request_id": "selfdev-long-running-claim-nonstall-20261008-117",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "53bc1689fb03f1ca28edb28c1a1ba8fc99a8f55c34a99c645f95f27c1034734f",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-long-running-claim-nonstall-20261008-117/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.46,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1557,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-long-running-claim-nonstall-20261008-117/script.py",
+      "script_sha256": "48d5fe67225d66dfb63ec79d904dd6d5e172c69925f3b7db361eb9d5394a6041",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"action\": \"wait\",\n  \"idle_seconds\": 300.0,\n  \"input\": {\n    \"attempts\": 0,\n    \"progress_at\": 1791464164.3467798,\n    \"receipt_id\": \"live-long-claim-proof\",\n    \"state\": \"working\"\n  },\n  \"output\": {\n    \"attempts\": 0,\n    \"progress_at\": 1791464164.3467798,\n    \"receipt_id\": \"live-long-claim-proof\",\n    \"state\": \"working\"\n  },\n  \"recovery_seconds\": 300.0\n}\nLONG_RUNNING_CLAIM_NONSTALL_ACCEPTANCE_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:08:03.550189+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
