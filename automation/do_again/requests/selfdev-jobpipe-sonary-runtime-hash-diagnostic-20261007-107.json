@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-jobpipe-sonary-runtime-hash-diagnostic-20261007-107",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T04:34:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T04:54:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, hashlib\nfrom pathlib import Path\nimport sys\n\nsource_repo=Path(\"/Users/steventran/do-again\")\nsys.path.insert(0,str(source_repo/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\nprojects=[Path(\"/Users/steventran/jobpipe\"),Path(\"/Users/steventran/Sonary\")]\nsource_pkg=source_repo/\"src/do_again\"\n\ndef files(root):\n    out={}\n    for p in sorted(x for x in root.rglob(\"*\") if x.is_file()):\n        rel=p.relative_to(root).as_posix()\n        out[rel]=hashlib.sha256(p.read_bytes()).hexdigest()\n    return out\n\nsource_files=files(source_pkg)\nrows=[]\nfor repo in projects:\n    key=hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:12]\n    runtime=Path.home()/\".do_again/projects\"/key/\"runtime/do_again\"\n    runtime_files=files(runtime)\n    only_source=sorted(set(source_files)-set(runtime_files))\n    only_runtime=sorted(set(runtime_files)-set(source_files))\n    diff=sorted(k for k in set(source_files)&set(runtime_files) if source_files[k]!=runtime_files[k])\n    rows.append({\n      \"repo\":str(repo),\n      \"source_canonical_tree_hash\":_tree_hash(source_pkg),\n      \"runtime_canonical_tree_hash\":_tree_hash(runtime),\n      \"canonical_match\":_tree_hash(source_pkg)==_tree_hash(runtime),\n      \"source_file_count\":len(source_files),\n      \"runtime_file_count\":len(runtime_files),\n      \"only_source\":only_source,\n      \"only_runtime\":only_runtime,\n      \"different_content\":diff,\n      \"critical_equal\":{\n        rel: source_files.get(rel)==runtime_files.get(rel)\n        for rel in [\n          \"service/daemon.py\",\n          \"service/liveness.py\",\n          \"service/rollout.py\",\n          \"core/schema.py\",\n          \"browser/runtime.py\",\n          \"service/service.py\"\n        ]\n      }\n    })\nprint(json.dumps(rows,indent=2,sort_keys=True))\nprint(\"CANONICAL_RUNTIME_HASH_DIAGNOSTIC_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
