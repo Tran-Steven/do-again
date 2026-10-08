@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:31:55.932842+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "5824f1c9d7317013ff94f0eee1be14f7a7fb0bd70c663d20c25667af14b6b149",
+  "request_id": "selfdev-retry-cancel-test-fix-20261007-59",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "5824f1c9d7317013ff94f0eee1be14f7a7fb0bd70c663d20c25667af14b6b149",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-retry-cancel-test-fix-20261007-59/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 13.943,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 4900,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-retry-cancel-test-fix-20261007-59/script.py",
+      "script_sha256": "06a7740aa5aafcaa109ff9e82cfd5f01e2d9ee064982fb12ba92c96bde5a4faa",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n{\n  \"new_request_id\": \"retry-06290d9312724766\",\n  \"original_request_id\": \"req-failed-1234\",\n  \"previous_state\": \"failed\",\n  \"request\": {\n    \"args\": {},\n    \"continuation\": {\n      \"acknowledged_receipts\": [\n        \"req-failed-1234\"\n      ],\n      \"goal_state\": \"in_progress\",\n      \"summary\": \"Retry of req-failed-1234 after terminal state failed.\"\n    },\n    \"expected\": {},\n    \"expires_at_utc\": \"2026-10-08T00:41:46.601349+00:00\",\n    \"issued_at_utc\": \"2026-10-08T00:31:46.601349+00:00\",\n    \"limits\": {},\n    \"operation\": \"status\",\n    \"request_id\": \"retry-06290d9312724766\",\n    \"schema_version\": 1\n  }\n}\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpfbe_t4rp/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpti55m1cw/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpti55m1cw/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpti55m1cw/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpti55m1cw/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpti55m1cw/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n.do-again: cancel: request is already claimed and cannot be safely cancelled\n.......do-again: retry: ambiguous replay requires a fresh manually scoped request after inspection\n...................E.\n======================================================================\nERROR: test_preclaim_cancellation_publishes_cancelled_receipt_without_execution (tests.test_request_fingerprints.RequestFingerprintTests.test_preclaim_cancellation_publishes_cancelled_receipt_without_execution)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_request_fingerprints.py\", line 101, in test_preclaim_cancellation_publishes_cancelled_receipt_without_execution\n    changed = agent.process_request(request_path)\n              ^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'Agent' object has no attribute 'process_request'\n\n----------------------------------------------------------------------\nRan 29 tests in 13.218s\n\nFAILED (errors=1)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:31:41.785435+00:00",
+  "state": "failed",
+  "traceback": null
+}
