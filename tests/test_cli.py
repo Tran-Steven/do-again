@@ -221,8 +221,19 @@ class CliOnboardingTests(unittest.TestCase):
                 patch("do_again.cli.service_status", return_value={"running": True}),
                 patch("do_again.cli.project_record", return_value={"chat_url": "https://chatgpt.com/c/project"}),
                 patch("do_again.cli.ensure_browser_running", return_value={"port": 9223}),
-                patch("do_again.cli.cdp.create_target", return_value=object()),
-                patch("do_again.cli.send_message", side_effect=fake_send),
+                patch("do_again.cli._find_chatgpt_target", return_value=object()) as existing_tab,
+                patch("do_again.cli.cdp.create_target") as create_tab,
+                patch("do_again.cli.cdp.evaluate", side_effect=[
+                    __import__("do_again.browser.errors", fromlist=["BrowserError"]).BrowserError(
+                        "CDP Runtime.evaluate failed: Cannot find default execution context"
+                    ),
+                    "complete",
+                ]) as readiness,
+                patch("do_again.cli.time.sleep") as safe_sleep,
+                patch("do_again.cli._assistant_snapshot", side_effect=[
+                    {"busy": True}, {"busy": False},
+                ]) as busy,
+                patch("do_again.cli.send_message", side_effect=fake_send) as send,
                 patch("do_again.cli.subprocess.run", side_effect=fake_git_run),
                 redirect_stdout(output),
             ):
@@ -230,6 +241,12 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertFalse(any(args[3] == "reset" for args in git_calls))
             self.assertTrue(any(args[3] == "show" for args in git_calls))
+            existing_tab.assert_called_once()
+            create_tab.assert_not_called()
+            self.assertEqual(readiness.call_count, 2)
+            self.assertEqual(send.call_count, 1)
+            self.assertEqual(busy.call_count, 2)
+            self.assertEqual(safe_sleep.call_count, 2)
             self.assertIn("SETUP_OK", output.getvalue())
             self.assertIn("verification=end_to_end", output.getvalue())
             self.assertIn(captured["request_id"], output.getvalue())

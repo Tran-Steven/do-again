@@ -33,7 +33,7 @@ from .browser import (
 )
 from .browser import cdp
 from .platforms.detect import detect_platform
-from .browser.runtime import send_message, use_background_fallback
+from .browser.runtime import send_message, use_background_fallback, _find_chatgpt_target, _assistant_snapshot
 from .core.schema import REQUEST_ID_RE, request_fingerprint
 from .service.rollout import staged_upgrade
 from .service.session_summary import build_summary, render_summary, save_summary, session_start
@@ -448,7 +448,44 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
             + json.dumps(request, sort_keys=True)
         )
 
-        target = cdp.create_target(port, chat_url, background=True)
+        # Prefer the existing bound project tab. Creating a fresh target
+        # navigates asynchronously; sending before it has a JS context fails
+        # with 'Cannot find default execution context' even when authenticated.
+        target = _find_chatgpt_target(port, chat_url)
+        if target is None:
+            target = cdp.create_target(port, chat_url, background=True)
+        context_deadline = time.monotonic() + 20
+        while True:
+            try:
+                ready = cdp.evaluate(target, "document.readyState", timeout=5.0)
+                if ready in {"interactive", "complete"}:
+                    break
+            except BrowserError as exc:
+                # Retry only the read-only readiness probe; never resend a
+                # potentially dispatched ChatGPT prompt.
+                message = str(exc)
+                if not any(part in message for part in (
+                    "Cannot find default execution context",
+                    "Execution context was destroyed",
+                )):
+                    raise
+            if time.monotonic() >= context_deadline:
+                raise BrowserError(
+                    "ChatGPT tab did not expose a ready execution context; "
+                    "no verification prompt was sent"
+                )
+            time.sleep(0.4)
+        # Do not interrupt an existing coding response. Poll only the
+        # conversation state until its composer is available for a new turn.
+        idle_deadline = time.monotonic() + min(max(timeout_seconds, 0.0), 45.0)
+        while True:
+            if not _assistant_snapshot(target).get("busy", False):
+                break
+            if time.monotonic() >= idle_deadline:
+                raise BrowserError(
+                    "ChatGPT is still generating; no verification request was sent"
+                )
+            time.sleep(1.0)
         send_message(target, prompt, timeout=180.0, wait_for_response=False)
 
         control = layout.control_worktree
