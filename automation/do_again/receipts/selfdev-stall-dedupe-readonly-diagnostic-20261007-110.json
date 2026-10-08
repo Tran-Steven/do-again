@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:47642:1791434221:f2c7c05b3c36",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:37:15.061521+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "ba12c8ad0347e7fcd01cccfd072e666bea11b83e77f712a6c2e276e3b60749f6",
+  "request_id": "selfdev-stall-dedupe-readonly-diagnostic-20261007-110",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "db7df56b569202c249f406c39df48b637ec8c8c8"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "db7df56b569202c249f406c39df48b637ec8c8c8"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "ba12c8ad0347e7fcd01cccfd072e666bea11b83e77f712a6c2e276e3b60749f6",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-stall-dedupe-readonly-diagnostic-20261007-110/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 3.133,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1173,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-stall-dedupe-readonly-diagnostic-20261007-110/script.py",
+      "script_sha256": "6fe490044cae32c56ceee00be600d16d463752fafcf0a1d511193fd6a6b58ada",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "head=db7df56b569202c249f406c39df48b637ec8c8c8\n=== _report_stall source ===\ndef _report_stall(repo: Path, config: dict[str, Any], state: dict[str, Any], reason: str = \"idle\") -> dict[str, Any]:\n    now = time.time()\n    if not config[\"report_stalls\"] or now < float(state.get(\"next_report_at\", 0)):\n        return state\n    slug = re.sub(r\"[^a-z0-9-]\", \"-\", repo.name.lower())[:60]\n    types = {\n        \"idle\": \"No-progress after bounded continuation\",\n        \"busy\": \"Conversation generation stuck\",\n        \"pending\": \"Unfinished request stuck\",\n        \"ci\": \"CI handoff unacknowledged after browser submission\",\n    }\n    title = f\"[do-again] {types[reason]} ({slug})\"\n    repository = config[\"issue_repo\"]\n    try:\n        lookup = subprocess.run(\n            [\"gh\", \"issue\", \"list\", \"--repo\", repository, \"--state\", \"open\", \"--limit\", \"100\", \"--search\", f\"{title} in:title\", \"--json\", \"number,title\"],\n            capture_output=True, text=True, timeout=30, check=False,\n        )\n    except (OSError, subprocess.TimeoutExpired):\n        state[\"next_report_at\"] = now + 3600\n        state[\"issue_report\"] = \"unavailable\"\n        return state\n    state[\"next_report_at\"] = now + 3600\n    if lookup.returncode != 0:\n        state[\"issue_report\"] = \"unavailable\"\n        return state\n    try:\n        matches = json.loads(lookup.stdout)\n    except (ValueError, TypeError):\n        state[\"issue_report\"] = \"unavailable\"\n        return state\n    for item in matches:\n        if item.get(\"title\") == title:\n            state[\"issue_number\"] = item[\"number\"]\n            state[\"issue_report\"] = \"existing\"\n            return state\n    body = (\n        \"Do Again's native progress watchdog observed an active continuous project \"\n        \"without verified development progress for a prolonged period.\\n\\n\"\n        f\"Project: `{slug}`\\n\"\n        f\"Failure class: `{reason}`.\\n\"\n        \"The local watchdog identified a persistent no-progress condition.\\n\"\n        \"The watchdog has stopped prompting until new progress or an operator intervention.\\n\\n\"\n        \"No candidate records, browser contents, or secrets are included. \"\n        \"Please inspect the private runtime ledger locally and add a deterministic regression.\"\n    )\n    try:\n        created = subprocess.run(\n            [\"gh\", \"issue\", \"create\", \"--repo\", repository, \"--title\", title, \"--body\", body],\n            capture_output=True, text=True, timeout=30, check=False,\n        )\n    except (OSError, subprocess.TimeoutExpired):\n        state[\"issue_report\"] = \"unavailable\"\n        return state\n    if created.returncode == 0:\n        state[\"issue_report\"] = \"created\"\n        match = re.search(r\"/issues/(\\d+)\", created.stdout)\n        if match:\n            state[\"issue_number\"] = int(match.group(1))\n    else:\n        state[\"issue_report\"] = \"unavailable\"\n    return state\n\n=== command 1 rc=0 ===\nargv=[\"gh\", \"issue\", \"list\", \"--repo\", \"Tran-Steven/do-again\", \"--state\", \"open\", \"--limit\", \"100\", \"--search\", \"[do-again] No-progress after bounded continuation (do-again) in:title\", \"--json\", \"number,title\"]\nstdout=[{\"number\":20,\"title\":\"[do-again] No-progress after bounded continuation (do-again)\"},{\"number\":19,\"title\":\"[do-again] No-progress after bounded continuation (do-again)\"}]\n\nstderr=\n=== command 2 rc=0 ===\nargv=[\"gh\", \"issue\", \"list\", \"--repo\", \"Tran-Steven/do-again\", \"--state\", \"open\", \"--limit\", \"100\", \"--json\", \"number,title\"]\nstdout=[{\"number\":20,\"title\":\"[do-again] No-progress after bounded continuation (do-again)\"},{\"number\":19,\"title\":\"[do-again] No-progress after bounded continuation (do-again)\"},{\"number\":16,\"title\":\"[Sev-5] Completed failed request re-enters conflict loop after Sonary HEAD advances\"},{\"number\":12,\"title\":\"[Sev-5] CI wait completes but agent stays idle; Chrome/CDP timeout hides uncertain submissions\"},{\"number\":10,\"title\":\"[Alpha blocker] Roll out liveness to installed projects and prove unattended stall recovery\"}]\n\nstderr=\n=== command 3 rc=0 ===\nargv=[\"gh\", \"search\", \"issues\", \"--repo\", \"Tran-Steven/do-again\", \"--state\", \"open\", \"--match\", \"title\", \"[do-again] No-progress after bounded continuation (do-again)\", \"--json\", \"number,title\"]\nstdout=[{\"number\":20,\"title\":\"[do-again] No-progress after bounded continuation (do-again)\"},{\"number\":19,\"title\":\"[do-again] No-progress after bounded continuation (do-again)\"}]\n\nstderr=\nREAD_ONLY_STALL_DEDUPE_DIAGNOSTIC_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:37:11.587280+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
