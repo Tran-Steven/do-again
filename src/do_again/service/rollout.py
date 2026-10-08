@@ -85,14 +85,19 @@ def _process_rows() -> list[dict[str, Any]]:
                 rows.append({"pid": int(parts[0]), "ppid": int(parts[1]), "command": parts[2]})
         return rows
     proc = subprocess.run(
-        ["ps", "-axo", "pid=,ppid=,command="],
+        ["ps", "-axo", "pid=,ppid=,state=,command="],
         text=True, capture_output=True, check=False, timeout=15,
     )
     rows = []
     for line in proc.stdout.splitlines():
-        parts = line.strip().split(None, 2)
-        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
-            rows.append({"pid": int(parts[0]), "ppid": int(parts[1]), "command": parts[2]})
+        parts = line.strip().split(None, 3)
+        if len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append({
+                "pid": int(parts[0]),
+                "ppid": int(parts[1]),
+                "state": parts[2],
+                "command": parts[3],
+            })
     return rows
 
 
@@ -176,6 +181,15 @@ def assess_upgrade(repo: Path, *, process_rows: list[dict[str, Any]] | None = No
     browser = _json(layout.state_dir / "browser_status.json")
     rows = process_rows if process_rows is not None else _process_rows()
     descendants = _descendants(status.get("pid"), rows)
+    # A zombie has already exited and cannot be executing user work. macOS can
+    # briefly retain reaped Git children as "(git)" between quiescence checks;
+    # treating those rows as live executor work can indefinitely starve a safe
+    # upgrade. Rows without a state field remain blocking for compatibility
+    # with injected/platform process inventories.
+    descendants = [
+        row for row in descendants
+        if not str(row.get("state") or "").upper().startswith("Z")
+    ]
     shared_browser_pids = _shared_browser_child_pids(rows, repo=repo)
     ignored_browser_children = [row for row in descendants if row["pid"] in shared_browser_pids]
     descendants = [row for row in descendants if row["pid"] not in shared_browser_pids]
