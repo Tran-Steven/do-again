@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:16:36.488707+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "db5e659bc6c4e9b7ce903a56c91b59201153a4e27839e3087aad86feb1aaa633",
+  "request_id": "selfdev-transport-failure-no-replay-20261008-118",
+  "schema_version": 1
+}
