@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:40:47.734758+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "5092e10cdcca2becc7bd8b9b199a6cd91fe7fc961cd79e06bbabbd8ae5e4d9fd",
+  "request_id": "selfdev-agent-soak-implement-20261007-67",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "5092e10cdcca2becc7bd8b9b199a6cd91fe7fc961cd79e06bbabbd8ae5e4d9fd",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-agent-soak-implement-20261007-67/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 6.078,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 8647,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-agent-soak-implement-20261007-67/script.py",
+      "script_sha256": "46b09ecdad29182eb6df73ecfcae51ea13e1b2b1ca9e58ac23d3ee10af99997e",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n\n=== focused stderr ===\n.........\n----------------------------------------------------------------------\nRan 9 tests in 2.678s\n\nOK\n\nfocused_rc=0\n=== soak stdout ===\n{\n  \"duplicate_replays\": 250,\n  \"exact_once\": true,\n  \"executions\": 250,\n  \"latency_ms\": {\n    \"max\": 19.86,\n    \"mean\": 6.21,\n    \"median\": 5.624,\n    \"min\": 2.569,\n    \"p95\": 11.314\n  },\n  \"requests\": 250,\n  \"restart_replays\": 250,\n  \"scope\": \"local Agent.process_path only; excludes Git remote, browser, ChatGPT, and network latency\",\n  \"unique_executions\": 250\n}\n\n=== soak stderr ===\n\nsoak_rc=0\n=== commit stdout ===\n[feat/self-dogfood-20261007 da7e46f] Add measured local agent soak benchmark\n 3 files changed, 179 insertions(+)\n create mode 100644 tests/test_soak.py\n create mode 100644 tools/agent_soak.py\n\n=== commit stderr ===\n\nnew_head=da7e46f5e07922eb63b7b48e71319588bd28d3d5\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:40:41.382482+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
