@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-self-upgrade-postfailure-audit-20261007-115",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T05:45:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T06:05:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, hashlib, os, subprocess, sys\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\ndef run(args,env=None):\n    return subprocess.run(args,cwd=repo,text=True,capture_output=True,check=False,env=env)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nkey=hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nruntime=root/\"runtime/do_again\"\nstate=root/\"state\"\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(repo/\"src\")\ndry=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(repo)],env=env)\n\ndef read_json(p):\n    try:\n        v=json.loads(p.read_text())\n        return v if isinstance(v,dict) else {}\n    except Exception:\n        return {}\n\nprint(json.dumps({\n  \"repo_head\":head,\n  \"source_hash\":_tree_hash(repo/\"src/do_again\"),\n  \"runtime_hash\":_tree_hash(runtime),\n  \"runtime_matches_source\":_tree_hash(repo/\"src/do_again\")==_tree_hash(runtime),\n  \"upgrade_journal\":read_json(state/\"runtime_upgrade.json\"),\n  \"dry_run\":{\"rc\":dry.returncode,\"stdout\":dry.stdout,\"stderr\":dry.stderr}\n},indent=2,sort_keys=True))\nprint(\"POST_FAILURE_SELF_UPGRADE_AUDIT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
