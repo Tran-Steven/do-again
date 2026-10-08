@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:44:22.552909+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "f36ab7144fa6c3bdd1092aab7ec9b7311859f8ade09a150fd4c8559552482572",
+  "request_id": "selfdev-self-postreconcile-runtime-audit-20261008-135",
+  "schema_version": 1
+}
