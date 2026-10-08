@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T02:49:45.322826+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "6d5e6e1d051761bfbd260a7b70356aacf88d336af6c45ddb2f520ae65a0c708d",
+  "request_id": "selfdev-postmerge-quiescence-audit-20261007-91",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a02b9979c083bb223a017bdb75e58e8223d43705"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a02b9979c083bb223a017bdb75e58e8223d43705"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "6d5e6e1d051761bfbd260a7b70356aacf88d336af6c45ddb2f520ae65a0c708d",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-postmerge-quiescence-audit-20261007-91/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.427,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 4045,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-postmerge-quiescence-audit-20261007-91/script.py",
+      "script_sha256": "d5ce0786e3134e6a16ada8d0760c31c7ed11ec6917bc0e5702eaa41d9813edc8",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"audited_at_epoch\": 1791427784.973871,\n  \"ci_wait_lifecycle_gap\": {\n    \"observed\": \"PR #11 CI completed successfully after prior chat stopped in waiting-for-CI state\",\n    \"requirement\": \"native lifecycle must distinguish waiting_for_ci and resume once terminal CI state arrives\"\n  },\n  \"merged_rollout_main_sha\": \"cbf5f56a41d3a61a33b4b3ea873d93461d4fc232\",\n  \"projects\": [\n    {\n      \"branch\": \"main\",\n      \"browser_status\": {\n        \"error\": null,\n        \"pending_receipts\": 0,\n        \"recorded_at_utc\": \"2026-10-08T02:49:25.125343+00:00\",\n        \"state\": \"ready\"\n      },\n      \"daemon_children\": [\n        {\n          \"cmd\": \"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-postmerge-quiescence-audit-20261007-91/script.py\",\n          \"etime\": \"00:00\",\n          \"pid\": 3320,\n          \"ppid\": 60491\n        },\n        {\n          \"cmd\": \"ps -axo pid=,ppid=,etime=,command=\",\n          \"etime\": \"00:00\",\n          \"pid\": 3323,\n          \"ppid\": 3320\n        }\n      ],\n      \"daemon_pid\": 60491,\n      \"git_status\": \"?? do-again-policy.json\\n?? do-again.toml\\n\",\n      \"head\": \"a02b9979c083bb223a017bdb75e58e8223d43705\",\n      \"liveness_state\": {},\n      \"outbox_ids\": [],\n      \"pending_ledgers\": [],\n      \"pending_requests\": [\n        \"selfdev-postmerge-quiescence-audit-20261007-91\"\n      ],\n      \"repo\": \"/Users/steventran/do-again\",\n      \"runtime_features\": {\n        \"liveness\": false,\n        \"rollout\": false\n      },\n      \"runtime_key\": \"41857a676462\",\n      \"runtime_upgrade\": {}\n    },\n    {\n      \"branch\": \"main\",\n      \"browser_status\": {\n        \"error\": \"TimeoutError: timed out\",\n        \"pending_receipts\": 1,\n        \"recorded_at_utc\": \"2026-10-08T02:49:33.958485+00:00\",\n        \"state\": \"recovering\"\n      },\n      \"daemon_children\": [\n        {\n          \"cmd\": \"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/42ba1b7dcb92/state/scratch/jobpipe-workday-uncertain-override-guard-20261008-02/script.py\",\n          \"etime\": \"00:49\",\n          \"pid\": 2229,\n          \"ppid\": 94823\n        },\n        {\n          \"cmd\": \"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m pytest -q --maxfail=1\",\n          \"etime\": \"00:09\",\n          \"pid\": 3126,\n          \"ppid\": 2229\n        }\n      ],\n      \"daemon_pid\": 94823,\n      \"git_status\": \" M adapters/protocol.py\\n M do-again.toml\\n M jobctl.py\\n M tests/test_jobctl.py\\n?? do-again-policy.json\\n\",\n      \"head\": \"227b00fb0142aa92df0c826f27980b65e2a452ad\",\n      \"liveness_state\": {\n        \"attempts\": 0,\n        \"busy_since\": 1791427603.276841,\n        \"progress_at\": 1791427559.6515148,\n        \"receipt_id\": \"jobpipe-workday-uncertain-override-audit-20261008-01\",\n        \"state\": \"working\"\n      },\n      \"outbox_ids\": [\n        \"jobpipe-workday-uncertain-override-guard-20261008-01\"\n      ],\n      \"pending_ledgers\": [],\n      \"pending_requests\": [\n        \"jobpipe-workday-uncertain-override-guard-20261008-02\"\n      ],\n      \"repo\": \"/Users/steventran/jobpipe\",\n      \"runtime_features\": {\n        \"liveness\": true,\n        \"rollout\": false\n      },\n      \"runtime_key\": \"42ba1b7dcb92\",\n      \"runtime_upgrade\": {}\n    },\n    {\n      \"branch\": \"main\",\n      \"browser_status\": {\n        \"error\": \"ChatGPT did not load a usable composer; check connectivity and retry\",\n        \"pending_receipts\": 2,\n        \"recorded_at_utc\": \"2026-10-08T02:49:41.728502+00:00\",\n        \"state\": \"recovering\"\n      },\n      \"daemon_children\": [\n        {\n          \"cmd\": \"(git)\",\n          \"etime\": \"00:00\",\n          \"pid\": 3302,\n          \"ppid\": 95816\n        },\n        {\n          \"cmd\": \"(git)\",\n          \"etime\": \"00:00\",\n          \"pid\": 3305,\n          \"ppid\": 3302\n        },\n        {\n          \"cmd\": \"(git-remote-http)\",\n          \"etime\": \"00:00\",\n          \"pid\": 3306,\n          \"ppid\": 3305\n        }\n      ],\n      \"daemon_pid\": 95816,\n      \"git_status\": \"\",\n      \"head\": \"a62e95778b70a23a95338075e1ae81caee1663a7\",\n      \"liveness_state\": {},\n      \"outbox_ids\": [\n        \"sonary-daw-fx-prepare-stage-stack-browser-proof-20261008-82\",\n        \"sonary-daw-fx-register-paged-asset-binding-audit-20261008-83\"\n      ],\n      \"pending_ledgers\": [],\n      \"pending_requests\": [],\n      \"repo\": \"/Users/steventran/Sonary\",\n      \"runtime_features\": {\n        \"liveness\": false,\n        \"rollout\": false\n      },\n      \"runtime_key\": \"d05c35935833\",\n      \"runtime_upgrade\": {}\n    }\n  ]\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T02:49:43.390850+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
