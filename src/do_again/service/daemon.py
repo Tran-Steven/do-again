@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import signal
+import time
 import sys
 import threading
 from pathlib import Path
@@ -23,6 +24,7 @@ from ..core.agent import Agent
 from ..core.schema import atomic_json, utc_now
 from ..browser import cdp
 from ..browser.errors import BrowserSubmissionUncertain
+from ..browser import runtime as browser_runtime
 from ..browser.runtime import _file_lock
 from .runtime import runtime_layout
 from .liveness import check_liveness
@@ -100,10 +102,68 @@ def _drain_browser_outbox(repo: Path, state_dir: Path) -> int:
         return _drain_browser_outbox_locked(repo, state_dir)
 
 
+def _uncertain_delivery_path(state_dir: Path) -> Path:
+    return state_dir / "browser_submission_uncertain.json"
+
+
+def _read_uncertain_delivery(state_dir: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(_uncertain_delivery_path(state_dir).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    if not isinstance(value, dict) or not isinstance(value.get("request_ids"), list):
+        raise BrowserError("invalid durable browser submission uncertainty record")
+    return value
+
+
+def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, Any]) -> int:
+    """A possibly-sent message must never be automatically submitted twice."""
+    ids = [str(x) for x in state["request_ids"]]
+    paths = [_browser_outbox_dir(state_dir) / f"{rid}.json" for rid in ids]
+    if any(not p.exists() for p in paths):
+        raise BrowserSubmissionUncertain(
+            "Uncertain browser delivery was modified outside reconciliation; inspect the bound chat and outbox"
+        )
+    record = browser_runtime.project_record(repo)
+    chat_url = str(record.get("chat_url") or "")
+    if chat_url != str(state.get("chat_url") or ""):
+        raise BrowserSubmissionUncertain(
+            "Uncertain browser receipt is bound to a different conversation; manual reconciliation required"
+        )
+    session = ensure_browser_running(verify_auth=True)
+    target = browser_runtime._find_chatgpt_target(int(session["port"]), chat_url)
+    if target is not None and browser_runtime._page_contains(target, str(state["batch_marker"])):
+        # Confirmed in the bound user's message DOM: remove only that exact
+        # batch's outbox files, leaving later work queued for normal delivery.
+        for p in paths:
+            p.unlink(missing_ok=True)
+        _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
+        _record_browser_state(state_dir, "queued" if _pending_outbox(state_dir) else "ready")
+        return len(paths)
+    age = time.time() - float(state.get("first_seen_epoch", time.time()))
+    if age >= 300:
+        incident = state_dir / "incidents" / "browser-submission-unacknowledged.json"
+        incident.parent.mkdir(parents=True, exist_ok=True)
+        if not incident.exists():
+            atomic_json(incident, {
+                "schema_version": 1,
+                "kind": "browser_submission_unacknowledged",
+                "first_seen_epoch": state.get("first_seen_epoch"),
+                "request_ids": ids,
+                "action": "Inspect the exact bound ChatGPT conversation; do not replay until delivery is conclusively resolved",
+            })
+    raise BrowserSubmissionUncertain(
+        "Browser receipt submission remains uncertain; waiting for exact user-message marker in bound chat"
+    )
+
+
 def _drain_browser_outbox_locked(repo: Path, state_dir: Path) -> int:
     activate_project(repo)
     ensure_browser_running(verify_auth=True)
 
+    uncertain = _read_uncertain_delivery(state_dir)
+    if uncertain:
+        return _reconcile_uncertain_delivery(repo, state_dir, uncertain)
     paths = _pending_outbox(state_dir)
     if not paths:
         _record_browser_state(state_dir, "ready")
@@ -111,14 +171,36 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path) -> int:
 
     batch_paths = paths[:20]
     receipts = [_read_outbox(path) for path in batch_paths]
+    ids = [str(r.get("request_id") or "") for r in receipts]
+    record = browser_runtime.project_record(repo)
+    # Crash-safe intent: if the process dies during a browser click, a later
+    # instance must reconcile rather than blindly send the same payload.
+    atomic_json(_uncertain_delivery_path(state_dir), {
+        "schema_version": 1,
+        "request_ids": ids,
+        "batch_marker": "DO_AGAIN_RECEIPTS_READY request_ids=" + ",".join(ids),
+        "chat_url": str(record.get("chat_url") or ""),
+        "first_seen_epoch": time.time(),
+        "state": "preparing",
+    })
     try:
-        notify_receipts(repo, receipts)
+        outcome = notify_receipts(repo, receipts)
+        if not isinstance(outcome, dict) or outcome.get("response") != "already_delivered":
+            # A browser submitted result is just a click, not in-chat proof.
+            raise BrowserSubmissionUncertain(
+                "Browser submitted receipt batch but its user-message marker is not yet verified"
+            )
     except BrowserError as exc:
-        if "ChatGPT is still generating; retry delivery later" not in str(exc):
-            raise
-        _record_browser_state(state_dir, "recovering", error=str(exc))
-        return 0
+        if isinstance(exc, BrowserAuthRequired) or "ChatGPT is still generating; retry delivery later" in str(exc):
+            # These known pre-submit checks guarantee the page was not clicked.
+            _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
+            _record_browser_state(state_dir, "recovering", error=str(exc))
+            if isinstance(exc, BrowserAuthRequired):
+                raise
+            return 0
+        raise
 
+    _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
     delivered = 0
     for path in batch_paths:
         try:
