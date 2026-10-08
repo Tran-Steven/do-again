@@ -3,13 +3,11 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:58649:1791438167:1983e93cf2fc",
-  "last_request_id": "selfdev-live-stall-dedupe-acceptance-20261007-116",
-  "last_request_state": "failed",
   "pid": 58649,
   "remote": "origin",
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-08T05:42:47.511735+00:00",
-  "state": "ready",
-  "updated_at_utc": "2026-10-08T05:45:11.391724+00:00"
+  "state": "stopped",
+  "updated_at_utc": "2026-10-08T12:45:23.724011+00:00"
 }
