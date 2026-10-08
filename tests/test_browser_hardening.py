@@ -390,5 +390,48 @@ class BrowserHardeningTests(unittest.TestCase):
 
 
 
+    def test_cleanup_inventory_excludes_active_bound_and_unverified_candidates(self):
+        record = self.bind()
+        browser._record_owned_chat(
+            self.repo, self.target.url, created_reason="bootstrap"
+        )
+        other = "11111111-2222-3333-4444-555555555555"
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[{"receipt": "x.json"}]):
+            inventory = browser.chat_cleanup_inventory(
+                self.repo, candidate_ids=[other]
+            )
+        owned = next(row for row in inventory["candidates"] if row["chat_id"] == "project")
+        candidate = next(row for row in inventory["candidates"] if row["chat_id"] == other)
+        self.assertTrue(owned["ownership_verified"])
+        self.assertTrue(owned["active_bound"])
+        self.assertFalse(owned["eligible"])
+        self.assertFalse(candidate["ownership_verified"])
+        self.assertFalse(candidate["eligible"])
+        self.assertEqual(candidate["reason"], "needs_content_verification")
+
+    def test_cleanup_dry_run_never_writes_queue(self):
+        self.bind()
+        old = "https://chatgpt.com/c/old-owned"
+        browser._record_owned_chat(self.repo, old, created_reason="rollover")
+        result = browser.queue_verified_archives(self.repo, apply=False)
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["eligible_chat_ids"], ["old-owned"])
+        self.assertEqual(result["queued_chat_ids"], [])
+        self.assertFalse(browser._archive_queue_path(self.repo).exists())
+
+    def test_cleanup_apply_is_idempotent_for_verified_owned_inactive_chat(self):
+        self.bind()
+        old = "https://chatgpt.com/c/old-owned"
+        browser._record_owned_chat(self.repo, old, created_reason="rollover")
+        first = browser.queue_verified_archives(self.repo, apply=True)
+        second = browser.queue_verified_archives(self.repo, apply=True)
+        self.assertEqual(first["queued_chat_ids"], ["old-owned"])
+        self.assertEqual(second["queued_chat_ids"], [])
+        queue = browser.archive_queue_status(self.repo)
+        self.assertEqual(len(queue["items"]), 1)
+        self.assertEqual(queue["items"][0]["state"], "pending")
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1038,6 +1038,189 @@ def _record_owned_chat(
     return existing
 
 
+def _archive_queue_path(repo: Path) -> Path:
+    return _project_browser_dir(repo) / "archive_queue.json"
+
+
+def _all_bound_chat_ids() -> set[str]:
+    bound: set[str] = set()
+    projects = browser_paths().projects
+    if not projects.is_dir():
+        return bound
+    for path in projects.glob("*.json"):
+        try:
+            record = _read_json(path)
+        except BrowserError:
+            continue
+        chat_id = _chat_id(str(record.get("chat_url") or ""))
+        if chat_id:
+            bound.add(chat_id)
+    return bound
+
+
+def _candidate_receipt_evidence(repo: Path, chat_id: str) -> list[dict[str, Any]]:
+    control = _control_worktree_for_repo(repo)
+    receipts_dir = control / "automation/do_again/receipts"
+    evidence: list[dict[str, Any]] = []
+    if not receipts_dir.is_dir():
+        return evidence
+    for path in sorted(receipts_dir.glob("*.json")):
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if chat_id not in raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        evidence.append(
+            {
+                "receipt": path.name,
+                "request_id": payload.get("request_id"),
+                "state": payload.get("state"),
+                "operation": payload.get("operation"),
+                "sha256": _sha256_file(path),
+            }
+        )
+    return evidence
+
+
+def chat_cleanup_inventory(
+    repo: Path,
+    *,
+    candidate_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    repo = repo.resolve()
+    registry = _read_json(_owned_chat_registry_path(repo))
+    rows: list[dict[str, Any]] = []
+    bound = _all_bound_chat_ids()
+    seen: set[str] = set()
+
+    chats = registry.get("chats")
+    if isinstance(chats, list):
+        for chat in chats:
+            chat_id = str(chat.get("chat_id") or "")
+            if not chat_id:
+                continue
+            seen.add(chat_id)
+            active = chat_id in bound
+            archive_state = str(chat.get("archive_state") or "active")
+            rows.append(
+                {
+                    "chat_id": chat_id,
+                    "chat_url": chat.get("chat_url"),
+                    "provenance": "owned_registry",
+                    "ownership_verified": True,
+                    "active_bound": active,
+                    "archive_state": archive_state,
+                    "eligible": (not active and archive_state != "archived"),
+                    "reason": (
+                        "currently_bound"
+                        if active
+                        else "already_archived"
+                        if archive_state == "archived"
+                        else "verified_owned_inactive"
+                    ),
+                }
+            )
+
+    for chat_id in candidate_ids or []:
+        chat_id = str(chat_id).strip()
+        if not chat_id or chat_id in seen:
+            continue
+        evidence = _candidate_receipt_evidence(repo, chat_id)
+        active = chat_id in bound
+        rows.append(
+            {
+                "chat_id": chat_id,
+                "chat_url": f"https://chatgpt.com/c/{chat_id}",
+                "provenance": "historical_candidate",
+                "ownership_verified": False,
+                "active_bound": active,
+                "archive_state": "unverified",
+                "eligible": False,
+                "reason": (
+                    "currently_bound"
+                    if active
+                    else "needs_content_verification"
+                    if evidence
+                    else "no_corroborating_receipts"
+                ),
+                "evidence": evidence,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "repo": str(repo),
+        "active_bound_chat_ids": sorted(bound),
+        "candidates": rows,
+        "generated_utc": _utc_now(),
+    }
+
+
+def archive_queue_status(repo: Path) -> dict[str, Any]:
+    value = _read_json(_archive_queue_path(repo))
+    items = value.get("items")
+    if not isinstance(items, list):
+        items = []
+    return {
+        "schema_version": 1,
+        "repo": str(repo.resolve()),
+        "items": items,
+        "updated_utc": value.get("updated_utc"),
+    }
+
+
+def queue_verified_archives(
+    repo: Path,
+    *,
+    candidate_ids: list[str] | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    inventory = chat_cleanup_inventory(repo, candidate_ids=candidate_ids)
+    eligible = [row for row in inventory["candidates"] if row.get("eligible")]
+    queue = archive_queue_status(repo)
+    items = list(queue["items"])
+    existing = {str(item.get("chat_id") or ""): item for item in items}
+    queued: list[str] = []
+
+    if apply:
+        for row in eligible:
+            chat_id = str(row["chat_id"])
+            prior = existing.get(chat_id)
+            if prior and prior.get("state") in {"pending", "archived"}:
+                continue
+            item = {
+                "chat_id": chat_id,
+                "chat_url": row.get("chat_url"),
+                "project_key": _project_key(repo),
+                "state": "pending",
+                "attempts": 0,
+                "queued_utc": _utc_now(),
+                "last_error": None,
+            }
+            if prior:
+                items[items.index(prior)] = item
+            else:
+                items.append(item)
+            existing[chat_id] = item
+            queued.append(chat_id)
+        _atomic_json(
+            _archive_queue_path(repo),
+            {"schema_version": 1, "items": items, "updated_utc": _utc_now()},
+        )
+
+    return {
+        "dry_run": not apply,
+        "eligible_chat_ids": [str(row["chat_id"]) for row in eligible],
+        "queued_chat_ids": queued,
+        "inventory": inventory,
+        "queue": archive_queue_status(repo),
+    }
+
+
 def _control_worktree_for_repo(repo: Path) -> Path:
     home = Path(
         os.environ.get("DO_AGAIN_HOME", str(Path.home() / ".do_again"))

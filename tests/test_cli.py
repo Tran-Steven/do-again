@@ -217,6 +217,32 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertNotIn("SETUP_OK", error.getvalue())
 
 
+    def test_chats_cleanup_is_dry_run_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            payload = {
+                "dry_run": True,
+                "eligible_chat_ids": ["old"],
+                "queued_chat_ids": [],
+                "inventory": {"candidates": []},
+                "queue": {"items": []},
+            }
+            output = io.StringIO()
+            with patch(
+                "do_again.cli.queue_verified_archives", return_value=payload
+            ) as cleanup, patch(
+                "sys.argv", ["do-again", "chats", "cleanup", str(repo)]
+            ), redirect_stdout(output):
+                rc = main()
+            self.assertEqual(rc, 0)
+            cleanup.assert_called_once()
+            called_repo = cleanup.call_args.args[0]
+            self.assertEqual(called_repo.resolve(), repo.resolve())
+            self.assertEqual(cleanup.call_args.kwargs, {"candidate_ids": [], "apply": False})
+            self.assertIn('"dry_run": true', output.getvalue())
+
+
+
     def test_setup_no_browser_disables_existing_browser_setting(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))

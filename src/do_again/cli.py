@@ -14,6 +14,9 @@ from pathlib import Path
 from .browser import (
     BrowserAuthRequired,
     BrowserError,
+    archive_queue_status,
+    chat_cleanup_inventory,
+    queue_verified_archives,
     browser_self_test,
     browser_status,
     deactivate_project,
@@ -534,6 +537,34 @@ def _browser_action(action: str, *, mode: str = "auto", run_test: bool = True) -
         return 1
 
 
+def _chat_cleanup_action(
+    action: str,
+    path: str,
+    *,
+    candidates: list[str] | None = None,
+    apply: bool = False,
+) -> int:
+    try:
+        repo = find_repo(path)
+        if action == "discover":
+            value = chat_cleanup_inventory(repo, candidate_ids=candidates or [])
+        elif action == "status":
+            value = archive_queue_status(repo)
+        elif action == "cleanup":
+            value = queue_verified_archives(
+                repo,
+                candidate_ids=candidates or [],
+                apply=apply,
+            )
+        else:
+            raise BrowserError(f"unsupported chats action: {action}")
+        print(json.dumps(value, indent=2, sort_keys=True))
+        return 0
+    except (BrowserError, ServiceError) as exc:
+        print(f"do-again: chats: {exc}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="do-again",
@@ -599,6 +630,30 @@ def main() -> int:
         command = sub.add_parser(name)
         command.add_argument("path", nargs="?", default=".")
 
+    chats_parser = sub.add_parser(
+        "chats",
+        help="Discover and safely clean up Do Again-owned automation chats",
+    )
+    chats_sub = chats_parser.add_subparsers(dest="chats_command", required=True)
+    chats_discover = chats_sub.add_parser(
+        "discover",
+        help="Dry-run chat ownership/provenance inventory",
+    )
+    chats_discover.add_argument("path", nargs="?", default=".")
+    chats_discover.add_argument("--candidate", action="append", default=[])
+    chats_status = chats_sub.add_parser(
+        "status",
+        help="Show persisted archive queue status",
+    )
+    chats_status.add_argument("path", nargs="?", default=".")
+    chats_cleanup = chats_sub.add_parser(
+        "cleanup",
+        help="Queue verified-owned inactive chats; dry-run unless --apply is used",
+    )
+    chats_cleanup.add_argument("path", nargs="?", default=".")
+    chats_cleanup.add_argument("--candidate", action="append", default=[])
+    chats_cleanup.add_argument("--apply", action="store_true")
+
     run_parser = sub.add_parser("run")
     run_parser.add_argument("path", nargs="?", default=".")
     run_parser.add_argument("--once", action="store_true")
@@ -651,6 +706,13 @@ def main() -> int:
             args.browser_command,
             mode=getattr(args, "mode", "auto"),
             run_test=not getattr(args, "skip_test", False),
+        )
+    if args.command == "chats":
+        return _chat_cleanup_action(
+            args.chats_command,
+            args.path,
+            candidates=getattr(args, "candidate", []),
+            apply=bool(getattr(args, "apply", False)),
         )
     if args.command == "run":
         try:
