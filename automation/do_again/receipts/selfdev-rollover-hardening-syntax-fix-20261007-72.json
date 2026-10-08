@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:46:14.972152+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "35e3dc0b57f1ab5fa29afe9aed3534f2f39bd05087471058a7512e8a90ab64fd",
+  "request_id": "selfdev-rollover-hardening-syntax-fix-20261007-72",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "35e3dc0b57f1ab5fa29afe9aed3534f2f39bd05087471058a7512e8a90ab64fd",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-hardening-syntax-fix-20261007-72/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 2.073,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 2236,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-hardening-syntax-fix-20261007-72/script.py",
+      "script_sha256": "ee67c7e80ce6ec52502701149c10b690ba775d2bc332b576583fc5b7f8a0e7a9",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== compile stdout ===\n\n=== compile stderr ===\n\ncompile_rc=0\n=== focused stdout ===\n\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n\n=== focused stderr ===\n..............do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n.........................F.........................\n======================================================================\nFAIL: test_successful_rollover_records_owned_successor_before_binding (tests.test_browser_hardening.BrowserHardeningTests.test_successful_rollover_records_owned_successor_before_binding)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser_hardening.py\", line 349, in test_successful_rollover_records_owned_successor_before_binding\n    self.assertEqual(tx[\"archive_state\"], \"pending\")\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'blocked_unowned' != 'pending'\n- blocked_unowned\n+ pending\n\n\n----------------------------------------------------------------------\nRan 65 tests in 1.383s\n\nFAILED (failures=1)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:46:12.667373+00:00",
+  "state": "failed",
+  "traceback": null
+}
