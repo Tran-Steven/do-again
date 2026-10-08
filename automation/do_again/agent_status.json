@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:47642:1791434221:f2c7c05b3c36",
-  "last_request_id": "selfdev-stall-dedupe-fix-20261007-111",
+  "last_request_id": "selfdev-stall-dedupe-push-20261007-112",
   "last_request_state": "succeeded",
   "pid": 47642,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-08T04:37:01.932087+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T04:40:03.821787+00:00"
+  "updated_at_utc": "2026-10-08T04:40:45.753125+00:00"
 }
