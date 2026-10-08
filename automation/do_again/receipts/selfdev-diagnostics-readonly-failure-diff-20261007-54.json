@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:25:48.582910+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "06a4243e4baab3db5ca06dcaae63f945b310deb3326d7aae50d8602db6c4e271",
+  "request_id": "selfdev-diagnostics-readonly-failure-diff-20261007-54",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "06a4243e4baab3db5ca06dcaae63f945b310deb3326d7aae50d8602db6c4e271",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-readonly-failure-diff-20261007-54/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.211,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 586,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-readonly-failure-diff-20261007-54/script.py",
+      "script_sha256": "88e5c80888cfb862e6018fc52cb262368c45f9abbec851597f13e8820aada158",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=6e39cbcd7f1c3ca8f0ebfac6a2b9d6b2948a1b58\nstatus:\n M src/do_again/cli.py\n M tests/test_cli.py\n\ntest imports:\n0001: from __future__ import annotations\n0002: \n0003: import io\n0004: import subprocess\n0005: import tempfile\n0006: import unittest\n0007: from contextlib import redirect_stderr, redirect_stdout\n0008: from pathlib import Path\n0009: from unittest.mock import patch\n0010: \n0011: from do_again.cli import list_projects, main, setup_project, verify_project\n0012: \n0013: \n0014: def git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:\n0015:     return subprocess.run(\n0016:         [\"git\", \"-C\", str(cwd), *args],\n0017:         check=True,\n0018:         text=True,\n0019:         capture_output=True,\n0020:     )\n0021: \n0022: \n0023: class CliOnboardingTests(unittest.TestCase):\n0024:     def make_repo(self, root: Path) -> Path:\n0025:         bare = root / \"origin.git\"\n0026:         subprocess.run(\n0027:             [\"git\", \"init\", \"--bare\", str(bare)],\n0028:             check=True,\n0029:             text=True,\n0030:             capture_output=True,\n0031:         )\n0032:         repo = root / \"repo with spaces\"\n0033:         repo.mkdir()\n0034:         git(repo, \"init\", \"-b\", \"main\")\n0035:         git(repo, \"config\", \"user.name\", \"Test\")\n0036:         git(repo, \"config\", \"user.email\", \"test@example.invalid\")\n0037:         (repo / \"README.md\").write_text(\"# test\\n\", encoding=\"utf-8\")\n0038:         git(repo, \"add\", \"README.md\")\n0039:         git(repo, \"commit\", \"-m\", \"initial\")\n0040:         git(repo, \"remote\", \"add\", \"origin\", str(bare))\n0041:         git(repo, \"push\", \"-u\", \"origin\", \"main\")\n0042:         return repo\n0043: \n0044:     def test_setup_no_service_is_one_command_bootstrap(self) -> None:\n0045:         with tempfile.TemporaryDirectory() as tmp:\ndiffstat:\n src/do_again/cli.py | 180 +++++++++++++++++++++++++++++++++++++++++++++++++++-\n tests/test_cli.py   |  78 +++++++++++++++++++++++\n 2 files changed, 257 insertions(+), 1 deletion(-)\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:25:48.171394+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
