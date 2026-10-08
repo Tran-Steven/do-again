@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-verify-imports-diff-20261007-28",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:01:10.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:31:10.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\n\ndef run(*args):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=True).stdout\n\nprint(\"branch=\" + run(\"git\",\"branch\",\"--show-current\").strip())\nprint(\"head=\" + run(\"git\",\"rev-parse\",\"HEAD\").strip())\nprint(\"status:\")\nprint(run(\"git\",\"status\",\"--porcelain=v1\"))\nprint(\"imports:\")\nfor i,line in enumerate((wt/\"src/do_again/cli.py\").read_text().splitlines()[:30],1):\n    print(f\"{i:02d}: {line}\")\nprint(\"diff:\")\nprint(run(\"git\",\"diff\",\"--\",\"src/do_again/cli.py\",\"tests/test_cli.py\"))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
