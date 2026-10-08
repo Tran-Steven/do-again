@@ -1,0 +1,57 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:22:37.468157+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "status",
+  "operator_progress": {
+    "acknowledged_receipts": [
+      "selfdev-live-rollout-quiescence-audit-20261007-100"
+    ],
+    "ci": {
+      "head_sha": "65f9a3e792c3cf3fa951df21fe9114a180d85d40",
+      "repository": "Tran-Steven/do-again",
+      "run_id": 37723478310
+    },
+    "goal_id": "issue-10-live-ci-handoff-proof",
+    "goal_state": "waiting_for_ci",
+    "summary": "Live post-upgrade proof that terminal CI wakes the durable continuous goal exactly once without replay."
+  },
+  "request_fingerprint": "e0cc315d030beeb620eac0de33a7c5618525395f82f1c99d2cbc3e8812d371e7",
+  "request_id": "selfdev-live-ci-handoff-proof-20261007-101",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "operation": "status",
+    "request_fingerprint": "e0cc315d030beeb620eac0de33a7c5618525395f82f1c99d2cbc3e8812d371e7",
+    "result": {
+      "authority": {
+        "repo_branch": "main",
+        "repo_dirty": true,
+        "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+      },
+      "disk": {
+        "available_bytes": 21026009088,
+        "total_bytes": 245107195904,
+        "used_bytes": 224081186816
+      },
+      "runtime": {
+        "platform": "darwin",
+        "python_executable": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "python_version": "3.13.15"
+      }
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:22:36.813466+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
