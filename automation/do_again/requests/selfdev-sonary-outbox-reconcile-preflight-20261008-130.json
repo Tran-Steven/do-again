@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-outbox-reconcile-preflight-20261008-130",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:36:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:56:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, hashlib\nfrom pathlib import Path\n\ntarget=Path(\"/Users/steventran/Sonary\")\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nstate=root/\"state\"\noutbox=state/\"browser_outbox\"\nuncertain=state/\"browser_delivery_uncertain.json\"\n\ndef read_json(p):\n    try:\n        v=json.loads(p.read_text())\n        return v if isinstance(v,dict) else {}\n    except Exception:\n        return {}\n\nitems=[]\nif outbox.is_dir():\n    for p in sorted(outbox.glob(\"*.json\")):\n        items.append({\n            \"name\":p.name,\n            \"mtime\":p.stat().st_mtime,\n            \"payload\":read_json(p),\n        })\n\nprint(json.dumps({\n  \"outbox_items\":items,\n  \"uncertain_exists\":uncertain.is_file(),\n  \"uncertain\":read_json(uncertain) if uncertain.is_file() else None,\n  \"browser_status\":read_json(state/\"browser_status.json\"),\n},indent=2,sort_keys=True))\nprint(\"SONARY_OUTBOX_RECONCILIATION_PREFLIGHT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
