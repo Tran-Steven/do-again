@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:23:55.424035+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "c6acdb6c62668c478975699147885980650ceb8e14d2dd79cb6f8f8b0c41c3a9",
+  "request_id": "selfdev-issue10-final-closure-audit-20261008-122",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "c6acdb6c62668c478975699147885980650ceb8e14d2dd79cb6f8f8b0c41c3a9",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-issue10-final-closure-audit-20261008-122/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 3.021,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 2784,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-issue10-final-closure-audit-20261008-122/script.py",
+      "script_sha256": "cb0d8cc71cdb1ab2cdb950be91757db2c7ce5ac09d89d7419ec55bcb0044262e",
+      "stderr": "runtime not current: /Users/steventran/Sonary\n",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"acceptance_evidence\": {\n    \"fault_injection\": \"covered by -101/-104/-109/-116/-117/-118/-119/-121 live and isolated installed-runtime proofs\",\n    \"intentional_continuous_goals\": \"configs/status inspected below\",\n    \"runtime_validation\": \"canonical runtime hash parity checked below\",\n    \"safe_upgrade_flow\": \"covered by staged rollout + verified runtime journals + in-flight deferral receipts\",\n    \"status_distinctions\": \"status output + liveness states inspected below\",\n    \"visible_incident_dedupe\": \"covered by #19/#20 reproduction, PR #22, and deployed #30 reuse proof\"\n  },\n  \"projects\": [\n    {\n      \"browser_status\": {\n        \"error\": null,\n        \"pending_receipts\": 0,\n        \"recorded_at_utc\": \"2026-10-08T13:23:30.090288+00:00\",\n        \"state\": \"ready\"\n      },\n      \"continuous_config\": true,\n      \"head\": \"f5179f78ec60017a786743a548313f60f3d01a41\",\n      \"liveness\": {\n        \"attempts\": 0,\n        \"busy_since\": 1791465748.584885,\n        \"goal_id\": \"issue-10-live-ci-handoff-proof\",\n        \"goal_state\": \"in_progress\",\n        \"progress_at\": 1791465702.9515953,\n        \"receipt_id\": \"selfdev-cross-project-installed-fault-smoke-20261008-121\",\n        \"stale_goal_superseded\": \"selfdev-live-ci-uncertain-recovery-audit-20261007-103\",\n        \"state\": \"generating\"\n      },\n      \"repo\": \"/Users/steventran/do-again\",\n      \"report_stalls_config\": true,\n      \"runtime_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n      \"runtime_matches_current_source\": true,\n      \"status_cli\": {\n        \"rc\": 0,\n        \"stderr\": \"\",\n        \"stdout\": \"platform=macos\\nservice_manager=launchd\\nrepo=/Users/steventran/do-again\\nlabel=io.github.tran-steven.do-again.41857a676462\\ninstalled=True\\nrunning=True\\npid=49258\\nruntime_dir=/Users/steventran/.do_again/projects/41857a676462\\ncontrol_worktree=/Users/steventran/.do_again/projects/41857a676462/control\\nbrowser_enabled=True\\nbrowser_running=True\\nbrowser_mode=background\\nbrowser_authenticated=True\\nbrowser_session_ready=True\\nautomation_chat=https://chatgpt.com/c/6ac683c3-93ac-83e8-95a3-78905b34577e\\nbrowser_delivery_state=ready\\nbrowser_pending_receipts=0\\nliveness_state=generating\\nliveness_last_progress=1791465702.9515953\\nliveness_recovery_attempts=0\\n\"\n      }\n    },\n    {\n      \"browser_status\": {\n        \"error\": null,\n        \"pending_receipts\": 0,\n        \"recorded_at_utc\": \"2026-10-08T13:23:30.686077+00:00\",\n        \"state\": \"ready\"\n      },\n      \"continuous_config\": true,\n      \"head\": \"a705a94e501e664359e6071947120a64abc927a4\",\n      \"liveness\": {\n        \"attempts\": 0,\n        \"goal_state\": \"in_progress\",\n        \"progress_at\": 1791465676.5038142,\n        \"receipt_id\": \"jobpipe-live-ats-http-status-form-readiness-20261008-01\",\n        \"state\": \"idle_grace\"\n      },\n      \"repo\": \"/Users/steventran/jobpipe\",\n      \"report_stalls_config\": true,\n      \"runtime_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n      \"runtime_matches_current_source\": true,\n      \"status_cli\": {\n        \"rc\": 0,\n        \"stderr\": \"\",\n        \"stdout\": \"platform=macos\\nservice_manager=launchd\\nrepo=/Users/steventran/jobpipe\\nlabel=io.github.tran-steven.do-again.42ba1b7dcb92\\ninstalled=True\\nrunning=True\\npid=54526\\nruntime_dir=/Users/steventran/.do_again/projects/42ba1b7dcb92\\ncontrol_worktree=/Users/steventran/.do_again/projects/42ba1b7dcb92/control\\nbrowser_enabled=True\\nbrowser_running=True\\nbrowser_mode=background\\nbrowser_authenticated=True\\nbrowser_session_ready=True\\nautomation_chat=https://chatgpt.com/c/6ac6d206-e284-83e8-8f01-5fdc80ce1e77\\nbrowser_delivery_state=ready\\nbrowser_pending_receipts=0\\nliveness_state=idle_grace\\nliveness_last_progress=1791465676.5038142\\nliveness_recovery_attempts=0\\n\"\n      }\n    },\n    {\n      \"browser_status\": {\n        \"error\": null,\n        \"pending_receipts\": 0,\n        \"recorded_at_utc\": \"2026-10-08T05:15:59.440215+00:00\",\n        \"state\": \"ready\"\n      },\n      \"continuous_config\": true,\n      \"head\": \"af82719515ed41d375ea73b875a575cb8859b3f7\",\n      \"liveness\": {\n        \"attempts\": 0,\n        \"busy_since\": 1791436528.566805,\n        \"goal_state\": \"in_progress\",\n        \"progress_at\": 1791436502.1097744,\n        \"receipt_id\": \"sonary-daw-typecheck-regression-gate-20261008-142\",\n        \"state\": \"working\"\n      },\n      \"repo\": \"/Users/steventran/Sonary\",\n      \"report_stalls_config\": true,\n      \"runtime_hash\": \"130cdb7f857513c486e910f35d085967dc4d9d1f6662cebe6881f0328c8bafd2\",\n      \"runtime_matches_current_source\": false,\n      \"status_cli\": {\n        \"rc\": 0,\n        \"stderr\": \"\",\n        \"stdout\": \"platform=macos\\nservice_manager=launchd\\nrepo=/Users/steventran/Sonary\\nlabel=io.github.tran-steven.do-again.d05c35935833\\ninstalled=True\\nrunning=False\\npid=None\\nruntime_dir=/Users/steventran/.do_again/projects/d05c35935833\\ncontrol_worktree=/Users/steventran/.do_again/projects/d05c35935833/control\\nbrowser_enabled=True\\nbrowser_running=True\\nbrowser_mode=background\\nbrowser_authenticated=True\\nbrowser_session_ready=True\\nautomation_chat=https://chatgpt.com/c/6ac6c4fd-3c50-83e8-b727-6a4ea8a290f3\\nbrowser_delivery_state=ready\\nbrowser_pending_receipts=0\\nliveness_state=working\\nliveness_last_progress=1791436502.1097744\\nliveness_recovery_attempts=0\\n\"\n      }\n    }\n  ],\n  \"source_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"source_head\": \"f5179f78ec60017a786743a548313f60f3d01a41\"\n}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:23:52.072410+00:00",
+  "state": "failed",
+  "traceback": null
+}
