@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:25:16.343820+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "fa9881d676e73f716ddeff6d17a8b2e4b7a95dea05591161dc2b0e3e3d4d8ed6",
+  "request_id": "selfdev-sonary-current-runtime-preflight-20261008-123",
+  "schema_version": 1
+}
