@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-push-20261007-90",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T02:12:10.000000+00:00",
+  "expires_at_utc": "2026-10-08T02:32:10.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport subprocess\nfrom pathlib import Path\nwt=Path(\"/Users/steventran/.do_again/rollout-20261007\")\nexpected=\"1d92d174d49e058e0dfe46d55b5fe7bceba70fe5\"\ndef run(args,check=True):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check)\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip()\nif head!=expected or branch!=\"feat/staged-runtime-rollout-20261007\" or status:\n    raise SystemExit(f\"unexpected state head={head} branch={branch} status={status!r}\")\npush=run([\"git\",\"push\",\"-u\",\"origin\",branch],check=False)\nprint(push.stdout); print(push.stderr); print(\"push_rc=\"+str(push.returncode))\nif push.returncode: raise SystemExit(push.returncode)\nremote=run([\"git\",\"ls-remote\",\"origin\",f\"refs/heads/{branch}\"]).stdout.strip()\nprint(\"remote_ref=\"+remote)\nif expected not in remote: raise SystemExit(\"remote mismatch\")\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/rollout-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
