@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-postrecovery-upgrade-preflight-20261008-129",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:35:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:55:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess, sys, hashlib\nfrom pathlib import Path\n\nsource=Path(\"/Users/steventran/do-again\")\ntarget=Path(\"/Users/steventran/Sonary\")\nsys.path.insert(0,str(source/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(source/\"src\")\n\ndef run(args):\n    return subprocess.run(args,cwd=source,text=True,capture_output=True,check=False,env=env)\n\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\n\ndry=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(target)])\n\nprint(json.dumps({\n  \"source_head\":run([\"git\",\"-C\",str(source),\"rev-parse\",\"HEAD\"]).stdout.strip(),\n  \"source_hash\":_tree_hash(source/\"src/do_again\"),\n  \"runtime_hash\":_tree_hash(root/\"runtime/do_again\"),\n  \"dry_run\":{\"rc\":dry.returncode,\"stdout\":dry.stdout,\"stderr\":dry.stderr},\n},indent=2,sort_keys=True))\nprint(\"SONARY_POST_RECOVERY_UPGRADE_PREFLIGHT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
