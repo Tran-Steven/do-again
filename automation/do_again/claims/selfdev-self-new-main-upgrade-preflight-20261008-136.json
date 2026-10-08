@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:45:51.735431+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "035babb8c76965c18aab5dbbbe5d96debc2d3cd1f59a65fe6a7fe158d779fe79",
+  "request_id": "selfdev-self-new-main-upgrade-preflight-20261008-136",
+  "schema_version": 1
+}
