@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:07:43.832801+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "3a8b8a21bafb75c8d07960c617a78b8b57e428a9c2ff9c00a1092f76b67ee543",
+  "request_id": "selfdev-rollover-foundation-implement-20261007-34",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "3a8b8a21bafb75c8d07960c617a78b8b57e428a9c2ff9c00a1092f76b67ee543",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-foundation-implement-20261007-34/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 2.075,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 18171,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-foundation-implement-20261007-34/script.py",
+      "script_sha256": "268cfc1f060bb6c2498829b53fdfa819c3e135ff2c187c0ec61f97a7d682978b",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n\n=== focused stderr ===\n........do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n...E.............EEE.E..................E....\n======================================================================\nERROR: test_failed_rollover_preserves_old_chat_binding (tests.test_browser_hardening.BrowserHardeningTests.test_failed_rollover_preserves_old_chat_binding)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser_hardening.py\", line 226, in test_failed_rollover_preserves_old_chat_binding\n    browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1146, in _rollover_project_chat\n    token = secrets.token_hex(16)\n            ^^^^^^^\nNameError: name 'secrets' is not defined. Did you forget to import 'secrets'?\n\n======================================================================\nERROR: test_rollover_failed_ack_preserves_binding_and_persists_failed_transaction (tests.test_browser_hardening.BrowserHardeningTests.test_rollover_failed_ack_preserves_binding_and_persists_failed_transaction)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser_hardening.py\", line 309, in test_rollover_failed_ack_preserves_binding_and_persists_failed_transaction\n    }), patch.object(browser.secrets, \"token_hex\", return_value=\"fixedtoken\"), patch.object(\n                     ^^^^^^^^^^^^^^^\nAttributeError: module 'do_again.browser.runtime' has no attribute 'secrets'\n\n======================================================================\nERROR: test_rollover_pressure_uses_configured_character_threshold (tests.test_browser_hardening.BrowserHardeningTests.test_rollover_pressure_uses_configured_character_threshold)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser_hardening.py\", line 358, in test_rollover_pressure_uses_configured_character_threshold\n    self.assertTrue(browser._rollover_needed(self.target))\n                    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1124, in _rollover_needed\n    if warning or _rollover_needed(target):\n                  ~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1124, in _rollover_needed\n    if warning or _rollover_needed(target):\n                  ~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1124, in _rollover_needed\n    if warning or _rollover_needed(target):\n                  ~~~~~~~~~~~~~~~~^^^^^^^^\n  [Previous line repeated 977 more times]\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1123, in _rollover_needed\n    warning = _context_limit_warning(target)\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 1168, in __call__\n    self._increment_mock_call(*args, **kwargs)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 1176, in _increment_mock_call\n    self.called = True\n    ^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py\", line 802, in __setattr__\n    return object.__setattr__(self, name, value)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^\nRecursionError: maximum recursion depth exceeded\n\n======================================================================\nERROR: test_rollover_transport_failure_closes_unbound_target (tests.test_browser_hardening.BrowserHardeningTests.test_rollover_transport_failure_closes_unbound_target)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser_hardening.py\", line 235, in test_rollover_transport_failure_closes_unbound_target\n    browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1146, in _rollover_project_chat\n    token = secrets.token_hex(16)\n            ^^^^^^^\nNameError: name 'secrets' is not defined. Did you forget to import 'secrets'?\n\n======================================================================\nERROR: test_successful_rollover_records_owned_successor_before_binding (tests.test_browser_hardening.BrowserHardeningTests.test_successful_rollover_records_owned_successor_before_binding)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser_hardening.py\", line 333, in test_successful_rollover_records_owned_successor_before_binding\n    browser.secrets, \"token_hex\", return_value=\"fixedtoken\"\n    ^^^^^^^^^^^^^^^\nAttributeError: module 'do_again.browser.runtime' has no attribute 'secrets'\n\n======================================================================\nERROR: test_rollover_persists_new_chat_and_closes_old_target (tests.test_browser.BrowserRuntimeTests.test_rollover_persists_new_chat_and_closes_old_target)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser.py\", line 431, in test_rollover_persists_new_chat_and_closes_old_target\n    target, updated = _rollover_project_chat(\n                      ~~~~~~~~~~~~~~~~~~~~~~^\n        repo, record, port=9223, old_target=old_target\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1146, in _rollover_project_chat\n    token = secrets.token_hex(16)\n            ^^^^^^^\nNameError: name 'secrets' is not defined. Did you forget to import 'secrets'?\n\n----------------------------------------------------------------------\nRan 53 tests in 1.201s\n\nFAILED (errors=6)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:07:41.479367+00:00",
+  "state": "failed",
+  "traceback": null
+}
