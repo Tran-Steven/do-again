@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:37:59.661058+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "eab5143472b23dbf8407cdf8e440a91538097d021fc9d8791bb53847edd52586",
+  "request_id": "selfdev-doctor-fix-test-stub-repair-20261007-65",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "eab5143472b23dbf8407cdf8e440a91538097d021fc9d8791bb53847edd52586",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-doctor-fix-test-stub-repair-20261007-65/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 15.45,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 4622,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-doctor-fix-test-stub-repair-20261007-65/script.py",
+      "script_sha256": "4aa66ac5b49b2eda465cd4e34ba3106fc5e74b2962704cd3e7ca098d4b58164e",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n{\n  \"new_request_id\": \"retry-1b090b9afbd44000\",\n  \"original_request_id\": \"req-failed-1234\",\n  \"previous_state\": \"failed\",\n  \"request\": {\n    \"args\": {},\n    \"continuation\": {\n      \"acknowledged_receipts\": [\n        \"req-failed-1234\"\n      ],\n      \"goal_state\": \"in_progress\",\n      \"summary\": \"Retry of req-failed-1234 after terminal state failed.\"\n    },\n    \"expected\": {},\n    \"expires_at_utc\": \"2026-10-08T00:47:50.000828+00:00\",\n    \"issued_at_utc\": \"2026-10-08T00:37:50.000828+00:00\",\n    \"limits\": {},\n    \"operation\": \"status\",\n    \"request_id\": \"retry-1b090b9afbd44000\",\n    \"schema_version\": 1\n  }\n}\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpc37z1cg_/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp52flwc5q/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp52flwc5q/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp52flwc5q/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp52flwc5q/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp52flwc5q/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n.do-again: cancel: request is already claimed and cannot be safely cancelled\n..........do-again: retry: ambiguous replay requires a fresh manually scoped request after inspection\n............................\n----------------------------------------------------------------------\nRan 39 tests in 14.729s\n\nOK\n\nfocused_rc=0\n=== commit stdout ===\n[feat/self-dogfood-20261007 25023d0] Add conservative doctor fix mode\n 2 files changed, 200 insertions(+), 15 deletions(-)\n\n=== commit stderr ===\n\nnew_head=25023d0b9d28b0d2cccec9022ca5cc470124d749\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:37:43.972300+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
