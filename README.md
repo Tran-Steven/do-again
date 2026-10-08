@@ -356,3 +356,18 @@ MIT
 Rollout ignores only children positively identified as exited zombies. Live children and children with unavailable process state still block cutover. Process filtering does not override started-ledger or uncertain-delivery blockers.
 
 Browser submission uses one Enter gesture. Missing composer acceptance and all exceptions after that gesture are uncertain and prohibit a fallback click or automatic resend. Pre-dispatch composer failures remain distinguishable. A durable pre-dispatch intent journal and separate acknowledgment are still required before M3 acceptance.
+### Operator authority journal (integration foundation)
+
+`AuthorityRegistry` stores explicit `active`, `paused`, `maintenance`, and
+`stopped` intent, an accepted goal revision, and a monotonically increasing
+authority epoch in a separate SQLite journal. Missing, corrupt, unsupported,
+symlinked, or unregistered authority denies admission. Initialization grants
+no project authority. Admission and pause use the same transaction lock:
+operator pause waits for an effect's initiation boundary, then prevents new
+admissions while admitted execution may drain. Project identity comes from
+the trusted repository connection, never a request payload.
+
+This module is an integration foundation, not a deployed security boundary.
+Privileged entrypoints still need integration, and native confinement must
+protect the journal before arbitrary scripts can run under its authority.
+Do not deploy or claim M2 acceptance from these registry tests alone.
