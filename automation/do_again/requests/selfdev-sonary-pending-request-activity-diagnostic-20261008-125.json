@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-pending-request-activity-diagnostic-20261008-125",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:28:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:48:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess, time, hashlib\nfrom pathlib import Path\n\ntarget=Path(\"/Users/steventran/Sonary\")\nreq_id=\"sonary-daw-typecheck-stage-isolation-20261008-143\"\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\ncontrol=root/\"control\"\nstate=root/\"state\"\n\nreq=control/\"automation/do_again/requests\"/f\"{req_id}.json\"\nreceipt=control/\"automation/do_again/receipts\"/f\"{req_id}.json\"\n\ndef read_json(p):\n    try:\n        v=json.loads(p.read_text())\n        return v if isinstance(v,dict) else {}\n    except Exception:\n        return {}\n\nps=subprocess.run([\"ps\",\"-axo\",\"pid=,ppid=,etime=,command=\"],text=True,capture_output=True)\nmatching=[]\nfor line in ps.stdout.splitlines():\n    if req_id in line or str(root) in line:\n        matching.append(line.strip())\n\nout={\n  \"request_id\":req_id,\n  \"request_exists\":req.is_file(),\n  \"request_mtime\":req.stat().st_mtime if req.is_file() else None,\n  \"request_age_seconds\":time.time()-req.stat().st_mtime if req.is_file() else None,\n  \"request\":read_json(req) if req.is_file() else None,\n  \"receipt_exists\":receipt.is_file(),\n  \"receipt\":read_json(receipt) if receipt.is_file() else None,\n  \"liveness\":read_json(state/\"liveness.json\"),\n  \"browser_status\":read_json(state/\"browser_status.json\"),\n  \"matching_processes\":matching,\n}\nprint(json.dumps(out,indent=2,sort_keys=True))\nprint(\"SONARY_PENDING_REQUEST_ACTIVITY_DIAGNOSTIC_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
