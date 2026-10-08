@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ci-lifecycle-audit-20261007-92",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T02:51:30.000000+00:00",
+  "expires_at_utc": "2026-10-08T03:21:30.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport subprocess\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nwt=Path(\"/Users/steventran/.do_again/lifecycle-ci-20261007\")\nbranch=\"feat/ci-wait-lifecycle-20261007\"\nexpected=\"cbf5f56a41d3a61a33b4b3ea873d93461d4fc232\"\n\ndef run(args,cwd=repo,check=True):\n    return subprocess.run(args,cwd=cwd,text=True,capture_output=True,check=check)\n\n# Preserve original checkout; only require tracked cleanliness.\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.splitlines()\ntracked=[x for x in status if not x.startswith(\"?? \")]\nif tracked:\n    raise SystemExit(f\"tracked changes in source checkout: {tracked}\")\n\nfetch=run([\"git\",\"fetch\",\"origin\",\"main\"],check=False)\nprint(fetch.stdout); print(fetch.stderr)\nif fetch.returncode: raise SystemExit(fetch.returncode)\norigin=run([\"git\",\"rev-parse\",\"origin/main\"]).stdout.strip()\nprint(\"origin_main=\"+origin)\nif origin!=expected:\n    raise SystemExit(f\"unexpected origin/main {origin}\")\n\nif wt.exists():\n    raise SystemExit(f\"worktree exists: {wt}\")\nif run([\"git\",\"show-ref\",\"--verify\",f\"refs/heads/{branch}\"],check=False).returncode==0:\n    raise SystemExit(f\"branch exists: {branch}\")\n\nadd=run([\"git\",\"worktree\",\"add\",\"-b\",branch,str(wt),expected],check=False)\nprint(add.stdout); print(add.stderr)\nif add.returncode: raise SystemExit(add.returncode)\n\ndef wrun(args):\n    return run(args,cwd=wt)\nprint(\"branch=\"+wrun([\"git\",\"branch\",\"--show-current\"]).stdout.strip())\nprint(\"head=\"+wrun([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status=\"+repr(wrun([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n\nfor rel in [\"src/do_again/service/liveness.py\",\"tests/test_liveness.py\",\"src/do_again/cli.py\"]:\n    p=wt/rel\n    print(f\"\\n===== {rel} =====\")\n    lines=p.read_text().splitlines()\n    for i,l in enumerate(lines):\n        if any(k in l.lower() for k in (\"goal_state\",\"waiting_for_ci\",\"continuous\",\"progress_at\",\"recover\",\"stalled\",\"check_liveness\",\"github\",\"workflow\")):\n            a=max(0,i-4); b=min(len(lines),i+10)\n            print(f\"--- {a+1}-{b} ---\")\n            for j in range(a,b): print(f\"{j+1}: {lines[j]}\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
