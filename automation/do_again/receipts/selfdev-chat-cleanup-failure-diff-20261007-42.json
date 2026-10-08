@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:14:53.421151+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "dd1a2cc9f71b07c9ff2418d559873c2204c4f2ff2045ff79d24b680259b9f852",
+  "request_id": "selfdev-chat-cleanup-failure-diff-20261007-42",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "dd1a2cc9f71b07c9ff2418d559873c2204c4f2ff2045ff79d24b680259b9f852",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-chat-cleanup-failure-diff-20261007-42/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.943,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 718,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-chat-cleanup-failure-diff-20261007-42/script.py",
+      "script_sha256": "268126611993b5a9007a129b8569ac94bd0e407c37bd37283f0ae58391d7cbb0",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=e71260f973e45da941535d526fd4e4b01477f7e2\nstatus:\n M src/do_again/browser/__init__.py\n M src/do_again/browser/runtime.py\n M src/do_again/cli.py\n M tests/test_browser_hardening.py\n M tests/test_cli.py\n\ncli test excerpt:\n0220:     def test_chats_cleanup_is_dry_run_by_default(self) -> None:\n0221:         with tempfile.TemporaryDirectory() as tmp:\n0222:             repo = self.make_repo(Path(tmp))\n0223:             payload = {\n0224:                 \"dry_run\": True,\n0225:                 \"eligible_chat_ids\": [\"old\"],\n0226:                 \"queued_chat_ids\": [],\n0227:                 \"inventory\": {\"candidates\": []},\n0228:                 \"queue\": {\"items\": []},\n0229:             }\n0230:             output = io.StringIO()\n0231:             with patch(\n0232:                 \"do_again.cli.queue_verified_archives\", return_value=payload\n0233:             ) as cleanup, patch(\n0234:                 \"sys.argv\", [\"do-again\", \"chats\", \"cleanup\", str(repo)]\n0235:             ), redirect_stdout(output):\n0236:                 rc = main()\n0237:             self.assertEqual(rc, 0)\n0238:             cleanup.assert_called_once_with(repo, candidate_ids=[], apply=False)\n0239:             self.assertIn('\"dry_run\": true', output.getvalue())\n0240: \n0241: \n0242: \n0243:     def test_setup_no_browser_disables_existing_browser_setting(self) -> None:\n0244:         with tempfile.TemporaryDirectory() as tmp:\n0245:             repo = self.make_repo(Path(tmp))\n0246:             fake_status = {\"installed\": False, \"running\": False}\n0247:             with patch(\"do_again.cli.service_status\", return_value=fake_status):\n0248:                 rc = setup_project(str(repo), install_background=False, browser=False)\ndiffstat:\n src/do_again/browser/__init__.py |   6 ++\n src/do_again/browser/runtime.py  | 183 +++++++++++++++++++++++++++++++++++++++\n src/do_again/cli.py              |  62 +++++++++++++\n tests/test_browser_hardening.py  |  43 +++++++++\n tests/test_cli.py                |  23 +++++\n 5 files changed, 317 insertions(+)\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:14:52.112157+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
