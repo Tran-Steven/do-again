@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-foundation-second-failure-audit-20261007-37",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:09:20.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:39:20.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\n\ndef run(*args):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=True).stdout\n\nprint(\"branch=\" + run(\"git\",\"branch\",\"--show-current\").strip())\nprint(\"head=\" + run(\"git\",\"rev-parse\",\"HEAD\").strip())\nprint(\"status:\")\nprint(run(\"git\",\"status\",\"--porcelain=v1\"))\n\nruntime = (wt/\"src/do_again/browser/runtime.py\").read_text().splitlines()\nfor i,line in enumerate(runtime,1):\n    if \"def _conversation_pressure_chars\" in line or \"def _rollover_needed\" in line:\n        print(f\"=== runtime around {i} ===\")\n        for n in range(i, min(i+28,len(runtime))+1):\n            print(f\"{n:04d}: {runtime[n-1]}\")\n\ntests = (wt/\"tests/test_browser.py\").read_text().splitlines()\nfor i,line in enumerate(tests,1):\n    if \"test_rollover_persists_new_chat_and_closes_old_target\" in line or \"test_notify_receipts_batches_multiple_receipts_in_one_submission\" in line:\n        print(f\"=== test_browser around {i} ===\")\n        for n in range(i, min(i+55,len(tests))+1):\n            print(f\"{n:04d}: {tests[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
