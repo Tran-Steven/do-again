@@ -37,8 +37,12 @@ class AuthorityRegistry:
         for path in (self.path, *self.path.parents):
             if path.is_symlink():
                 raise AuthorityDenied("operator authority path contains a symlink")
-        if self.path.exists() and not self.path.is_file():
-            raise AuthorityDenied("operator authority is not a regular file")
+        if self.path.exists():
+            stat = self.path.stat()
+            if not self.path.is_file() or stat.st_nlink != 1:
+                raise AuthorityDenied("operator authority must be an unaliased regular file")
+            if os.name == "posix" and (stat.st_uid != os.getuid() or stat.st_mode & 0o077):
+                raise AuthorityDenied("operator authority must be privately owned")
 
     def initialize(self) -> None:
         """Explicit trusted operator action; contains no default project grants."""

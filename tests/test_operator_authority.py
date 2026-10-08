@@ -75,3 +75,25 @@ class OperatorAuthorityTests(unittest.TestCase):
         with self.assertRaises(AuthorityDenied):
             self.registry.initialize()
         self.assertEqual(target.read_bytes(), b"sentinel")
+
+    def test_unknown_schema_fails_closed_and_is_preserved(self):
+        import sqlite3
+        self.registry.initialize()
+        with sqlite3.connect(self.registry.path) as db:
+            db.execute("PRAGMA user_version=99")
+        with self.assertRaises(AuthorityDenied):
+            self.registry.status(self.repo)
+        with self.assertRaises(AuthorityDenied):
+            self.registry.initialize()
+
+    def test_shared_permissions_and_hardlink_alias_are_rejected(self):
+        import os
+        self.registry.initialize()
+        self.registry.path.chmod(0o644)
+        if os.name == "posix":
+            with self.assertRaises(AuthorityDenied):
+                self.registry.status(self.repo)
+        self.registry.path.chmod(0o600)
+        os.link(self.registry.path, self.root / "alias")
+        with self.assertRaises(AuthorityDenied):
+            self.registry.status(self.repo)
