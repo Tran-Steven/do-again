@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:47:36.167077+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "584468b9e5232572ef9c458699fe3c23f151f6272eb3603b64176f34add02ff7",
+  "request_id": "selfdev-self-135-delivery-reconciliation-audit-20261008-137",
+  "schema_version": 1
+}
