@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-hook-audit-20261007-87",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T02:04:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T02:24:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nimport subprocess\n\nwt=Path(\"/Users/steventran/.do_again/rollout-20261007\")\n\ndef emit(rel, start, end):\n    p=wt/rel\n    lines=p.read_text().splitlines()\n    print(f\"===== {rel}:{start}-{end} =====\")\n    for i in range(start-1,min(end,len(lines))):\n        print(f\"{i+1}: {lines[i]}\")\n\nemit(\"src/do_again/service/runtime.py\", 620, 760)\nemit(\"src/do_again/cli.py\", 1, 230)\nemit(\"src/do_again/cli.py\", 900, 1180)\nemit(\"src/do_again/service/daemon.py\", 1, 210)\n",
+    "cwd": "/Users/steventran/.do_again/rollout-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
