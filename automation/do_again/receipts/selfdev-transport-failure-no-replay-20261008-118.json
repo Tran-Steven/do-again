@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:16:39.455288+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "db5e659bc6c4e9b7ce903a56c91b59201153a4e27839e3087aad86feb1aaa633",
+  "request_id": "selfdev-transport-failure-no-replay-20261008-118",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "db5e659bc6c4e9b7ce903a56c91b59201153a4e27839e3087aad86feb1aaa633",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-transport-failure-no-replay-20261008-118/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.604,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 3810,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-transport-failure-no-replay-20261008-118/script.py",
+      "script_sha256": "0c5cafb53e1487ce4aa68a2cf054dae755e349e64ffd800d995561c6bfe8a466",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"first\": {\n    \"attempts\": 1,\n    \"idle_resume_at\": 1791465398.60775,\n    \"idle_resume_marker\": \"DO_AGAIN_LIVENESS_CONTINUE token=01ca2d6fa3561a550e40\",\n    \"idle_resume_phase\": \"uncertain\",\n    \"idle_resume_probe_error\": \"TimeoutError\",\n    \"last_resume_at\": 1791465398.60775,\n    \"progress_at\": 1791461798.6015701,\n    \"receipt_id\": \"r1\",\n    \"state\": \"idle_delivery_uncertain\"\n  },\n  \"first_exception\": \"TimeoutError:injected network/CDP outcome unknown\",\n  \"second\": {\n    \"attempts\": 1,\n    \"goal_state\": \"in_progress\",\n    \"idle_resume_at\": 1791465278.6110778,\n    \"idle_resume_marker\": \"DO_AGAIN_LIVENESS_CONTINUE token=01ca2d6fa3561a550e40\",\n    \"idle_resume_phase\": \"uncertain\",\n    \"idle_resume_probe_error\": \"TimeoutError\",\n    \"last_resume_at\": 1791465398.60775,\n    \"progress_at\": 1791461798.6015701,\n    \"receipt_id\": \"r1\",\n    \"state\": \"idle_delivery_uncertain\"\n  },\n  \"second_state\": \"idle_delivery_uncertain\",\n  \"send_calls\": [\n    1,\n    1,\n    1\n  ],\n  \"third\": {\n    \"attempts\": 1,\n    \"goal_state\": \"in_progress\",\n    \"idle_resume_at\": 1791465278.6110778,\n    \"idle_resume_error\": \"No receipt arrived before browser-handoff deadline\",\n    \"idle_resume_marker\": \"DO_AGAIN_LIVENESS_CONTINUE token=01ca2d6fa3561a550e40\",\n    \"idle_resume_phase\": \"uncertain\",\n    \"idle_resume_probe_error\": \"TimeoutError\",\n    \"last_resume_at\": 1791465398.60775,\n    \"progress_at\": 1791461798.6015701,\n    \"receipt_id\": \"r1\",\n    \"state\": \"stalled_idle_handoff\"\n  },\n  \"third_state\": \"stalled_idle_handoff\"\n}\nTRANSPORT_FAILURE_NO_REPLAY_ACCEPTANCE_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:16:38.020840+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
