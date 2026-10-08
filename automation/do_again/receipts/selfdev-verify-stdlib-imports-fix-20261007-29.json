@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:02:10.349962+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "df45d0da4b98388ed50692d46c9f7983b7268ced1a7e43d86cf410d3be4b1da7",
+  "request_id": "selfdev-verify-stdlib-imports-fix-20261007-29",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "df45d0da4b98388ed50692d46c9f7983b7268ced1a7e43d86cf410d3be4b1da7",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-verify-stdlib-imports-fix-20261007-29/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 11.436,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1985,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-verify-stdlib-imports-fix-20261007-29/script.py",
+      "script_sha256": "2ec3815c1e5bc90f6099e4b07b478f3397383f4c9a1bf5183c5f5a46b2ab3606",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp7ujdgm66/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp6v3ugvrq/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp6v3ugvrq/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp6v3ugvrq/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp6v3ugvrq/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp6v3ugvrq/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n..............\n----------------------------------------------------------------------\nRan 14 tests in 8.282s\n\nOK\n\nfocused_rc=0\n=== commit stdout ===\n[feat/self-dogfood-20261007 585fbf9] Add end-to-end setup verification command\n 2 files changed, 199 insertions(+), 3 deletions(-)\n\n=== commit stderr ===\n\nnew_head=585fbf9340de57a9bc6fcd662e5979bb37a9c7c9\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:01:58.584138+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
