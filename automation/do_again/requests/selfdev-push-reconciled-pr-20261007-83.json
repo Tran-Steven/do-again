@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-push-reconciled-pr-20261007-83",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T01:16:40.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:46:40.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"8f79679d7b70e8e610e2a1151c70d8baf3d4220e\"\n\ndef run(args, check=True):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip()\nif head!=expected or branch!=\"feat/self-dogfood-20261007\" or status:\n    raise SystemExit(f\"unexpected state head={head} branch={branch} status={status!r}\")\n\npush=run([\"git\",\"push\",\"origin\",\"feat/self-dogfood-20261007\"],check=False)\nprint(\"=== push stdout ===\"); print(push.stdout)\nprint(\"=== push stderr ===\"); print(push.stderr)\nprint(\"push_rc=\"+str(push.returncode))\nif push.returncode:\n    raise SystemExit(push.returncode)\n\nremote=run([\"git\",\"ls-remote\",\"origin\",\"refs/heads/feat/self-dogfood-20261007\"]).stdout.strip()\nprint(\"remote_ref=\"+remote)\nif expected not in remote:\n    raise SystemExit(\"remote head mismatch\")\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
