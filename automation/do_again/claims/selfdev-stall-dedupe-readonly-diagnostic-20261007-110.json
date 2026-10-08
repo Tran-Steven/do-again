@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:47642:1791434221:f2c7c05b3c36",
+  "claimed_at_utc": "2026-10-08T04:37:10.165332+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 47642,
+  "request_fingerprint": "ba12c8ad0347e7fcd01cccfd072e666bea11b83e77f712a6c2e276e3b60749f6",
+  "request_id": "selfdev-stall-dedupe-readonly-diagnostic-20261007-110",
+  "schema_version": 1
+}
