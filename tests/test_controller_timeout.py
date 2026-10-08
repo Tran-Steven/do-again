@@ -63,6 +63,21 @@ class ControllerTimeoutTests(unittest.TestCase):
         enter.assert_called_once()
         self.assertEqual(evaluate.call_count, 22)
 
+    def test_enter_then_no_send_button_is_uncertain(self):
+        with (
+            patch.object(browser,"_assistant_snapshot",return_value={"busy":False}),
+            patch.object(browser,"_context_limit_warning",return_value=""),
+            patch.object(cdp,"evaluate",side_effect=["ready"]+[False]*20+["no_button"]) as evaluate,
+            patch.object(cdp,"insert_text") as insert,
+            patch.object(cdp,"press_enter") as enter,
+            patch.object(browser.time,"sleep"),
+        ):
+            with self.assertRaisesRegex(BrowserSubmissionUncertain,"delivery outcome is unknown"):
+                browser.send_message(self.target,"DO_AGAIN_RECEIPT_NOT_CONFIRMED",wait_for_response=False)
+        self.assertEqual(evaluate.call_count,22)
+        insert.assert_called_once()
+        enter.assert_called_once()
+
     def test_readonly_snapshot_timeout_never_assumes_submission(self):
         with patch.object(browser, "_assistant_snapshot", side_effect=cdp.CdpTimeoutError("CDP timeout")):
             with self.assertRaises(cdp.CdpTimeoutError):

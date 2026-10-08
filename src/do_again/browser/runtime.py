@@ -870,7 +870,12 @@ return 'ready';
                 break
         if not accepted:
             if cdp.evaluate(target, click, timeout=10.0, user_gesture=True) != "clicked":
-                raise BrowserError("ChatGPT did not accept the submitted prompt")
+                # Enter was already dispatched and may have caused a send;
+                # a missing/disabled button cannot establish non-delivery.
+                raise BrowserSubmissionUncertain(
+                    "ChatGPT did not confirm submission after Enter; "
+                    "delivery outcome is unknown and must be reconciled"
+                )
 
         if not wait_for_response:
             return {

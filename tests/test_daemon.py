@@ -91,7 +91,7 @@ class BrowserOutboxTests(unittest.TestCase):
                 patch("do_again.service.daemon.ensure_browser_running"),
                 patch(
                     "do_again.service.daemon.notify_receipts",
-                    return_value={"response": "submitted"},
+                    return_value={"response": "already_delivered"},
                 ) as notify,
             ):
                 delivered = _drain_browser_outbox_locked(repo, state_dir)
@@ -137,7 +137,7 @@ class BrowserOutboxTests(unittest.TestCase):
                 patch("do_again.service.daemon.activate_project"),
                 patch(
                     "do_again.service.daemon.notify_receipts",
-                    return_value={"response": "submitted"},
+                    return_value={"response": "already_delivered"},
                 ),
             ):
                 delivered = _drain_browser_outbox(repo, state)
