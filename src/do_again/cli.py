@@ -36,6 +36,7 @@ from .platforms.detect import detect_platform
 from .browser.runtime import send_message, use_background_fallback
 from .core.schema import REQUEST_ID_RE, request_fingerprint
 from .service.rollout import staged_upgrade
+from .service.session_summary import build_summary, render_summary, save_summary, session_start
 from .service.runtime import (
     ServiceError,
     _default_policy,
@@ -837,6 +838,7 @@ def _service_action(action: str, path: str) -> int:
     try:
         repo = find_repo(path)
         layout = runtime_layout(repo)
+        report_since = session_start(layout) if action == "stop" else None
 
         if action in {"install", "start", "restart"}:
             _ensure_project_browser(repo)
@@ -869,7 +871,32 @@ def _service_action(action: str, path: str) -> int:
         print(f"do-again: {exc}", file=sys.stderr)
         return 1
     _print_service_status(value)
+    if action == "stop" and report_since is not None:
+        try:
+            data = build_summary(layout, since=report_since)
+            content = render_summary(data)
+            saved = save_summary(layout, data, content)
+            print("\n" + content + f"Saved recap: {saved}")
+        except (OSError, ValueError) as exc:
+            # Stopping safely always takes priority over a best-effort recap.
+            print(f"do-again: session recap unavailable: {exc}", file=sys.stderr)
     return 0
+
+
+def project_summary(path: str = ".", *, hours: float = 24.0, json_output: bool = False) -> int:
+    if not (0 < hours <= 24 * 365):
+        print("do-again: summary: hours must be between 0 and 8760", file=sys.stderr)
+        return 2
+    try:
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        now = datetime.now(timezone.utc)
+        data = build_summary(layout, since=now - timedelta(hours=hours), now=now)
+        print(json.dumps(data, indent=2, sort_keys=True) if json_output else render_summary(data))
+        return 0
+    except (ServiceError, OSError, ValueError) as exc:
+        print(f"do-again: summary: {exc}", file=sys.stderr)
+        return 1
 
 
 def list_projects() -> int:
@@ -1008,7 +1035,7 @@ def main() -> int:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{setup,verify,start,status,history,trace,logs,cancel,retry,stop,restart,upgrade,list,doctor,browser}",
+        metavar="{setup,verify,start,status,summary,history,trace,logs,cancel,retry,stop,restart,upgrade,list,doctor,browser}",
     )
 
     doctor_parser = sub.add_parser(
@@ -1055,6 +1082,12 @@ def main() -> int:
     )
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
+    summary_parser = sub.add_parser(
+        "summary", help="Read a concise, receipt-grounded work recap without stopping the service"
+    )
+    summary_parser.add_argument("path", nargs="?", default=".")
+    summary_parser.add_argument("--hours", type=float, default=24.0)
+    summary_parser.add_argument("--json", action="store_true", help="Machine-readable local report")
     upgrade_parser = sub.add_parser(
         "upgrade",
         help="Safely stage and roll out this project's copied service runtime",
@@ -1189,6 +1222,8 @@ def main() -> int:
         return verify_project(args.path, timeout_seconds=args.timeout)
     if args.command == "status":
         return status(args.path)
+    if args.command == "summary":
+        return project_summary(args.path, hours=args.hours, json_output=args.json)
     if args.command == "upgrade":
         try:
             value = staged_upgrade(args.path, apply=args.apply)
