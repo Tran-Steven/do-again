@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:58649:1791438167:1983e93cf2fc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T05:44:08.360146+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "b941e8e4105b952cd3194b1ae9719e44e46431f383cd9762500962d4aebdd1e8",
+  "request_id": "selfdev-self-upgrade-postfailure-audit-20261007-115",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "7bee017a4893ce2ad6f05113bcec9d4f5817c5b7"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "7bee017a4893ce2ad6f05113bcec9d4f5817c5b7"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "b941e8e4105b952cd3194b1ae9719e44e46431f383cd9762500962d4aebdd1e8",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-upgrade-postfailure-audit-20261007-115/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.252,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1212,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-upgrade-postfailure-audit-20261007-115/script.py",
+      "script_sha256": "fa26da58d9f1bc0a942ba1ee7a12c250223537a853f2fdb91a693596f16c7707",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"dry_run\": {\n    \"rc\": 0,\n    \"stderr\": \"\",\n    \"stdout\": \"{\\n  \\\"applied\\\": false,\\n  \\\"deferred\\\": true,\\n  \\\"effective_blockers\\\": [\\n    {\\n      \\\"kind\\\": \\\"pending_requests\\\",\\n      \\\"request_ids\\\": [\\n        \\\"selfdev-self-upgrade-postfailure-audit-20261007-115\\\"\\n      ]\\n    },\\n    {\\n      \\\"kind\\\": \\\"executor_children\\\",\\n      \\\"processes\\\": [\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-upgrade-postfailure-audit-20261007-115/script.py\\\",\\n          \\\"pid\\\": 62488,\\n          \\\"ppid\\\": 58649\\n        },\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n          \\\"pid\\\": 62490,\\n          \\\"ppid\\\": 62488\\n        },\\n        {\\n          \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n          \\\"pid\\\": 62500,\\n          \\\"ppid\\\": 62490\\n        }\\n      ]\\n    }\\n  ],\\n  \\\"offline\\\": false,\\n  \\\"preflight\\\": {\\n    \\\"blockers\\\": [\\n      {\\n        \\\"kind\\\": \\\"pending_requests\\\",\\n        \\\"request_ids\\\": [\\n          \\\"selfdev-self-upgrade-postfailure-audit-20261007-115\\\"\\n        ]\\n      },\\n      {\\n        \\\"kind\\\": \\\"executor_children\\\",\\n        \\\"processes\\\": [\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-upgrade-postfailure-audit-20261007-115/script.py\\\",\\n            \\\"pid\\\": 62488,\\n            \\\"ppid\\\": 58649\\n          },\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n            \\\"pid\\\": 62490,\\n            \\\"ppid\\\": 62488\\n          },\\n          {\\n            \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n            \\\"pid\\\": 62500,\\n            \\\"ppid\\\": 62490\\n          }\\n        ]\\n      }\\n    ],\\n    \\\"features\\\": {\\n      \\\"liveness\\\": true,\\n      \\\"rollout\\\": true\\n    },\\n    \\\"ignored_shared_browser_children\\\": [],\\n    \\\"outbox_pending\\\": [],\\n    \\\"pending_requests\\\": [\\n      \\\"selfdev-self-upgrade-postfailure-audit-20261007-115\\\"\\n    ],\\n    \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n    \\\"runtime_hash\\\": \\\"aa89bbeebc4527c1e1e493674c31cd15ee0b68212a8de7e8e5b5b94b84d1d6af\\\",\\n    \\\"safe\\\": false,\\n    \\\"service\\\": {\\n      \\\"control_worktree\\\": \\\"/Users/steventran/.do_again/projects/41857a676462/control\\\",\\n      \\\"installed\\\": true,\\n      \\\"label\\\": \\\"io.github.tran-steven.do-again.41857a676462\\\",\\n      \\\"pid\\\": 58649,\\n      \\\"platform\\\": \\\"macos\\\",\\n      \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n      \\\"running\\\": true,\\n      \\\"runtime_dir\\\": \\\"/Users/steventran/.do_again/projects/41857a676462\\\",\\n      \\\"service_manager\\\": \\\"launchd\\\"\\n    },\\n    \\\"started_requests\\\": []\\n  }\\n}\\n\"\n  },\n  \"repo_head\": \"7bee017a4893ce2ad6f05113bcec9d4f5817c5b7\",\n  \"runtime_hash\": \"aa89bbeebc4527c1e1e493674c31cd15ee0b68212a8de7e8e5b5b94b84d1d6af\",\n  \"runtime_matches_source\": true,\n  \"source_hash\": \"aa89bbeebc4527c1e1e493674c31cd15ee0b68212a8de7e8e5b5b94b84d1d6af\",\n  \"upgrade_journal\": {\n    \"backup_package\": \"/Users/steventran/.do_again/projects/41857a676462/runtime-backups/upgrade-0a9666098fe44e0b/do_again\",\n    \"created_at_utc\": \"2026-10-08T05:42:40.967665+00:00\",\n    \"expected_runtime_hash\": \"aa89bbeebc4527c1e1e493674c31cd15ee0b68212a8de7e8e5b5b94b84d1d6af\",\n    \"offline\": false,\n    \"previous_runtime_hash\": \"ea154adfb387ade5255d6d4105c38c3fda8990668367c4790847c561f8b6fb76\",\n    \"queued_requests_preserved\": [],\n    \"repo\": \"/Users/steventran/do-again\",\n    \"schema_version\": 1,\n    \"service_was_running\": true,\n    \"stage_package\": \"/Users/steventran/.do_again/projects/41857a676462/runtime-staging/upgrade-0a9666098fe44e0b/do_again\",\n    \"state\": \"verified\",\n    \"swapped_at_utc\": \"2026-10-08T05:42:46.958604+00:00\",\n    \"transaction_id\": \"upgrade-0a9666098fe44e0b\",\n    \"verification\": {\n      \"hash_matches\": true,\n      \"liveness\": true,\n      \"rollout\": true,\n      \"runtime_hash\": \"aa89bbeebc4527c1e1e493674c31cd15ee0b68212a8de7e8e5b5b94b84d1d6af\",\n      \"service\": {\n        \"control_worktree\": \"/Users/steventran/.do_again/projects/41857a676462/control\",\n        \"installed\": true,\n        \"label\": \"io.github.tran-steven.do-again.41857a676462\",\n        \"pid\": 58649,\n        \"platform\": \"macos\",\n        \"repo\": \"/Users/steventran/do-again\",\n        \"running\": true,\n        \"runtime_dir\": \"/Users/steventran/.do_again/projects/41857a676462\",\n        \"service_manager\": \"launchd\"\n      }\n    },\n    \"verified_at_utc\": \"2026-10-08T05:42:47.232672+00:00\"\n  }\n}\nPOST_FAILURE_SELF_UPGRADE_AUDIT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T05:44:06.823122+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
