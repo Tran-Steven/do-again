@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:32:57.552501+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "e7821a3f186e513b2a4bdb1ec8550e4f09c8ff0179a480cc708d0a4a0bf0adc0",
+  "request_id": "selfdev-sonary-stale-started-recovery-20261008-128",
+  "schema_version": 1
+}
