@@ -433,5 +433,76 @@ class BrowserHardeningTests(unittest.TestCase):
 
 
 
+    def test_verify_candidate_rejects_active_chat_before_browser_open(self):
+        self.bind()
+        with patch.object(browser, "ensure_browser_running") as ensure:
+            result = browser.verify_candidate_chat(self.repo, "project")
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["reason"], "currently_bound")
+        ensure.assert_not_called()
+
+    def test_verify_candidate_requires_receipt_corroboration(self):
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]), patch.object(
+            browser, "ensure_browser_running"
+        ) as ensure:
+            result = browser.verify_candidate_chat(self.repo, "historical")
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["reason"], "no_corroborating_receipts")
+        ensure.assert_not_called()
+
+    def test_archive_queue_blocks_unowned_and_active_without_ui_mutation(self):
+        self.bind()
+        queue_path = browser._archive_queue_path(self.repo)
+        browser._atomic_json(queue_path, {
+            "schema_version": 1,
+            "items": [
+                {"chat_id": "project", "chat_url": self.target.url, "state": "pending", "attempts": 0},
+                {"chat_id": "stranger", "chat_url": "https://chatgpt.com/c/stranger", "state": "pending", "attempts": 0},
+            ],
+        })
+        browser._record_owned_chat(self.repo, self.target.url, created_reason="bootstrap")
+        with patch.object(browser, "ensure_browser_running", return_value={"port": 9223}), patch.object(
+            cdp, "create_target"
+        ) as create:
+            result = browser.process_archive_queue(self.repo)
+        states = {row["chat_id"]: row["state"] for row in result["items"]}
+        self.assertEqual(states["project"], "blocked_active")
+        self.assertEqual(states["stranger"], "blocked_unowned")
+        create.assert_not_called()
+
+    def test_archive_failure_is_retryable_and_duplicate_archived_is_idempotent(self):
+        self.bind()
+        old_url = "https://chatgpt.com/c/old-owned"
+        browser._record_owned_chat(self.repo, old_url, created_reason="rollover")
+        browser.queue_verified_archives(self.repo, apply=True)
+        target = cdp.Target("old", old_url, "", "ws://127.0.0.1/old")
+        with patch.object(browser, "ensure_browser_running", return_value={"port": 9223}), patch.object(
+            cdp, "create_target", return_value=target
+        ), patch.object(browser, "wait_for_authenticated", return_value=(target, {})), patch.object(
+            browser, "_archive_chat_via_ui", side_effect=browser.BrowserError("ui changed")
+        ), patch.object(cdp, "close_target"):
+            failed = browser.process_archive_queue(self.repo)
+        self.assertEqual(failed["items"][0]["state"], "retry")
+        self.assertEqual(failed["items"][0]["attempts"], 1)
+
+        with patch.object(browser, "ensure_browser_running", return_value={"port": 9223}), patch.object(
+            cdp, "create_target", return_value=target
+        ), patch.object(browser, "wait_for_authenticated", return_value=(target, {})), patch.object(
+            browser, "_archive_chat_via_ui", return_value="clicked_archive"
+        ) as archive, patch.object(cdp, "close_target"):
+            succeeded = browser.process_archive_queue(self.repo)
+        self.assertEqual(succeeded["items"][0]["state"], "archived")
+        self.assertEqual(succeeded["items"][0]["attempts"], 2)
+        self.assertEqual(archive.call_count, 1)
+
+        with patch.object(browser, "ensure_browser_running", return_value={"port": 9223}), patch.object(
+            cdp, "create_target"
+        ) as create:
+            again = browser.process_archive_queue(self.repo)
+        self.assertEqual(again["items"][0]["state"], "archived")
+        create.assert_not_called()
+
+
+
 if __name__ == "__main__":
     unittest.main()

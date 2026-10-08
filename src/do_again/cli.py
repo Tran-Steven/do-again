@@ -23,6 +23,8 @@ from .browser import (
     discover_browser,
     ensure_browser_running,
     ensure_project_chat,
+    process_archive_queue,
+    verify_candidate_chat,
     project_record,
     setup_browser,
     stop_browser,
@@ -556,6 +558,14 @@ def _chat_cleanup_action(
                 candidate_ids=candidates or [],
                 apply=apply,
             )
+        elif action == "verify":
+            rows = [
+                verify_candidate_chat(repo, chat_id)
+                for chat_id in (candidates or [])
+            ]
+            value = {"repo": str(repo), "results": rows}
+        elif action == "run":
+            value = process_archive_queue(repo)
         else:
             raise BrowserError(f"unsupported chats action: {action}")
         print(json.dumps(value, indent=2, sort_keys=True))
@@ -646,6 +656,17 @@ def main() -> int:
         help="Show persisted archive queue status",
     )
     chats_status.add_argument("path", nargs="?", default=".")
+    chats_verify = chats_sub.add_parser(
+        "verify",
+        help="Verify historical candidates using bootstrap markers plus receipts",
+    )
+    chats_verify.add_argument("path", nargs="?", default=".")
+    chats_verify.add_argument("--candidate", action="append", required=True)
+    chats_run = chats_sub.add_parser(
+        "run",
+        help="Process the persisted archive queue for verified-owned inactive chats",
+    )
+    chats_run.add_argument("path", nargs="?", default=".")
     chats_cleanup = chats_sub.add_parser(
         "cleanup",
         help="Queue verified-owned inactive chats; dry-run unless --apply is used",

@@ -1220,6 +1220,221 @@ def queue_verified_archives(
         "queue": archive_queue_status(repo),
     }
 
+def _chat_has_bootstrap_markers(
+    target: cdp.Target,
+    *,
+    repo: Path,
+    remote_url: str,
+    control_branch: str,
+) -> bool:
+    required = [
+        "Do Again automation workspace bootstrap.",
+        f"Project: {repo.name}",
+        f"Repository: {remote_url}",
+        f"Control branch: {control_branch}",
+        "DO_AGAIN_PROJECT_READY",
+    ]
+    return all(_page_contains(target, marker) for marker in required)
+
+
+def _verify_historical_chat_ownership(
+    repo: Path,
+    chat_url: str,
+    *,
+    port: int,
+) -> dict[str, Any]:
+    record = project_record(repo)
+    remote_url = str(record.get("remote_url") or "")
+    control_branch = str(record.get("control_branch") or "operator-control")
+    if not remote_url:
+        raise BrowserError("project browser record is missing remote_url")
+    target = _find_chatgpt_target(port, chat_url)
+    created = False
+    if target is None:
+        target = cdp.create_target(port, chat_url, background=True)
+        created = True
+    try:
+        target, _ = wait_for_authenticated(
+            port, chat_url=chat_url, timeout=30.0, target=target
+        )
+        owned = _chat_has_bootstrap_markers(
+            target,
+            repo=repo,
+            remote_url=remote_url,
+            control_branch=control_branch,
+        )
+        return {
+            "owned": owned,
+            "chat_url": chat_url,
+            "evidence": "bootstrap_markers" if owned else "bootstrap_markers_missing",
+        }
+    finally:
+        if created:
+            cdp.close_target(port, target.id)
+
+
+def verify_candidate_chat(
+    repo: Path,
+    chat_id: str,
+) -> dict[str, Any]:
+    repo = repo.resolve()
+    chat_id = str(chat_id).strip()
+    if not chat_id:
+        raise BrowserError("chat id is required")
+    if chat_id in _all_bound_chat_ids():
+        return {
+            "chat_id": chat_id,
+            "verified": False,
+            "reason": "currently_bound",
+        }
+    evidence = _candidate_receipt_evidence(repo, chat_id)
+    if not evidence:
+        return {
+            "chat_id": chat_id,
+            "verified": False,
+            "reason": "no_corroborating_receipts",
+        }
+    status = ensure_browser_running(verify_auth=True)
+    result = _verify_historical_chat_ownership(
+        repo,
+        f"https://chatgpt.com/c/{chat_id}",
+        port=int(status["port"]),
+    )
+    if not result.get("owned"):
+        return {
+            "chat_id": chat_id,
+            "verified": False,
+            "reason": "bootstrap_markers_missing",
+            "receipt_evidence": evidence,
+        }
+    row = _record_owned_chat(
+        repo,
+        f"https://chatgpt.com/c/{chat_id}",
+        created_reason="historical_verified",
+    )
+    row["verified_from"] = "bootstrap_markers_and_receipts"
+    registry = _read_json(_owned_chat_registry_path(repo))
+    _atomic_json(_owned_chat_registry_path(repo), registry)
+    return {
+        "chat_id": chat_id,
+        "verified": True,
+        "reason": "bootstrap_markers_and_receipts",
+        "receipt_evidence": evidence,
+    }
+
+
+_ARCHIVE_CHAT_JS = r"""(() => {
+const visible = el => {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  const s = getComputedStyle(el);
+  return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+};
+const text = el => String(el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim();
+
+const archiveButtons = Array.from(document.querySelectorAll('button,[role="menuitem"]'))
+  .filter(visible)
+  .filter(el => /^archive( chat| conversation)?$/i.test(text(el)));
+if (archiveButtons.length === 1) {
+  archiveButtons[0].click();
+  return 'clicked_archive';
+}
+if (archiveButtons.length > 1) return 'ambiguous_archive';
+
+const menuButtons = Array.from(document.querySelectorAll('button'))
+  .filter(visible)
+  .filter(el => {
+    const label = text(el);
+    return /^(more|more options|conversation options)$/i.test(label) ||
+      /more options|conversation options/i.test(el.getAttribute('aria-label') || '');
+  });
+if (menuButtons.length !== 1) return menuButtons.length ? 'ambiguous_menu' : 'no_menu';
+menuButtons[0].click();
+return 'opened_menu';
+})()"""
+
+
+def _archive_chat_via_ui(target: cdp.Target) -> str:
+    first = str(cdp.evaluate(target, _ARCHIVE_CHAT_JS, timeout=10.0, user_gesture=True) or "")
+    if first == "clicked_archive":
+        return first
+    if first != "opened_menu":
+        raise BrowserError(f"archive control unavailable: {first or 'unknown'}")
+    time.sleep(0.2)
+    second = str(cdp.evaluate(target, _ARCHIVE_CHAT_JS, timeout=10.0, user_gesture=True) or "")
+    if second != "clicked_archive":
+        raise BrowserError(f"archive action unavailable after opening menu: {second or 'unknown'}")
+    return second
+
+
+def process_archive_queue(repo: Path) -> dict[str, Any]:
+    repo = repo.resolve()
+    queue = archive_queue_status(repo)
+    items = list(queue["items"])
+    if not items:
+        return queue
+
+    browser = ensure_browser_running(verify_auth=True)
+    port = int(browser["port"])
+    bound = _all_bound_chat_ids()
+    registry = _read_json(_owned_chat_registry_path(repo))
+    chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
+    owned = {str(row.get("chat_id") or ""): row for row in chats}
+
+    for item in items:
+        if item.get("state") == "archived":
+            continue
+        chat_id = str(item.get("chat_id") or "")
+        row = owned.get(chat_id)
+        if not row:
+            item["state"] = "blocked_unowned"
+            item["last_error"] = "chat is not in the verified owned-chat registry"
+            continue
+        if chat_id in bound:
+            item["state"] = "blocked_active"
+            item["last_error"] = "chat is currently bound to an active project"
+            continue
+
+        target = None
+        try:
+            item["attempts"] = int(item.get("attempts") or 0) + 1
+            target = cdp.create_target(
+                port,
+                str(item.get("chat_url") or row.get("chat_url") or ""),
+                background=True,
+            )
+            target, _ = wait_for_authenticated(
+                port, chat_url=target.url, timeout=30.0, target=target
+            )
+            if chat_id in _all_bound_chat_ids():
+                raise BrowserError("chat became active before archive")
+            outcome = _archive_chat_via_ui(target)
+            if outcome != "clicked_archive":
+                raise BrowserError(f"archive did not complete: {outcome}")
+            item["state"] = "archived"
+            item["archived_utc"] = _utc_now()
+            item["last_error"] = None
+            row["archive_state"] = "archived"
+            row["archived_utc"] = item["archived_utc"]
+        except Exception as exc:
+            if item.get("state") not in {"blocked_active", "blocked_unowned"}:
+                item["state"] = "retry"
+                item["last_error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            if target is not None:
+                cdp.close_target(port, target.id)
+
+    _atomic_json(
+        _archive_queue_path(repo),
+        {"schema_version": 1, "items": items, "updated_utc": _utc_now()},
+    )
+    registry["chats"] = chats
+    registry["updated_utc"] = _utc_now()
+    _atomic_json(_owned_chat_registry_path(repo), registry)
+    return archive_queue_status(repo)
+
+
+
 
 def _control_worktree_for_repo(repo: Path) -> Path:
     home = Path(
