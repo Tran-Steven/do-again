@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:47:50.063485+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "37ae4f5bfb3d9416fc40ebfa6a5c618d4a6231efc872cd3af3c133a4f8a5cdeb",
+  "request_id": "selfdev-rollover-success-fixture-fix-20261007-74",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "37ae4f5bfb3d9416fc40ebfa6a5c618d4a6231efc872cd3af3c133a4f8a5cdeb",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-success-fixture-fix-20261007-74/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 3.3,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 2994,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-success-fixture-fix-20261007-74/script.py",
+      "script_sha256": "1daec0b70f04a47f9dcb45cae856fb476c8abde988a35cdc8a6f0e744e70b82f",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "compile_rc=0\n\n=== focused stdout ===\n\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n\n=== focused stderr ===\n..............do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n...................................................\n----------------------------------------------------------------------\nRan 65 tests in 2.321s\n\nOK\n\nfocused_rc=0\n=== commit stdout ===\n[feat/self-dogfood-20261007 be828f7] Harden transactional chat rollover and archival\n 2 files changed, 232 insertions(+), 15 deletions(-)\n\n=== commit stderr ===\n\nnew_head=be828f77d2bd87242f16561f7b3d9ebd6bdfcfe3\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:47:46.416714+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
