@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:26:45.139662+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "41cde1ae06a621e077a90901424a81e8c36c40137adf0c6e344a057d31703cc8",
+  "request_id": "selfdev-diagnostics-readonly-import-fix-20261007-55",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "41cde1ae06a621e077a90901424a81e8c36c40137adf0c6e344a057d31703cc8",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-readonly-import-fix-20261007-55/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 12.218,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 2181,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-readonly-import-fix-20261007-55/script.py",
+      "script_sha256": "1dd6fcf5ee6bed7a24d749d784f23b24a4d5d9773a70d9317d02b0aef0c014a0",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmppvq8oo_o/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp95izbga_/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp95izbga_/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp95izbga_/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp95izbga_/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp95izbga_/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n.........................\n----------------------------------------------------------------------\nRan 25 tests in 11.475s\n\nOK\n\nfocused_rc=0\n=== commit stdout ===\n[feat/self-dogfood-20261007 6f219b8] Add durable request diagnostics\n 2 files changed, 268 insertions(+), 2 deletions(-)\n\n=== commit stderr ===\n\nnew_head=6f219b829fac59a7ca0e0b27cdff81b9d04c365b\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:26:32.713997+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
