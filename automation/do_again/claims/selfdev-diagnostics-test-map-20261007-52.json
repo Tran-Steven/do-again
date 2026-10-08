@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:23:30.993847+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "8b080f97b6a95cc5f099d91dd63deffc0982a1158aa4074d3ced73032bf574db",
+  "request_id": "selfdev-diagnostics-test-map-20261007-52",
+  "schema_version": 1
+}
