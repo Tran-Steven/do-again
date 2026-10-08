@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:08:15.837763+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "0942c02a65779ec1f4cc732c73091f3dbaca8340212376cf2f453a7d0e92dd5d",
+  "request_id": "selfdev-rollover-foundation-failure-diff-20261007-35",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "0942c02a65779ec1f4cc732c73091f3dbaca8340212376cf2f453a7d0e92dd5d",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-foundation-failure-diff-20261007-35/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.225,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1046,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-foundation-failure-diff-20261007-35/script.py",
+      "script_sha256": "5f560c0c034b11107986fece67e4484e1c5715409ec086b39372e8d105efc68a",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=585fbf9340de57a9bc6fcd662e5979bb37a9c7c9\nstatus:\n M src/do_again/browser/runtime.py\n M tests/test_browser_hardening.py\n\nimports:\n01: from __future__ import annotations\n02: \n03: import hashlib\n04: import json\n05: import os\n06: import shutil\n07: import socket\n08: import subprocess\n09: import sys\n10: import tempfile\n11: import threading\n12: import time\n13: import uuid\n14: from contextlib import contextmanager\n15: from dataclasses import dataclass\n16: from functools import wraps\n17: from datetime import datetime, timezone\n18: from pathlib import Path\n19: from typing import Any\n20: \n21: from ..platforms.process import pid_alive\n22: from . import cdp\n23: from .errors import BrowserAuthRequired, BrowserError\n24: \n25: \n26: CHATGPT_URL = \"https://chatgpt.com/\"\n27: \n28: \n29: @dataclass(frozen=True)\n30: class BrowserPaths:\n31:     root: Path\n32:     profile: Path\n33:     config: Path\n34:     state: Path\n35:     log: Path\nrollover_needed:\n1122: def _rollover_needed(target: cdp.Target) -> bool:\n1123:     warning = _context_limit_warning(target)\n1124:     if warning or _rollover_needed(target):\n1125:         return True\n1126:     config = load_config()\n1127:     threshold = int(config.get(\"rollover_char_threshold\") or 180000)\n1128:     if threshold < 20000:\n1129:         threshold = 20000\n1130:     return _conversation_pressure_chars(target) >= threshold\n1131: \n1132: \n1133: def _rollover_project_chat(\n1134:     repo: Path,\n1135:     record: dict[str, Any],\n1136:     *,\n1137:     port: int,\n1138:     old_target: cdp.Target | None = None,\n1139: ) -> tuple[cdp.Target, dict[str, Any]]:\n1140:     remote_url = str(record.get(\"remote_url\") or \"\")\nnotify rollover gate:\n1417:     warning = _context_limit_warning(target)\n1418:     if warning:\n1419:         if _assistant_snapshot(target).get(\"busy\"):\n1420:             raise BrowserError(\n1421:                 \"context limit detected while ChatGPT is still busy; retrying later\"\n1422:             )\n1423:         target, record = _rollover_project_chat(\n1424:             repo,\n1425:             record,\n1426:             port=port,\n1427:             old_target=target,\n1428:         )\n1429: \n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:08:15.377534+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
