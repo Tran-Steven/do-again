@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:47642:1791434221:f2c7c05b3c36",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:40:01.706634+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "1f3c3f3891adab5a619216eb3bc88930a2919a96fca8bbc3011d53cced2a6294",
+  "request_id": "selfdev-stall-dedupe-fix-20261007-111",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "db7df56b569202c249f406c39df48b637ec8c8c8"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "db7df56b569202c249f406c39df48b637ec8c8c8"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "1f3c3f3891adab5a619216eb3bc88930a2919a96fca8bbc3011d53cced2a6294",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-stall-dedupe-fix-20261007-111/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 76.164,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 4646,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-stall-dedupe-fix-20261007-111/script.py",
+      "script_sha256": "dc3136d5336286b2644bf9b17f3975bd1dc0bf33b78f7dad0ba9ffae45c458fb",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== focused stderr ===\n....................\n----------------------------------------------------------------------\nRan 20 tests in 0.133s\n\nOK\n\nfocused_rc=0\n=== full stderr tail ===\n.......................................do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n...........................................do-again: cancel: request is already claimed and cannot be safely cancelled\n...........do-again: retry: ambiguous replay requires a fresh manually scoped request after inspection\n............................................................................................................................................\n----------------------------------------------------------------------\nRan 233 tests in 73.379s\n\nOK\nfull_rc=0\ndiff_check_rc=0\n\n\n[feat/stall-issue-dedupe-20261007 1df7744] Deduplicate stall issues without search indexing\n 2 files changed, 17 insertions(+), 1 deletion(-)\n\n\nhead=1df7744078b5ae0c7f97897c0e105be4f5e185e6\nstatus=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:38:45.244448+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
