@@ -44,7 +44,7 @@ def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
     try:
         targets = {'other_sentinel':str(other_sentinel), 'sentinel': str(sentinel), 'service': target,
                    'socket': str(SOCKET_ROOT / f'{project.key[:24]}.sock'),
-                   'operator_pid': os.getpid(), 'uid': project.uid, 'gid': project.gid,
+                   'runner':str(Path(__file__).with_name('execution_runner.py')), 'operator_pid': os.getpid(), 'uid': project.uid, 'gid': project.gid,
                    'allowed': str(project.worktree / ('.native-proof-' + nonce)), 'scratch': str(scratch)}
         script = '''import errno,json,os,socket,subprocess,time
 from pathlib import Path
@@ -54,7 +54,9 @@ def denied(name, action):
     try: action()
     except OSError as e: result[name]=e.errno in (errno.EPERM,errno.EACCES)
     else: result[name]=False
-result['identity']=os.getuid()==T['uid'] and os.geteuid()==T['uid'] and not (set(os.getgroups())-{T['gid']})
+import runpy
+checked_groups=runpy.run_path(T['runner'])['kernel_groups']()
+result['identity']=os.getuid()==T['uid'] and os.geteuid()==T['uid'] and os.getgid()==T['gid'] and not (checked_groups-{T['gid']})
 Path(T['allowed']).write_text('allowed')
 result['allowed_write']=Path(T['allowed']).read_text()=='allowed'
 denied('other_project_write_denied',lambda:Path(T['other_sentinel']).write_text('ESCAPE'))

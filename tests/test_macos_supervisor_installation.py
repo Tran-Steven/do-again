@@ -81,6 +81,27 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual((target/'tracked.txt').read_text(),'approved snapshot')
         self.assertEqual(command('-C',str(target),'rev-parse','HEAD'),sha)
 
+    def test_preview_cutover_rejects_ambiguous_execution_before_service_effect(self):
+        import sqlite3
+        from do_again.supervisor.macos_execution import ExecutionLedger
+        config={'production_ready':False,'projects':[{'repo':'/synthetic','key':'test','uid':401,'gid':401,'account':'_doagain_da','worktree':'/synthetic/work','source_sha':'approved'}]}
+        (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))
+        (self.root/'state/test').mkdir(parents=True)
+        path=self.root/'authority.sqlite';ExecutionLedger(path).reserve('test','request-ambiguous','fingerprint')
+        registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'),patch.object(self.module,'run') as run:
+            with self.assertRaisesRegex(RuntimeError,'ambiguous'):
+                with self.module.preview_cutover(config,registry,True):self.fail('unsafe cutover admitted')
+            run.assert_not_called()
+
+    def test_preview_cutover_preserves_production_helper(self):
+        config={'production_ready':True,'projects':[]}
+        (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'),patch.object(self.module,'run') as run:
+            with self.assertRaisesRegex(RuntimeError,'production'):
+                with self.module.preview_cutover(config,Mock(),True):self.fail('production helper admitted')
+            run.assert_not_called()
+
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
