@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:14:50.229572+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "dd1a2cc9f71b07c9ff2418d559873c2204c4f2ff2045ff79d24b680259b9f852",
+  "request_id": "selfdev-chat-cleanup-failure-diff-20261007-42",
+  "schema_version": 1
+}
