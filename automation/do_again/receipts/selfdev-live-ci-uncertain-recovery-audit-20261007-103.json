@@ -1,0 +1,53 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:28:01.598627+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "operator_progress": {
+    "acknowledged_receipts": [
+      "selfdev-live-ci-handoff-state-proof-20261007-102"
+    ],
+    "goal_id": "issue-10-live-ci-handoff-proof",
+    "goal_state": "waiting_for_execution",
+    "summary": "Read-only audit of uncertain CI wake recovery/escalation; verify no duplicate replay."
+  },
+  "request_fingerprint": "0eda691bf9b6cb193cae309a53aa71f509dea141472571a57af0c2e2227b69b7",
+  "request_id": "selfdev-live-ci-uncertain-recovery-audit-20261007-103",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "0eda691bf9b6cb193cae309a53aa71f509dea141472571a57af0c2e2227b69b7",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-ci-uncertain-recovery-audit-20261007-103/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.169,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1696,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-ci-uncertain-recovery-audit-20261007-103/script.py",
+      "script_sha256": "85ec74e993c8e5449cbed3ad7384582f31004fcd521b4cfb98615fab165d7751",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T04:27:43.975089+00:00\",\n    \"state\": \"ready\"\n  },\n  \"incidents\": [],\n  \"liveness\": {\n    \"attempts\": 1,\n    \"ci\": {\n      \"conclusion\": \"success\",\n      \"head_sha\": \"65f9a3e792c3cf3fa951df21fe9114a180d85d40\",\n      \"probe_state\": \"terminal\",\n      \"repository\": \"Tran-Steven/do-again\",\n      \"run_id\": 37723478310,\n      \"status\": \"completed\"\n    },\n    \"ci_checked_at\": 1791433579.413773,\n    \"ci_conclusion\": \"success\",\n    \"ci_delivery_error\": \"BrowserError\",\n    \"ci_delivery_marker\": \"DO_AGAIN_CI_GATE_COMPLETE token=07463eeac953d5dfe9af\",\n    \"ci_delivery_phase\": \"uncertain\",\n    \"ci_terminal_at\": 1791433562.7205682,\n    \"ci_terminal_fingerprint\": \"Tran-Steven/do-again:37723478310:65f9a3e792c3cf3fa951df21fe9114a180d85d40:success\",\n    \"goal_id\": \"issue-10-live-ci-handoff-proof\",\n    \"goal_state\": \"waiting_for_execution\",\n    \"last_resume_at\": 1791433563.1000478,\n    \"progress_at\": 1791430202.7234247,\n    \"receipt_id\": \"selfdev-ci-lifecycle-push-20261007-98\",\n    \"state\": \"waiting_for_execution\"\n  },\n  \"now\": 1791433681.430067,\n  \"outbox_ids\": [],\n  \"pending_requests\": [\n    \"selfdev-live-ci-uncertain-recovery-audit-20261007-103\"\n  ],\n  \"terminal_age_seconds\": 118.7094988822937\n}\nUNCERTAIN_CI_DELIVERY_AUDIT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:28:01.108289+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
