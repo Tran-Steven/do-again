@@ -35,6 +35,7 @@ from .browser import cdp
 from .platforms.detect import detect_platform
 from .browser.runtime import send_message, use_background_fallback
 from .core.schema import REQUEST_ID_RE, request_fingerprint
+from .service.rollout import staged_upgrade
 from .service.runtime import (
     ServiceError,
     _default_policy,
@@ -997,7 +998,7 @@ def main() -> int:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{setup,verify,start,status,history,trace,logs,cancel,retry,stop,restart,list,doctor,browser}",
+        metavar="{setup,verify,start,status,history,trace,logs,cancel,retry,stop,restart,upgrade,list,doctor,browser}",
     )
 
     doctor_parser = sub.add_parser(
@@ -1044,6 +1045,16 @@ def main() -> int:
     )
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
+    upgrade_parser = sub.add_parser(
+        "upgrade",
+        help="Safely stage and roll out this project's copied service runtime",
+    )
+    upgrade_parser.add_argument("path", nargs="?", default=".")
+    upgrade_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply only when the project is provably quiescent; otherwise defer without restart",
+    )
     history_parser = sub.add_parser(
         "history", help="Show recent durable Do Again request history"
     )
@@ -1168,6 +1179,14 @@ def main() -> int:
         return verify_project(args.path, timeout_seconds=args.timeout)
     if args.command == "status":
         return status(args.path)
+    if args.command == "upgrade":
+        try:
+            value = staged_upgrade(args.path, apply=args.apply)
+        except ServiceError as exc:
+            print(f"do-again: upgrade: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(value, indent=2, sort_keys=True))
+        return 0 if value.get("applied") or not args.apply else 2
     if args.command == "history":
         return request_history(args.path, limit=args.limit)
     if args.command == "trace":
