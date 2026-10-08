@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from do_again.core.agent import Agent
-from do_again.core.schema import atomic_json, request_fingerprint, utc_now, validate_request
+from do_again.core.schema import OperatorError, atomic_json, request_fingerprint, utc_now, validate_request
 
 
 class RequestFingerprintTests(unittest.TestCase):
@@ -165,3 +165,35 @@ class RequestFingerprintTests(unittest.TestCase):
             result = executor.execute(request)
         self.assertEqual(result["request_fingerprint"], request_fingerprint(request))
         self.assertEqual(result["result"], {"ready": True})
+
+    def test_continuation_waiting_for_ci_is_normalized_and_fingerprinted(self):
+        request = self.request()
+        request["continuation"] = {
+            "acknowledged_receipts": [],
+            "goal_state": "waiting_for_ci",
+            "goal_id": "rollout-pr11",
+            "ci": {
+                "repository": "Tran-Steven/do-again",
+                "run_id": 37716899421,
+                "head_sha": "1D92D174D49E058E0DFE46D55B5FE7BCEBA70FE5",
+            },
+        }
+        normalized = validate_request(request, max_ttl_seconds=3600)
+        self.assertEqual(normalized["continuation"]["goal_state"], "waiting_for_ci")
+        self.assertEqual(
+            normalized["continuation"]["ci"]["head_sha"],
+            "1d92d174d49e058e0dfe46d55b5fe7bceba70fe5",
+        )
+        base = request_fingerprint(request)
+        request["continuation"]["ci"]["run_id"] += 1
+        self.assertNotEqual(base, request_fingerprint(request))
+
+    def test_waiting_for_ci_requires_explicit_ci_metadata(self):
+        request = self.request()
+        request["continuation"] = {
+            "acknowledged_receipts": [],
+            "goal_state": "waiting_for_ci",
+        }
+        with self.assertRaisesRegex(OperatorError, "requires continuation.ci"):
+            validate_request(request, max_ttl_seconds=3600)
+
