@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "claimed_at_utc": "2026-10-08T04:34:20.813186+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 98664,
+  "request_fingerprint": "6e7912fb5e3ac582f7523ff275eaf03cb60f793b4ba66a4d5ed310e7c1345b0d",
+  "request_id": "selfdev-issue10-live-gap-audit-20261007-108",
+  "schema_version": 1
+}
