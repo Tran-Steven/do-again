@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T14:02:10.746588+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "9f3ee536d65a290ab2ef14f2e1ee07844d0b63331b11714b51e92278b4c2e4f5",
+  "request_id": "selfdev-rollout-zombie-child-fix-20261008-140",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "9f3ee536d65a290ab2ef14f2e1ee07844d0b63331b11714b51e92278b4c2e4f5",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollout-zombie-child-fix-20261008-140/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.322,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 6016,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollout-zombie-child-fix-20261008-140/script.py",
+      "script_sha256": "62e660603973b1cf05ad5aad07c1b7e08f1f311fb3664c5778c89ac21f8536ff",
+      "stderr": "test file lacks unittest main marker\n",
+      "stderr_truncated": false,
+      "stdout": "$ git branch -D fix/rollout-ignore-zombie-children\n\nerror: branch 'fix/rollout-ignore-zombie-children' not found\n\n$ git worktree add -b fix/rollout-ignore-zombie-children /Users/steventran/.do_again/worktrees/rollout-zombie-fix main\nHEAD is now at b5c09ec Recover historical automation chats without archiving active sessions (#33)\n\nPreparing worktree (new branch 'fix/rollout-ignore-zombie-children')\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T14:02:10.132708+00:00",
+  "state": "failed",
+  "traceback": null
+}
