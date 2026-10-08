@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:22:08.935729+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "18b4c43ba98858898c3c86ad349dfb07b6b5d889abde02b06279a41eaab96b5e",
+  "request_id": "selfdev-diagnostics-ledger-audit-20261007-50",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "18b4c43ba98858898c3c86ad349dfb07b6b5d889abde02b06279a41eaab96b5e",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-ledger-audit-20261007-50/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.074,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1282,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-ledger-audit-20261007-50/script.py",
+      "script_sha256": "48616e08f22ada7222474405ac778f77f5dbbc2ead86f4eb245c4cbea9634702",
+      "stderr": "  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-ledger-audit-20261007-50/script.py\", line 14\n    \"ledger_path(\", \"atomic_json(self.ledger\", \"ledger =\", \"state\":\",\n                                                                   ^\nSyntaxError: unterminated string literal (detected at line 14)\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:22:08.647776+00:00",
+  "state": "failed",
+  "traceback": null
+}
