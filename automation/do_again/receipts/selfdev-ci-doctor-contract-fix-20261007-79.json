@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T01:09:08.101508+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "e5fa5e2fc980c5bfe2ad3b044eb4cdb765d2d179bd2532586a3d5faf907dd607",
+  "request_id": "selfdev-ci-doctor-contract-fix-20261007-79",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6afd748124419208daf19cf79f254e2830348b70"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "6afd748124419208daf19cf79f254e2830348b70"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "e5fa5e2fc980c5bfe2ad3b044eb4cdb765d2d179bd2532586a3d5faf907dd607",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ci-doctor-contract-fix-20261007-79/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 31.104,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 3583,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ci-doctor-contract-fix-20261007-79/script.py",
+      "script_sha256": "055a93b9655e0235f6d276c282320fa993fa2e9003cd317f37f28be077c9cc1e",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "compile_rc=0\n\n=== focused stdout ===\n{\n  \"new_request_id\": \"retry-436691c4c48e484b\",\n  \"original_request_id\": \"req-failed-1234\",\n  \"previous_state\": \"failed\",\n  \"request\": {\n    \"args\": {},\n    \"continuation\": {\n      \"acknowledged_receipts\": [\n        \"req-failed-1234\"\n      ],\n      \"goal_state\": \"in_progress\",\n      \"summary\": \"Retry of req-failed-1234 after terminal state failed.\"\n    },\n    \"expected\": {},\n    \"expires_at_utc\": \"2026-10-08T01:18:49.292734+00:00\",\n    \"issued_at_utc\": \"2026-10-08T01:08:49.292734+00:00\",\n    \"limits\": {},\n    \"operation\": \"status\",\n    \"request_id\": \"retry-436691c4c48e484b\",\n    \"schema_version\": 1\n  }\n}\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpl7gkxlu7/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp805c641i/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp805c641i/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp805c641i/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp805c641i/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmp805c641i/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n.do-again: cancel: request is already claimed and cannot be safely cancelled\n...........do-again: retry: ambiguous replay requires a fresh manually scoped request after inspection\n.............\n----------------------------------------------------------------------\nRan 25 tests in 29.322s\n\nOK\n\nfocused_rc=0\ncmd= ['python3', '-m', 'do_again.cli', 'doctor', '--help'] rc= 0\ncmd= ['python3', '-m', 'do_again.cli', 'status', '--help'] rc= 0\n[feat/self-dogfood-20261007 6e64053] Fix clean-runner doctor CI contract\n 2 files changed, 19 insertions(+), 2 deletions(-)\n\n\nnew_head=6e640530c9ae908e01c193cc8eaa983812813bab\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T01:08:36.626615+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
