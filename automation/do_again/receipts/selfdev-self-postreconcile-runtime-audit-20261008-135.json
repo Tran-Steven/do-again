@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:44:25.169759+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "f36ab7144fa6c3bdd1092aab7ec9b7311859f8ade09a150fd4c8559552482572",
+  "request_id": "selfdev-self-postreconcile-runtime-audit-20261008-135",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "f36ab7144fa6c3bdd1092aab7ec9b7311859f8ade09a150fd4c8559552482572",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-postreconcile-runtime-audit-20261008-135/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.54,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1300,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-postreconcile-runtime-audit-20261008-135/script.py",
+      "script_sha256": "c4970afe08a4bb5fcf61bc48fe62f8a0c89ec099648a91443de860eb20b11035",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T13:44:01.983647+00:00\",\n    \"state\": \"ready\"\n  },\n  \"liveness\": {\n    \"attempts\": 0,\n    \"busy_since\": 1791467045.150698,\n    \"progress_at\": 1791466955.6002963,\n    \"receipt_id\": \"selfdev-self-queued-receipt-delivery-20261008-134\",\n    \"state\": \"generating\"\n  },\n  \"outbox_items\": [],\n  \"repo_head\": \"b5c09ec117b4cc9a3cb752ad248631a32a0b08eb\",\n  \"runtime_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"runtime_matches_source\": false,\n  \"source_hash\": \"63a35d1c447bcc83a34ec7f30f144358aba9081f006fee22ce807a4ad9214b7c\",\n  \"uncertain\": null,\n  \"uncertain_exists\": false\n}\nSELF_POST_RECONCILIATION_RUNTIME_AUDIT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:44:24.309426+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
