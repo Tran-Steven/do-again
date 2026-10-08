@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:18:39.116768+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "83d6bebc52b39eb0826782b313ae372eb6751879c43a40e3ddd5ff77c5b873eb",
+  "request_id": "selfdev-restart-uncertain-handoff-no-replay-20261008-119",
+  "schema_version": 1
+}
