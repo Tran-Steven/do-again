@@ -240,7 +240,7 @@ Do Again never deletes conversations.
 Automatic archival requires strong ownership provenance:
 
 - the chat was created by Do Again and is recorded in the project's durable owned-chat registry; or
-- a historical chat is independently verified by original Do Again bootstrap markers and corroborating local request/receipt evidence.
+- a historical chat is independently verified by its project bootstrap content and corroborating local request/receipt evidence, a durable project rollover/checkpoint reference, or a URL from Do Again's dedicated Chrome-profile history. Both initial readiness and acknowledged rollover-handoff conversations are supported.
 
 Every currently bound project chat is globally excluded from archival.
 
@@ -253,7 +253,7 @@ do-again chats status
 do-again chats run
 ~~~
 
-Cleanup is dry-run by default. Archival retries are idempotent. Unowned or active chats are blocked before archive UI interaction.
+`chats discover` automatically surfaces predecessors from the saved project binding, rollover transaction, durable checkpoints, and read-only history of Do Again's dedicated Chrome profile without treating any URL alone as proof of ownership. Use `chats verify --candidate <conversation-id>` to confirm a historical candidate against its actual authenticated chat content before it becomes eligible. Cleanup is dry-run by default. Archival retries are idempotent. Unowned or active chats are blocked before archive UI interaction.
 
 ## Service lifecycle
 
