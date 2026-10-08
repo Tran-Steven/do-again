@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:30:32.569051+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "bbdfc7655556846275db7abb1d136317467abaab9d682f11ba55b3c034bfb3ae",
+  "request_id": "selfdev-sonary-claim-ledger-diagnostic-20261008-127",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "bbdfc7655556846275db7abb1d136317467abaab9d682f11ba55b3c034bfb3ae",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-claim-ledger-diagnostic-20261008-127/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.591,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 2107,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-claim-ledger-diagnostic-20261008-127/script.py",
+      "script_sha256": "825003cb97e3662123118094423bbafd039e9f3faaa8d447bc4d54f419116f71",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"candidate_pid_processes\": {\n    \"20504\": []\n  },\n  \"claim\": {\n    \"agent_instance_id\": \"Stevens-Mac-mini.local:20504:1791433136:3f0bf611640d\",\n    \"claimed_at_utc\": \"2026-10-08T05:15:37.851196+00:00\",\n    \"host\": \"Stevens-Mac-mini.local\",\n    \"pid\": 20504,\n    \"request_fingerprint\": \"39a758cd7c796c8a55abffb21b3de8b60f1a7ac9ed7a73c2e707630127ab4ffc\",\n    \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n    \"schema_version\": 1\n  },\n  \"claim_age_seconds\": 29694.259635210037,\n  \"claim_exists\": true,\n  \"claim_mtime\": 1791436537.8518696,\n  \"claim_path\": \"/Users/steventran/.do_again/projects/d05c35935833/control/automation/do_again/claims/sonary-daw-typecheck-stage-isolation-20261008-143.json\",\n  \"ledger\": {\n    \"agent_instance_id\": \"Stevens-Mac-mini.local:20504:1791433136:3f0bf611640d\",\n    \"request_fingerprint\": \"39a758cd7c796c8a55abffb21b3de8b60f1a7ac9ed7a73c2e707630127ab4ffc\",\n    \"started_at_utc\": \"2026-10-08T05:15:39.586694+00:00\",\n    \"state\": \"started\"\n  },\n  \"ledger_age_seconds\": 29692.52262711525,\n  \"ledger_exists\": true,\n  \"ledger_mtime\": 1791436539.5892549,\n  \"ledger_path\": \"/Users/steventran/.do_again/projects/d05c35935833/state/ledger/sonary-daw-typecheck-stage-isolation-20261008-143.json\",\n  \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n  \"service_processes\": []\n}\nSONARY_CLAIM_LEDGER_DIAGNOSTIC_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:30:30.332201+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
