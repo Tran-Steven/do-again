@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "claimed_at_utc": "2026-10-08T04:30:36.037191+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 98664,
+  "request_fingerprint": "6003c7ef20fd77657fb7402e5fc93ce8efb6e0ed612b53a0dc6a1c27b5916c1a",
+  "request_id": "selfdev-jobpipe-sonary-quiescence-reaudit-20261007-105",
+  "schema_version": 1
+}
