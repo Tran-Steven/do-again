@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:47642:1791434221:f2c7c05b3c36",
+  "claimed_at_utc": "2026-10-08T04:38:43.848338+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 47642,
+  "request_fingerprint": "1f3c3f3891adab5a619216eb3bc88930a2919a96fca8bbc3011d53cced2a6294",
+  "request_id": "selfdev-stall-dedupe-fix-20261007-111",
+  "schema_version": 1
+}
