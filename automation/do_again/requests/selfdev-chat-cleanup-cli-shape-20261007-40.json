@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-chat-cleanup-cli-shape-20261007-40",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:12:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:42:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\ndef run(*args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\nprint(\"head=\"+run(\"git\",\"rev-parse\",\"HEAD\").strip())\nprint(\"status=\"+repr(run(\"git\",\"status\",\"--porcelain=v1\")))\nlines=(wt/\"src/do_again/cli.py\").read_text().splitlines()\nfor i,line in enumerate(lines,1):\n    if i <= 45 or \"def _browser_action\" in line or \"if args.command == \\\"browser\\\"\" in line:\n        start=max(1,i-5); end=min(len(lines),i+45)\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start,end+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
