@@ -44,6 +44,25 @@ class ControllerTimeoutTests(unittest.TestCase):
         enter.assert_called_once()
         self.assertEqual(evaluate.call_count, 2)  # No duplicate click after an uncertain submit.
 
+    def test_fallback_click_timeout_is_uncertain_and_not_repeated(self):
+        # This is the exact observed production failure: Enter was attempted,
+        # twenty composer checks found content, then Runtime.evaluate(click)
+        # timed out without proving whether the click executed.
+        outcomes = ["ready"] + [False] * 20 + [cdp.CdpTimeoutError("CDP Runtime.evaluate response timed out")]
+        with (
+            patch.object(browser, "_assistant_snapshot", return_value={"busy": False}),
+            patch.object(browser, "_context_limit_warning", return_value=""),
+            patch.object(cdp, "evaluate", side_effect=outcomes) as evaluate,
+            patch.object(cdp, "insert_text") as insert,
+            patch.object(cdp, "press_enter") as enter,
+            patch.object(browser.time, "sleep"),
+        ):
+            with self.assertRaises(BrowserSubmissionUncertain):
+                browser.send_message(self.target, "DO_AGAIN_TEST id=clicked", wait_for_response=False)
+        insert.assert_called_once()
+        enter.assert_called_once()
+        self.assertEqual(evaluate.call_count, 22)
+
     def test_readonly_snapshot_timeout_never_assumes_submission(self):
         with patch.object(browser, "_assistant_snapshot", side_effect=cdp.CdpTimeoutError("CDP timeout")):
             with self.assertRaises(cdp.CdpTimeoutError):
