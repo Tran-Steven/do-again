@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-live-ci-handoff-proof-20261007-101",
+  "operation": "status",
+  "issued_at_utc": "2026-10-08T04:18:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T04:38:00.000000+00:00",
+  "args": {},
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "selfdev-live-rollout-quiescence-audit-20261007-100"
+    ],
+    "goal_state": "waiting_for_ci",
+    "goal_id": "issue-10-live-ci-handoff-proof",
+    "summary": "Live post-upgrade proof that terminal CI wakes the durable continuous goal exactly once without replay.",
+    "ci": {
+      "repository": "Tran-Steven/do-again",
+      "run_id": 37723478310,
+      "head_sha": "65f9a3e792c3cf3fa951df21fe9114a180d85d40"
+    }
+  }
+}
