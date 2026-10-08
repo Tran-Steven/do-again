@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-hardening-syntax-fix-20261007-72",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:45:40.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:25:40.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os, subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"da7e46f5e07922eb63b7b48e71319588bd28d3d5\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check,env=env)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nif head!=expected or branch!=\"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected state head={head} branch={branch}\")\n\np=wt/\"src/do_again/browser/runtime.py\"\ntext=p.read_text()\nold='''    if readiness_marker:\n        prompt += f\"\n\nReply exactly: {readiness_marker}\"\n    return prompt\n'''\nnew='''    if readiness_marker:\n        prompt += f\"\\\\n\\\\nReply exactly: {readiness_marker}\"\n    return prompt\n'''\nif old not in text:\n    raise SystemExit(\"malformed bootstrap f-string anchor missing\")\ntext=text.replace(old,new,1)\np.write_text(text)\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\ncompile_proc=run(\n    [\"python3\",\"-m\",\"py_compile\",\"src/do_again/browser/runtime.py\",\"tests/test_browser_hardening.py\"],\n    check=False, env=env\n)\nprint(\"=== compile stdout ===\")\nprint(compile_proc.stdout)\nprint(\"=== compile stderr ===\")\nprint(compile_proc.stderr)\nprint(\"compile_rc=\"+str(compile_proc.returncode))\nif compile_proc.returncode!=0:\n    raise SystemExit(compile_proc.returncode)\n\nfocused=run(\n    [\"python3\",\"-m\",\"unittest\",\"tests.test_browser_hardening\",\"tests.test_browser\"],\n    check=False, env=env\n)\nprint(\"=== focused stdout ===\")\nprint(focused.stdout)\nprint(\"=== focused stderr ===\")\nprint(focused.stderr)\nprint(\"focused_rc=\"+str(focused.returncode))\nif focused.returncode!=0:\n    raise SystemExit(focused.returncode)\n\nrun([\"git\",\"add\",\"src/do_again/browser/runtime.py\",\"tests/test_browser_hardening.py\"])\ncommit=run([\"git\",\"commit\",\"-m\",\"Harden transactional chat rollover and archival\"],check=False)\nprint(\"=== commit stdout ===\")\nprint(commit.stdout)\nprint(\"=== commit stderr ===\")\nprint(commit.stderr)\nif commit.returncode!=0:\n    raise SystemExit(commit.returncode)\n\nprint(\"new_head=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
