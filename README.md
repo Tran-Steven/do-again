@@ -233,6 +233,24 @@ do-again stop
 
 Each project gets an isolated runtime, control worktree, state directory, policy copy, and service label under ~/.do_again. The background service runs from a copied runtime so it remains stable after the invoking shell exits.
 
+## Continuous development and stall reporting
+
+A healthy daemon is not proof that the agent is progressing. Continuous development is opt-in per project. For an ongoing goal, add these values under [do_again] in do-again.toml:
+
+~~~toml
+continuous = true
+idle_seconds = 1800
+recovery_seconds = 900
+report_stalls = true
+stall_issue_repo = "YOUR_ORG/do-again"
+~~~
+
+With continuous mode enabled, Do Again evaluates project liveness after browser receipt delivery is drained. It waits during active model generation or pending local requests, performs bounded durable continuation for an idle unfinished goal, and escalates repeated no-progress or stuck states instead of prompting forever.
+
+Issue reporting is optional and requires an authenticated GitHub CLI with permission to create issues in the configured destination. Reports are sanitized and deduplicated; browser content, credentials, prompts, candidate/customer data, and raw private logs are excluded. If GitHub reporting is unavailable, local liveness state remains visible through do-again status.
+
+Continuous mode does not make browser submission equivalent to acknowledged progress, does not replay uncertain non-idempotent claims, and does not change application/submission authorization. Disable continuous mode for intentionally completed or paused projects.
+
 ## Security model
 
 Do Again is built around explicit operation, binary, and path policy; dedicated control-branch validation; bounded TTLs; request fingerprints; local exact-once ledgers; Git-backed distributed claims; project-scoped runtime state; a dedicated browser profile; localhost-only CDP; no stored ChatGPT credentials; no automatic replay of ambiguous mutations; and no archival without verified ownership provenance.
