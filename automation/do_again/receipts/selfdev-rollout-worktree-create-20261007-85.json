@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T02:00:42.540699+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "aa9b7b6817fc8a59b076eeaf947156d51667a57a06a2631a6ee144ba71fd8d8a",
+  "request_id": "selfdev-rollout-worktree-create-20261007-85",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a02b9979c083bb223a017bdb75e58e8223d43705"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a02b9979c083bb223a017bdb75e58e8223d43705"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "aa9b7b6817fc8a59b076eeaf947156d51667a57a06a2631a6ee144ba71fd8d8a",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollout-worktree-create-20261007-85/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.439,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1887,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollout-worktree-create-20261007-85/script.py",
+      "script_sha256": "cdb0a0f87dcd8b3e5ed8d361a241bc93436d9ecc4a9c92ab7c5c3d20a3f78bb5",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "\nFrom https://github.com/Tran-Steven/do-again\n * branch            main       -> FETCH_HEAD\n\n=== worktree add stdout ===\nHEAD is now at a02b997 Harden Do Again self-dogfood reliability and recovery (#8)\n\n=== worktree add stderr ===\nPreparing worktree (new branch 'feat/staged-runtime-rollout-20261007')\n\nwt_branch=feat/staged-runtime-rollout-20261007\nwt_head=a02b9979c083bb223a017bdb75e58e8223d43705\nwt_status=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T02:00:40.532907+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
