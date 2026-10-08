@@ -19,6 +19,10 @@ class CdpError(BrowserError):
     pass
 
 
+class CdpTimeoutError(CdpError):
+    """A CDP command timed out; its side effects may be unknown."""
+
+
 @dataclass(frozen=True)
 class Target:
     id: str
@@ -236,7 +240,10 @@ class WebSocket:
 
 
 def call(url: str, method: str, params: dict[str, Any] | None = None, *, timeout: float = 30.0) -> dict[str, Any]:
-    ws = WebSocket(url, timeout=timeout)
+    try:
+        ws = WebSocket(url, timeout=timeout)
+    except TimeoutError as exc:
+        raise CdpTimeoutError(f"CDP {method} connection timed out") from exc
     try:
         deadline = time.monotonic() + timeout
         message_id = int.from_bytes(os.urandom(4), "big") & 0x7FFFFFFF
@@ -252,7 +259,7 @@ def call(url: str, method: str, params: dict[str, Any] | None = None, *, timeout
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise CdpError(f"CDP {method} timed out")
+                raise CdpTimeoutError(f"CDP {method} timed out")
             ws.sock.settimeout(remaining)
             payload = json.loads(ws.recv_text())
             if payload.get("id") != message_id:
@@ -261,6 +268,8 @@ def call(url: str, method: str, params: dict[str, Any] | None = None, *, timeout
                 raise CdpError(f"CDP {method} failed: {payload['error']}")
             result = payload.get("result")
             return result if isinstance(result, dict) else {}
+    except TimeoutError as exc:
+        raise CdpTimeoutError(f"CDP {method} response timed out") from exc
     finally:
         ws.close()
 
