@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-issue10-live-gap-audit-20261007-108",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T04:36:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T04:56:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, subprocess\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\n\ndef run(args):\n    return subprocess.run(args,cwd=repo,text=True,capture_output=True,check=False)\n\nissue10 = run([\"gh\",\"issue\",\"view\",\"10\",\"--json\",\"body,comments\"])\nif issue10.returncode:\n    print(issue10.stderr)\n    raise SystemExit(issue10.returncode)\ndata=json.loads(issue10.stdout)\nbody=str(data.get(\"body\") or \"\")\ncomments=\"\\n\".join(str(c.get(\"body\") or \"\") for c in data.get(\"comments\") or [])\ntext=body+\"\\n\"+comments\n\ncriteria={\n  \"idle_after_receipt\":[\"idle after receipt\",\"no-progress\",\"bounded continuation\"],\n  \"queued_delivery\":[\"queued delivery\",\"browser outbox\",\"pending_receipts\"],\n  \"long_running_claim\":[\"long-running claim\",\"claimed request\",\"waiting_for_execution\"],\n  \"crash_auth_network\":[\"crash\",\"auth\",\"network\",\"TimeoutError\",\"BrowserError\"],\n  \"visible_incident\":[\"incident\",\"issue_report\",\"stalled_ci_handoff\",\"visible\"],\n  \"no_duplicates\":[\"duplicate\",\"exactly once\",\"no replay\"],\n  \"three_projects\":[\"jobpipe\",\"Sonary\",\"Do Again\"],\n}\nevidence={}\nlow=text.lower()\nfor name,terms in criteria.items():\n    evidence[name]={t:(t.lower() in low) for t in terms}\n\nprint(json.dumps({\n  \"issue_title_or_body_excerpt\": body[:4000],\n  \"criteria_evidence\": evidence,\n  \"comment_count\": len(data.get(\"comments\") or []),\n},indent=2,sort_keys=True))\n\n# Also summarize current test inventory around live/soak/recovery.\nfor path in sorted((repo/\"tests\").glob(\"test_*.py\")):\n    s=path.read_text(errors=\"ignore\").lower()\n    hits=[k for k in [\"soak\",\"claim\",\"browser\",\"liveness\",\"incident\",\"timeout\",\"auth\",\"network\",\"outbox\"] if k in s]\n    if hits:\n        print(path.name, \",\".join(hits))\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
