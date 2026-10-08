@@ -13,6 +13,7 @@ from do_again.cli import (
     list_projects,
     main,
     cancel_request,
+    doctor,
     request_history,
     retry_request,
     setup_project,
@@ -307,6 +308,89 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertIn("two", rendered)
             self.assertIn("three", rendered)
 
+
+
+    def test_doctor_fix_creates_safe_runtime_dirs_without_service_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            output = io.StringIO()
+            with (
+                patch("do_again.cli.runtime_layout", return_value=layout),
+                patch("do_again.cli.service_status", return_value={"installed": True, "running": True}),
+                patch("do_again.cli._ensure_remote_control_branch"),
+                patch("do_again.cli._ensure_control_worktree") as ensure_control,
+                patch("do_again.cli.restart_service") as restart,
+                patch("do_again.cli.install_service") as install,
+                redirect_stdout(output),
+            ):
+                rc = doctor(str(repo), fix=True)
+            self.assertEqual(rc, 0)
+            self.assertTrue(layout.state_dir.is_dir())
+            self.assertTrue(layout.stdout_log.parent.is_dir())
+            ensure_control.assert_called_once()
+            restart.assert_not_called()
+            install.assert_not_called()
+            self.assertIn("FIXED created missing runtime directories", output.getvalue())
+
+    def test_doctor_fix_does_not_touch_dirty_existing_control_worktree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            layout.control_worktree.mkdir(parents=True)
+            output = io.StringIO()
+            real_run = subprocess.run
+            def doctor_git(argv, *args, **kwargs):
+                if argv[:4] == ["git", "-C", str(layout.control_worktree), "rev-parse"]:
+                    return subprocess.CompletedProcess(argv, 0, str(layout.control_worktree), "")
+                if argv[:4] == ["git", "-C", str(layout.control_worktree), "status"]:
+                    return subprocess.CompletedProcess(argv, 0, " M unsafe\n", "")
+                return real_run(argv, *args, **kwargs)
+            with (
+                patch("do_again.cli.runtime_layout", return_value=layout),
+                patch("do_again.cli.service_status", return_value={"installed": True, "running": True}),
+                patch("do_again.cli.subprocess.run", side_effect=doctor_git),
+                patch("do_again.cli._ensure_control_worktree") as ensure_control,
+                redirect_stdout(output),
+            ):
+                rc = doctor(str(repo), fix=True)
+            self.assertEqual(rc, 1)
+            ensure_control.assert_not_called()
+            self.assertIn("ACTION control_worktree: existing control worktree is dirty or unhealthy", output.getvalue())
+
+    def test_doctor_reports_browser_auth_as_manual_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            (repo / "do-again.toml").write_text(
+                '[do_again]\ncontrol_branch = "operator-control"\nbrowser = true\n',
+                encoding="utf-8",
+            )
+            layout = runtime_layout(repo)
+            layout.control_worktree.mkdir(parents=True)
+            output = io.StringIO()
+            real_run = subprocess.run
+            def doctor_git(argv, *args, **kwargs):
+                if argv[:4] == ["git", "-C", str(layout.control_worktree), "rev-parse"]:
+                    return subprocess.CompletedProcess(argv, 0, str(layout.control_worktree), "")
+                if argv[:4] == ["git", "-C", str(layout.control_worktree), "status"]:
+                    return subprocess.CompletedProcess(argv, 0, "", "")
+                return real_run(argv, *args, **kwargs)
+            with (
+                patch("do_again.cli.runtime_layout", return_value=layout),
+                patch("do_again.cli.service_status", return_value={"installed": True, "running": True}),
+                patch("do_again.cli.subprocess.run", side_effect=doctor_git),
+                patch("do_again.cli.discover_browser", return_value=Path("/Applications/Chrome.app")),
+                patch("do_again.cli.browser_status", side_effect=[
+                    {"running": True},
+                    {"running": True, "authenticated": False},
+                ]),
+                patch("do_again.cli.setup_browser") as setup_browser_mock,
+                redirect_stdout(output),
+            ):
+                rc = doctor(str(repo), fix=True)
+            self.assertEqual(rc, 1)
+            setup_browser_mock.assert_not_called()
+            self.assertIn("ACTION browser_auth: run do-again browser login", output.getvalue())
 
     def test_cancel_refuses_claimed_request(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

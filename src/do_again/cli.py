@@ -38,6 +38,7 @@ from .core.schema import REQUEST_ID_RE, request_fingerprint
 from .service.runtime import (
     ServiceError,
     _default_policy,
+    _ensure_control_worktree,
     _ensure_remote_control_branch,
     find_repo,
     install_service,
@@ -50,27 +51,114 @@ from .service.runtime import (
 )
 
 
-def doctor() -> int:
+def doctor(path: str = ".", *, fix: bool = False) -> int:
     info = detect_platform()
-    checks = {
+    checks: dict[str, bool] = {
         "python": sys.version_info >= (3, 11),
         "git": shutil.which("git") is not None,
         "platform": info.supported,
     }
+    repairs: list[str] = []
+    actions: list[str] = []
     browser_error: str | None = None
+    layout = None
+    repo = None
+
     try:
-        repo = find_repo(".")
+        repo = find_repo(path)
         layout = runtime_layout(repo)
-    except ServiceError:
-        layout = None
-    if layout is not None and layout.browser_enabled:
+        checks["repo"] = True
+    except ServiceError as exc:
+        checks["repo"] = False
+        actions.append(f"project: {exc}")
+
+    if layout is not None:
+        service: dict[str, object] = {}
         try:
-            browser_binary = discover_browser()
-            checks["browser"] = True
-        except BrowserError as exc:
-            checks["browser"] = False
-            browser_binary = None
-            browser_error = str(exc)
+            service = service_status(repo)
+            checks["service_status"] = True
+        except ServiceError as exc:
+            checks["service_status"] = False
+            actions.append(f"service: {exc}")
+
+        runtime_dirs = [
+            layout.root,
+            layout.state_dir,
+            layout.stdout_log.parent,
+        ]
+        missing_dirs = [p for p in runtime_dirs if not p.is_dir()]
+        checks["runtime_dirs"] = not missing_dirs
+        if fix and missing_dirs:
+            for directory in missing_dirs:
+                directory.mkdir(parents=True, exist_ok=True)
+            repairs.append("created missing runtime directories")
+            checks["runtime_dirs"] = True
+
+        control_ok = False
+        if layout.control_worktree.exists():
+            probe = subprocess.run(
+                ["git", "-C", str(layout.control_worktree), "rev-parse", "--show-toplevel"],
+                text=True,
+                capture_output=True,
+            )
+            if probe.returncode == 0:
+                dirty = subprocess.run(
+                    ["git", "-C", str(layout.control_worktree), "status", "--porcelain"],
+                    text=True,
+                    capture_output=True,
+                )
+                control_ok = dirty.returncode == 0 and not dirty.stdout.strip()
+                if not control_ok:
+                    actions.append("control_worktree: existing control worktree is dirty or unhealthy")
+        checks["control_worktree"] = control_ok
+
+        if fix and not control_ok and not layout.control_worktree.exists():
+            try:
+                _ensure_remote_control_branch(layout)
+                _ensure_control_worktree(layout)
+                repairs.append("created missing control worktree")
+                checks["control_worktree"] = True
+            except ServiceError as exc:
+                actions.append(f"control_worktree: {exc}")
+        elif not control_ok and not layout.control_worktree.exists():
+            actions.append("control_worktree: run do-again doctor --fix to create it")
+
+        if service:
+            installed = bool(service.get("installed"))
+            running = bool(service.get("running"))
+            checks["service_installed"] = installed
+            checks["service_running"] = running
+            if not installed:
+                actions.append("service: run do-again install")
+            elif not running:
+                actions.append("service: run do-again start")
+            # Never auto-install/restart here: those copy/replace runtime and are explicit lifecycle actions.
+
+        if layout.browser_enabled:
+            try:
+                browser_binary = discover_browser()
+                checks["browser"] = True
+            except BrowserError as exc:
+                checks["browser"] = False
+                browser_binary = None
+                browser_error = str(exc)
+                actions.append(f"browser: {exc}")
+
+            if browser_binary is not None:
+                try:
+                    shared = browser_status(verify_session=False)
+                    if shared.get("running"):
+                        session = browser_status(verify_session=True)
+                        authenticated = bool(session.get("authenticated"))
+                        checks["browser_auth"] = authenticated
+                        if not authenticated:
+                            actions.append("browser_auth: run do-again browser login")
+                    else:
+                        checks["browser_auth"] = False
+                        actions.append("browser_auth: browser is stopped; run do-again browser start")
+                except BrowserError as exc:
+                    checks["browser_auth"] = False
+                    actions.append(f"browser_auth: {exc}")
 
     for key, ok in checks.items():
         print(f"{'OK' if ok else 'FAIL'} {key}")
@@ -79,11 +167,16 @@ def doctor() -> int:
     if layout is not None:
         print(f"repo={layout.repo}")
         print(f"browser_enabled={layout.browser_enabled}")
-    if layout is not None and layout.browser_enabled:
+    if layout is not None and layout.browser_enabled and 'browser_binary' in locals():
         if browser_binary is not None:
             print(f"browser_binary={browser_binary}")
         if browser_error:
             print(f"browser_fix={browser_error}")
+    for value in repairs:
+        print(f"FIXED {value}")
+    for value in actions:
+        print(f"ACTION {value}")
+
     return 0 if all(checks.values()) else 1
 
 
@@ -893,7 +986,15 @@ def main() -> int:
         metavar="{setup,verify,start,status,history,trace,logs,cancel,retry,stop,restart,list,doctor,browser}",
     )
 
-    sub.add_parser("doctor", help="Check runtime prerequisites")
+    doctor_parser = sub.add_parser(
+        "doctor", help="Check runtime prerequisites and optionally repair safe local state"
+    )
+    doctor_parser.add_argument("path", nargs="?", default=".")
+    doctor_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Repair safe deterministic state only; never reinstall/restart services or bypass browser auth",
+    )
 
     setup_parser = sub.add_parser(
         "setup",
@@ -1041,7 +1142,7 @@ def main() -> int:
         parser.print_help()
         return 0
     if args.command == "doctor":
-        return doctor()
+        return doctor(args.path, fix=args.fix)
     if args.command == "setup":
         return setup_project(
             args.path,
