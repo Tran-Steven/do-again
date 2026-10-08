@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-self-queued-receipt-delivery-20261008-134",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:43:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T14:03:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, hashlib, sys\nfrom pathlib import Path\n\ntarget=Path(\"/Users/steventran/do-again\")\nreq_id=\"selfdev-issue10-final-closure-audit-20261008-132\"\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nstate=root/\"state\"\n\nsys.path.insert(0,\"/Users/steventran/do-again/src\")\nfrom do_again.service.daemon import _drain_browser_outbox\n\noutbox=state/\"browser_outbox\"\nuncertain=state/\"browser_delivery_uncertain.json\"\ntarget_file=outbox/f\"{req_id}.json\"\n\nif not target_file.is_file():\n    raise SystemExit(\"precondition failed: expected queued self receipt missing\")\nif uncertain.exists():\n    raise SystemExit(\"precondition failed: uncertain delivery already exists\")\n\ndelivered=_drain_browser_outbox(target,state)\n\nitems=sorted(p.name for p in outbox.glob(\"*.json\")) if outbox.is_dir() else []\nbrowser_status={}\ntry:\n    browser_status=json.loads((state/\"browser_status.json\").read_text())\nexcept Exception:\n    pass\n\nprint(json.dumps({\n  \"delivered\":delivered,\n  \"remaining_outbox\":items,\n  \"uncertain_exists\":uncertain.exists(),\n  \"browser_status\":browser_status,\n},indent=2,sort_keys=True))\n\nif delivered != 1:\n    raise SystemExit(f\"expected exactly one delivered receipt, got {delivered}\")\nif req_id+\".json\" in items:\n    raise SystemExit(\"delivered self receipt still present in outbox\")\nif uncertain.exists():\n    raise SystemExit(\"delivery left uncertain marker behind\")\nif browser_status.get(\"state\")!=\"ready\":\n    raise SystemExit(f\"browser delivery not ready after verified send: {browser_status}\")\n\nprint(\"SELF_QUEUED_RECEIPT_DELIVERY_ACCEPTANCE_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
