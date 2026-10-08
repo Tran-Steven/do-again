@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-live-stall-dedupe-acceptance-20261007-116",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T05:46:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T06:06:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, sys\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service import liveness\n\nconfig=liveness._settings(repo)\nif not config.get(\"report_stalls\"):\n    raise SystemExit(\"stall reporting disabled\")\n\na=liveness._report_stall(repo,config,{},\"idle\")\nb=liveness._report_stall(repo,config,{},\"idle\")\n\nprint(json.dumps({\"first\":a,\"second\":b},indent=2,sort_keys=True))\n\nfor label,state in [(\"first\",a),(\"second\",b)]:\n    if state.get(\"issue_report\")!=\"existing\":\n        raise SystemExit(f\"{label} report did not dedupe to existing issue: {state}\")\n    if not state.get(\"issue_number\"):\n        raise SystemExit(f\"{label} missing issue number\")\n\nif a[\"issue_number\"]!=b[\"issue_number\"]:\n    raise SystemExit(f\"dedupe unstable across fresh states: {a['issue_number']} vs {b['issue_number']}\")\n\nif a[\"issue_number\"] not in {19,20}:\n    raise SystemExit(f\"unexpected new issue created: {a['issue_number']}\")\n\nprint(\"LIVE_STALL_DEDUPE_ACCEPTANCE_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
