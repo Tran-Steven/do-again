@@ -310,6 +310,21 @@ class CliOnboardingTests(unittest.TestCase):
 
 
 
+    def test_doctor_returns_nonzero_for_missing_local_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            output = io.StringIO()
+            with (
+                patch("do_again.cli.runtime_layout", return_value=layout),
+                patch("do_again.cli.service_status", return_value={"installed": False, "running": False}),
+                redirect_stdout(output),
+            ):
+                rc = doctor(str(repo), fix=False)
+            self.assertEqual(rc, 1)
+            self.assertIn("service_installed", output.getvalue())
+            self.assertIn("control_worktree", output.getvalue())
+
     def test_doctor_fix_creates_safe_runtime_dirs_without_service_restart(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))
