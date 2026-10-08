@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-orphan-cancel-preflight-20261008-126",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:30:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:50:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess\nfrom pathlib import Path\n\nsource=Path(\"/Users/steventran/do-again\")\ntarget=Path(\"/Users/steventran/Sonary\")\nreq_id=\"sonary-daw-typecheck-stage-isolation-20261008-143\"\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(source/\"src\")\n\ndef run(args):\n    return subprocess.run(args,cwd=source,text=True,capture_output=True,check=False,env=env)\n\ncancel=run([\n    \"python3\",\"-m\",\"do_again.cli\",\n    \"cancel\",req_id,str(target),\n    \"--reason\",\"expired orphaned request with no receipt, claim, executor, or active ledger evidence\"\n])\n\nprint(\"=== cancel stdout ===\")\nprint(cancel.stdout)\nprint(\"=== cancel stderr ===\")\nprint(cancel.stderr)\nprint(\"cancel_rc=\"+str(cancel.returncode))\nif cancel.returncode!=0:\n    raise SystemExit(\"supported cancellation refused; no further mutation attempted\")\n\ndry=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(target)])\n\nprint(\"=== post-cancel upgrade preflight stdout ===\")\nprint(dry.stdout)\nprint(\"=== post-cancel upgrade preflight stderr ===\")\nprint(dry.stderr)\nprint(\"preflight_rc=\"+str(dry.returncode))\n\ntry:\n    parsed=json.loads(dry.stdout)\nexcept Exception as exc:\n    raise SystemExit(f\"could not parse preflight JSON: {exc}\")\n\nblockers=((parsed.get(\"preflight\") or {}).get(\"blockers\") or [])\nprint(json.dumps({\n  \"cancelled_request\":req_id,\n  \"post_cancel_blockers\":blockers,\n  \"safe\":(parsed.get(\"preflight\") or {}).get(\"safe\"),\n  \"deferred\":parsed.get(\"deferred\"),\n},indent=2,sort_keys=True))\n\nif any(b.get(\"kind\")==\"pending_requests\" and req_id in (b.get(\"request_ids\") or []) for b in blockers):\n    raise SystemExit(\"cancelled orphan still blocks rollout\")\n\nprint(\"SONARY_ORPHAN_CANCEL_AND_PREFLIGHT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
