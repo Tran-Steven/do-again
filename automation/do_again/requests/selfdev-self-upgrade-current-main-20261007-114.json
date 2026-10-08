@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-self-upgrade-current-main-20261007-114",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T05:43:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T06:03:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, hashlib, os, subprocess, sys\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nexpected_head=\"7bee017a4893ce2ad6f05113bcec9d4f5817c5b7\"\n\ndef run(args,env=None):\n    return subprocess.run(args,cwd=repo,text=True,capture_output=True,check=False,env=env)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nif head!=expected_head:\n    raise SystemExit(f\"main moved: {head}\")\n\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\nsource_hash=_tree_hash(repo/\"src/do_again\")\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(repo/\"src\")\n\np=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(repo),\"--apply\"],env=env)\nprint(\"=== upgrade stdout ===\")\nprint(p.stdout)\nprint(\"=== upgrade stderr ===\")\nprint(p.stderr)\nprint(\"upgrade_rc=\"+str(p.returncode))\nif p.returncode!=0:\n    raise SystemExit(p.returncode)\n\nkey=hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nruntime=root/\"runtime/do_again\"\nstate=root/\"state\"\n\nruntime_hash=_tree_hash(runtime)\ntry:\n    journal=json.loads((state/\"runtime_upgrade.json\").read_text())\nexcept Exception:\n    journal={}\n\nprint(json.dumps({\n  \"repo_head\":head,\n  \"source_hash\":source_hash,\n  \"runtime_hash\":runtime_hash,\n  \"journal\":journal,\n},indent=2,sort_keys=True))\n\nif runtime_hash!=source_hash:\n    raise SystemExit(\"runtime hash does not match source after upgrade\")\nif journal.get(\"state\")!=\"verified\":\n    raise SystemExit(\"upgrade journal not verified\")\nverification=journal.get(\"verification\") or {}\nif verification.get(\"runtime_hash\")!=source_hash or verification.get(\"hash_matches\") is not True:\n    raise SystemExit(\"journal verification hash mismatch\")\nprint(\"SELF_STAGED_UPGRADE_ACCEPTANCE_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
