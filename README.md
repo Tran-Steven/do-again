@@ -69,6 +69,28 @@ do-again stop
 do-again list
 ~~~
 
+The stop command prints a short **work recap** and saves a local Markdown
+snapshot in the project's private Do Again state directory under
+`session_reports/`. It covers the current daemon session when the startup
+timestamp is known; otherwise it explicitly falls back to the last 24 hours.
+It shows successful, failed, and unfinished requests, project Git commits,
+watchdog state, and browser-delivery warnings. A successful request is **not**
+automatically labeled a shipped feature, and local commits may include work
+outside Do Again. Recaps are never posted to GitHub or ChatGPT.
+
+To view a digest without ending the session:
+
+~~~bash
+do-again summary
+do-again summary --hours 8
+do-again summary --json
+~~~
+
+The reports are also saved as `session_reports/latest.md` and
+`session_reports/latest.json` after a `do-again stop`. Stopping one
+project does not stop other projects; closing a ChatGPT tab does not stop
+the Do Again service or produce a report.
+
 Attended mode without a background service:
 
 ~~~bash
