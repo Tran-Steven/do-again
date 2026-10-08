@@ -38,7 +38,7 @@ class DedicatedExecutionTests(unittest.TestCase):
         self.assertEqual(spec['umask'],0o077);self.assertTrue(spec['start_new_session'])
         self.assertEqual(spec['args'][0],'/usr/bin/sandbox-exec')
         self.assertIn('(deny job-creation)',spec['args'][2])
-        self.assertIn(str(self.work/'.git'),spec['args'][2])
+        self.assertIn('(deny file-write* (subpath '+json.dumps(str(self.work/'.git'))+'))',spec['args'][2])
         self.assertNotIn('SSH_AUTH_SOCK',spec['env']);self.assertNotIn('PYTHONPATH',spec['env'])
         self.assertEqual(spec['env']['HOME'],str(self.scratch))
 
