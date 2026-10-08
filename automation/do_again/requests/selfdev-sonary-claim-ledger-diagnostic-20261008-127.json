@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-claim-ledger-diagnostic-20261008-127",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:31:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:51:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, time, hashlib, subprocess\nfrom pathlib import Path\n\ntarget=Path(\"/Users/steventran/Sonary\")\nreq_id=\"sonary-daw-typecheck-stage-isolation-20261008-143\"\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nbase=root/\"control/automation/do_again\"\nstate=root/\"state\"\n\ndef read_json(p):\n    try:\n        v=json.loads(p.read_text())\n        return v if isinstance(v,dict) else {}\n    except Exception:\n        return {}\n\nclaim_path=base/\"claims\"/f\"{req_id}.json\"\nledger_path=state/\"ledger\"/f\"{req_id}.json\"\nclaim=read_json(claim_path) if claim_path.is_file() else None\nledger=read_json(ledger_path) if ledger_path.is_file() else None\n\nps=subprocess.run([\"ps\",\"-axo\",\"pid=,ppid=,etime=,command=\"],text=True,capture_output=True)\nlines=ps.stdout.splitlines()\n\ndef proc_for_pid(pid):\n    if not isinstance(pid,int) and not (isinstance(pid,str) and pid.isdigit()):\n        return []\n    needle=str(pid)\n    return [line.strip() for line in lines if line.strip().split(None,1)[0]==needle]\n\ncandidate_pids=set()\nfor obj in (claim or {}, ledger or {}):\n    for k,v in obj.items():\n        if \"pid\" in str(k).lower() and (isinstance(v,int) or (isinstance(v,str) and v.isdigit())):\n            candidate_pids.add(int(v))\n\nout={\n  \"request_id\":req_id,\n  \"claim_exists\":claim_path.is_file(),\n  \"claim_path\":str(claim_path),\n  \"claim_mtime\":claim_path.stat().st_mtime if claim_path.is_file() else None,\n  \"claim_age_seconds\":time.time()-claim_path.stat().st_mtime if claim_path.is_file() else None,\n  \"claim\":claim,\n  \"ledger_exists\":ledger_path.is_file(),\n  \"ledger_path\":str(ledger_path),\n  \"ledger_mtime\":ledger_path.stat().st_mtime if ledger_path.is_file() else None,\n  \"ledger_age_seconds\":time.time()-ledger_path.stat().st_mtime if ledger_path.is_file() else None,\n  \"ledger\":ledger,\n  \"candidate_pid_processes\":{str(pid):proc_for_pid(pid) for pid in sorted(candidate_pids)},\n  \"service_processes\":[line.strip() for line in lines if str(root) in line],\n}\nprint(json.dumps(out,indent=2,sort_keys=True))\nprint(\"SONARY_CLAIM_LEDGER_DIAGNOSTIC_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
