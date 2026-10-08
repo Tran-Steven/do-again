@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:20:29.283406+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "98beb9c896434e7dedaa0d7f0f34bfff8d3ca3a99afb981843305a788e6eb970",
+  "request_id": "selfdev-cross-project-installed-fault-smoke-20261008-120",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "98beb9c896434e7dedaa0d7f0f34bfff8d3ca3a99afb981843305a788e6eb970",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-cross-project-installed-fault-smoke-20261008-120/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.511,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 4412,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-cross-project-installed-fault-smoke-20261008-120/script.py",
+      "script_sha256": "797eb8d03a7675e8f28ff38f6875bdf111281081e13d7799a4907457454b4fd9",
+      "stderr": "Traceback (most recent call last):\n  File \"/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-cross-project-installed-fault-smoke-20261008-120/script.py\", line 19, in <module>\n    spec.loader.exec_module(liveness)\n    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^\n  File \"<frozen importlib._bootstrap_external>\", line 1023, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n  File \"/Users/steventran/.do_again/projects/42ba1b7dcb92/runtime/do_again/service/liveness.py\", line 12, in <module>\n    from ..browser import cdp\nImportError: attempted relative import with no known parent package\n",
+      "stderr_truncated": false,
+      "stdout": "",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:20:28.196759+00:00",
+  "state": "failed",
+  "traceback": null
+}
