@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:32:50.517038+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "da7abb04daf2bd44ba89548e3a7ba1e786fe416362ad58aa4a3b4f95dba6da1f",
+  "request_id": "selfdev-jobpipe-sonary-runtime-hash-diagnostic-20261007-107",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "da7abb04daf2bd44ba89548e3a7ba1e786fe416362ad58aa4a3b4f95dba6da1f",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-jobpipe-sonary-runtime-hash-diagnostic-20261007-107/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.709,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1812,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-jobpipe-sonary-runtime-hash-diagnostic-20261007-107/script.py",
+      "script_sha256": "3dd13dee561c73e8c4ddaf1a86ef3bf4f1aa765fada27a647a418db494686202",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "[\n  {\n    \"canonical_match\": true,\n    \"critical_equal\": {\n      \"browser/runtime.py\": true,\n      \"core/schema.py\": true,\n      \"service/daemon.py\": true,\n      \"service/liveness.py\": true,\n      \"service/rollout.py\": true,\n      \"service/service.py\": true\n    },\n    \"different_content\": [],\n    \"only_runtime\": [],\n    \"only_source\": [\n      \"__pycache__/__init__.cpython-313.pyc\",\n      \"__pycache__/cli.cpython-313.pyc\",\n      \"browser/__pycache__/__init__.cpython-313.pyc\",\n      \"browser/__pycache__/cdp.cpython-313.pyc\",\n      \"browser/__pycache__/errors.cpython-313.pyc\",\n      \"browser/__pycache__/runtime.cpython-313.pyc\",\n      \"core/__pycache__/__init__.cpython-313.pyc\",\n      \"core/__pycache__/agent.cpython-313.pyc\",\n      \"core/__pycache__/executor.cpython-313.pyc\",\n      \"core/__pycache__/schema.cpython-313.pyc\",\n      \"platforms/__pycache__/__init__.cpython-313.pyc\",\n      \"platforms/__pycache__/base.cpython-313.pyc\",\n      \"platforms/__pycache__/detect.cpython-313.pyc\",\n      \"platforms/__pycache__/linux.cpython-313.pyc\",\n      \"platforms/__pycache__/macos.cpython-313.pyc\",\n      \"platforms/__pycache__/process.cpython-313.pyc\",\n      \"platforms/__pycache__/windows.cpython-313.pyc\",\n      \"service/__pycache__/__init__.cpython-313.pyc\",\n      \"service/__pycache__/daemon.cpython-313.pyc\",\n      \"service/__pycache__/liveness.cpython-313.pyc\",\n      \"service/__pycache__/rollout.cpython-313.pyc\",\n      \"service/__pycache__/runtime.cpython-313.pyc\"\n    ],\n    \"repo\": \"/Users/steventran/jobpipe\",\n    \"runtime_canonical_tree_hash\": \"8ab007ed436fed3611834935a7d23ef5b89fd94a759462e1aa4c1a1351db24cc\",\n    \"runtime_file_count\": 23,\n    \"source_canonical_tree_hash\": \"8ab007ed436fed3611834935a7d23ef5b89fd94a759462e1aa4c1a1351db24cc\",\n    \"source_file_count\": 45\n  },\n  {\n    \"canonical_match\": true,\n    \"critical_equal\": {\n      \"browser/runtime.py\": true,\n      \"core/schema.py\": true,\n      \"service/daemon.py\": true,\n      \"service/liveness.py\": true,\n      \"service/rollout.py\": true,\n      \"service/service.py\": true\n    },\n    \"different_content\": [],\n    \"only_runtime\": [],\n    \"only_source\": [\n      \"__pycache__/__init__.cpython-313.pyc\",\n      \"__pycache__/cli.cpython-313.pyc\",\n      \"browser/__pycache__/__init__.cpython-313.pyc\",\n      \"browser/__pycache__/cdp.cpython-313.pyc\",\n      \"browser/__pycache__/errors.cpython-313.pyc\",\n      \"browser/__pycache__/runtime.cpython-313.pyc\",\n      \"core/__pycache__/__init__.cpython-313.pyc\",\n      \"core/__pycache__/agent.cpython-313.pyc\",\n      \"core/__pycache__/executor.cpython-313.pyc\",\n      \"core/__pycache__/schema.cpython-313.pyc\",\n      \"platforms/__pycache__/__init__.cpython-313.pyc\",\n      \"platforms/__pycache__/base.cpython-313.pyc\",\n      \"platforms/__pycache__/detect.cpython-313.pyc\",\n      \"platforms/__pycache__/linux.cpython-313.pyc\",\n      \"platforms/__pycache__/macos.cpython-313.pyc\",\n      \"platforms/__pycache__/process.cpython-313.pyc\",\n      \"platforms/__pycache__/windows.cpython-313.pyc\",\n      \"service/__pycache__/__init__.cpython-313.pyc\",\n      \"service/__pycache__/daemon.cpython-313.pyc\",\n      \"service/__pycache__/liveness.cpython-313.pyc\",\n      \"service/__pycache__/rollout.cpython-313.pyc\",\n      \"service/__pycache__/runtime.cpython-313.pyc\"\n    ],\n    \"repo\": \"/Users/steventran/Sonary\",\n    \"runtime_canonical_tree_hash\": \"8ab007ed436fed3611834935a7d23ef5b89fd94a759462e1aa4c1a1351db24cc\",\n    \"runtime_file_count\": 23,\n    \"source_canonical_tree_hash\": \"8ab007ed436fed3611834935a7d23ef5b89fd94a759462e1aa4c1a1351db24cc\",\n    \"source_file_count\": 45\n  }\n]\nCANONICAL_RUNTIME_HASH_DIAGNOSTIC_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:32:49.311414+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
