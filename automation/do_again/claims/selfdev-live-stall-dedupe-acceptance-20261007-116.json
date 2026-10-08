@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:58649:1791438167:1983e93cf2fc",
+  "claimed_at_utc": "2026-10-08T05:45:02.688818+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 58649,
+  "request_fingerprint": "ee4925eb8e2c535e3ff4fb52ac2d77627a54fd13fa5f96215395d4de8ed57eac",
+  "request_id": "selfdev-live-stall-dedupe-acceptance-20261007-116",
+  "schema_version": 1
+}
