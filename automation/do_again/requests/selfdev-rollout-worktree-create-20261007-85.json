@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-worktree-create-20261007-85",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T02:00:20.000000+00:00",
+  "expires_at_utc": "2026-10-08T02:20:20.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport subprocess\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nwt=Path(\"/Users/steventran/.do_again/rollout-20261007\")\nbranch=\"feat/staged-runtime-rollout-20261007\"\nexpected=\"a02b9979c083bb223a017bdb75e58e8223d43705\"\n\ndef run(args, check=True):\n    return subprocess.run(args,cwd=repo,text=True,capture_output=True,check=check)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\ncurrent=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.splitlines()\ntracked_dirty=[x for x in status if not x.startswith(\"?? \")]\nif head!=expected or current!=\"main\" or tracked_dirty:\n    raise SystemExit(f\"unexpected source state head={head} branch={current} tracked_dirty={tracked_dirty}\")\n\nif wt.exists():\n    raise SystemExit(f\"target worktree already exists: {wt}\")\n\nfetch=run([\"git\",\"fetch\",\"origin\",\"main\"],check=False)\nprint(fetch.stdout); print(fetch.stderr)\nif fetch.returncode:\n    raise SystemExit(fetch.returncode)\norigin_main=run([\"git\",\"rev-parse\",\"origin/main\"]).stdout.strip()\nif origin_main!=expected:\n    raise SystemExit(f\"origin/main moved unexpectedly: {origin_main}\")\n\nexisting=run([\"git\",\"show-ref\",\"--verify\",f\"refs/heads/{branch}\"],check=False)\nif existing.returncode==0:\n    raise SystemExit(f\"branch already exists: {branch}\")\n\nadd=run([\"git\",\"worktree\",\"add\",\"-b\",branch,str(wt),expected],check=False)\nprint(\"=== worktree add stdout ===\"); print(add.stdout)\nprint(\"=== worktree add stderr ===\"); print(add.stderr)\nif add.returncode:\n    raise SystemExit(add.returncode)\n\ndef wrun(args, check=True):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check)\n\nprint(\"wt_branch=\"+wrun([\"git\",\"branch\",\"--show-current\"]).stdout.strip())\nprint(\"wt_head=\"+wrun([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"wt_status=\"+repr(wrun([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
