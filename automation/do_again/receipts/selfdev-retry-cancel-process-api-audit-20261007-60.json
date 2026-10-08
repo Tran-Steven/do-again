@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:32:34.472036+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "6e731148bb9c418ef36a1ae2535a55750bced4b089c09fe6301c1fb867e6c243",
+  "request_id": "selfdev-retry-cancel-process-api-audit-20261007-60",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "6e731148bb9c418ef36a1ae2535a55750bced4b089c09fe6301c1fb867e6c243",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-retry-cancel-process-api-audit-20261007-60/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.21,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 933,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-retry-cancel-process-api-audit-20261007-60/script.py",
+      "script_sha256": "65f5e983a94dec3defb06eecb243b27b4bd499dec7ead58051256b8787fce42a",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=6f219b829fac59a7ca0e0b27cdff81b9d04c365b\nstatus:\n M src/do_again/cli.py\n M src/do_again/core/agent.py\n M tests/test_cli.py\n M tests/test_request_fingerprints.py\n\n--- agent 547-615 ---\n0547:             [\"/bin/launchctl\", \"kickstart\", \"-k\", target],\n0548:             stdin=subprocess.DEVNULL,\n0549:             stdout=subprocess.DEVNULL,\n0550:             stderr=subprocess.DEVNULL,\n0551:             start_new_session=True,\n0552:             close_fds=True,\n0553:         )\n0554: \n0555:     def process_path(self, path: Path) -> bool:\n0556:         try:\n0557:             raw = read_json(path)\n0558:         except Exception as exc:\n0559:             return self.publish_invalid_request(path, exc)\n0560:         if not isinstance(raw, dict):\n0561:             return self.publish_invalid_request(path, \"request must be an object\")\n0562: \n0563:         request_id = str(raw.get(\"request_id\") or \"\")\n0564:         if not request_id or path.stem != request_id:\n0565:             return self.publish_invalid_request(\n0566:                 path,\n0567:                 \"request_id is missing or does not match the request filename\",\n0568:             )\n0569: \n0570:         fingerprint = request_fingerprint(raw)\n0571:         existing_receipt = self.receipt_payload(request_id)\n0572:         if existing_receipt is not None:\n0573:             existing_fingerprint = str(\n0574:                 existing_receipt.get(\"request_fingerprint\") or \"\"\n0575:             )\n0576:             if self._request_matches_fingerprint(raw, existing_fingerprint):\n0577:                 return False\n0578:             self.publish_conflict(\n0579:                 request=raw,\n0580:                 reason=\"request_id already has a receipt for different request content\",\n0581:                 existing_fingerprint=existing_fingerprint or None,\n0582:             )\n0583:             return True\n0584: \n0585:         if not self.acquire_request_lock(request_id):\n0586:             return False\n0587: \n0588:         try:\n0589:             existing_receipt = self.receipt_payload(request_id)\n0590:             if existing_receipt is not None:\n0591:                 existing_fingerprint = str(\n0592:                     existing_receipt.get(\"request_fingerprint\") or \"\"\n0593:                 )\n0594:                 if self._request_matches_fingerprint(raw, existing_fingerprint):\n0595:                     return False\n0596:                 self.publish_conflict(\n0597:                     request=raw,\n0598:                     reason=\"request_id already has a receipt for different request content\",\n0599:                     existing_fingerprint=existing_fingerprint or None,\n0600:                 )\n0601:                 return True\n0602: \n0603:             ledger = self.local_ledger(request_id)\n0604:             if ledger:\n0605:                 ledger_fingerprint = str(\n0606:                     ledger.get(\"request_fingerprint\") or \"\"\n0607:                 )\n0608:                 if ledger_fingerprint and not self._request_matches_fingerprint(raw, ledger_fingerprint):\n0609:                     self.publish_conflict(\n0610:                         request=raw,\n0611:                         reason=\"request_id conflicts with durable local ledger content\",\n0612:                         existing_fingerprint=ledger_fingerprint,\n0613:                     )\n0614:                     return True\n0615: \n0070:                 self.assertFalse(agent.process_path(path))\n0071:                 restarted = self.agent()\n0072:                 self.assertFalse(restarted.process_path(path))\n0073:                 restarted.executor.execute.assert_not_called()\n0074:         self.assertEqual(len(self.executions), 8)\n0075:         self.assertFalse(self.control.joinpath(\"automation/do_again/conflicts\").exists())\n0076: \n0077: \n0078:     def test_preclaim_cancellation_publishes_cancelled_receipt_without_execution(self):\n0079:         request_id = \"cancel-before-execution\"\n0080:         request = self.request(request_id)\n0081:         agent = self.agent()\n0082:         request_path = agent.requests_dir / f\"{request_id}.json\"\n0083:         request_path.parent.mkdir(parents=True, exist_ok=True)\n0084:         request_path.write_text(json.dumps(request), encoding=\"utf-8\")\n0085:         cancellation = {\n0086:             \"schema_version\": 1,\n0087:             \"request_id\": request_id,\n0088:             \"request_fingerprint\": request_fingerprint(request),\n0089:             \"state\": \"cancelled_before_execution\",\n0090:             \"reason\": \"test cancellation\",\n0091:             \"cancelled_at_utc\": request[\"issued_at_utc\"],\n0092:         }\n0093:         cancel_path = agent.cancellations_dir / f\"{request_id}.json\"\n0094:         cancel_path.parent.mkdir(parents=True, exist_ok=True)\n0095:         cancel_path.write_text(json.dumps(cancellation), encoding=\"utf-8\")\n0096:         with patch.object(agent, \"acquire_remote_claim\") as claim, patch.object(\n0097:             agent.executor, \"execute\"\n0098:         ) as execute, patch.object(agent, \"publish_receipt\"), patch.object(\n0099:             agent, \"notify_receipt\"\n0100:         ):\n0101:             changed = agent.process_request(request_path)\n0102:         self.assertTrue(changed)\n0103:         claim.assert_not_called()\n0104:         execute.assert_not_called()\n0105:         ledger = agent.local_ledger(request_id)\n0106:         self.assertEqual(ledger[\"receipt\"][\"state\"], \"cancelled\")\n0107: \n0108:     def test_legacy_normalized_receipt_is_not_reexecuted_after_expiry(self):\n0109:         request = self.request()\n0110:         path = self.write_request(request)\n0111:         agent = self.agent()\n0112:         normalized = validate_request(request, max_ttl_seconds=3600)\n0113:         receipt = agent.make_receipt(request=normalized, state=\"succeeded\", started_at=utc_now().isoformat())\n0114:         agent.publish_receipt(receipt)\n0115:         with patch(\"do_again.core.schema.utc_now\", return_value=utc_now() + timedelta(hours=2)):\ndiffstat:\n src/do_again/cli.py                | 176 ++++++++++++++++++++++++++++++++++++-\n src/do_again/core/agent.py         |  35 ++++++++\n tests/test_cli.py                  |  69 +++++++++++++++\n tests/test_request_fingerprints.py |  32 +++++++\n 4 files changed, 311 insertions(+), 1 deletion(-)\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:32:34.049062+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
