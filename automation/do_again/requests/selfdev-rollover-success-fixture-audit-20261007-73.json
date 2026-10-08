@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-success-fixture-audit-20261007-73",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:46:30.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:16:30.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\nprint(\"branch=\"+run([\"git\",\"branch\",\"--show-current\"]).strip())\nprint(\"head=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).strip())\nprint(\"status:\")\nprint(run([\"git\",\"status\",\"--porcelain=v1\"]))\np=wt/\"tests/test_browser_hardening.py\"\nlines=p.read_text().splitlines()\nfor n in range(1,90):\n    print(f\"{n:04d}: {lines[n-1]}\")\nfor n in range(320,365):\n    print(f\"{n:04d}: {lines[n-1]}\")\nprint(\"diffstat:\")\nprint(run([\"git\",\"diff\",\"--stat\"]))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
