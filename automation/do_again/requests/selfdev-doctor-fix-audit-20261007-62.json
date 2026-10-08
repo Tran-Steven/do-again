@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-doctor-fix-audit-20261007-62",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:34:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:04:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"5dcb550375737c002dbff316121ed1d0c71a27dc\"\n\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).strip()\nif head!=expected or status:\n    raise SystemExit(f\"unexpected state head={head} status={status!r}\")\n\nfor rel in [\"src/do_again/cli.py\",\"src/do_again/service/runtime.py\",\"src/do_again/browser/runtime.py\",\"tests/test_cli.py\",\"tests/test_service.py\"]:\n    p=wt/rel\n    print(f\"=== {rel} ===\")\n    lines=p.read_text().splitlines()\n    needles=[\n        \"def doctor\", \"browser_status\", \"setup_browser\", \"ensure_browser_running\",\n        \"prepare_runtime\", \"runtime_layout\", \"_ensure_control_worktree\",\n        \"_ensure_remote_control_branch\", \"policy_path\", \"metadata_path\",\n        \"service_status\", \"auth_required\"\n    ]\n    hits=[]\n    for i,line in enumerate(lines,1):\n        if any(n.lower() in line.lower() for n in needles):\n            hits.append(i)\n    seen=set()\n    for i in hits[:50]:\n        start=max(1,i-8); end=min(len(lines),i+28)\n        if any(n in seen for n in range(start,end+1)):\n            continue\n        seen.update(range(start,end+1))\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start,end+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
