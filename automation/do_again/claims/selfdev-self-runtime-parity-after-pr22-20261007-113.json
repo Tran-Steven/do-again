@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:42105:1791437684:f7477c11374f",
+  "claimed_at_utc": "2026-10-08T05:41:37.766515+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 42105,
+  "request_fingerprint": "28aea41b45eecbdf1bac0f9994b0471a007b59ba12eda35377780c3597fb7f95",
+  "request_id": "selfdev-self-runtime-parity-after-pr22-20261007-113",
+  "schema_version": 1
+}
