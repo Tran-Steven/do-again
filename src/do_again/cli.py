@@ -462,32 +462,46 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
                 capture_output=True,
             )
             if sync.returncode == 0:
-                reset = subprocess.run(
-                    ["git", "-C", str(control), "reset", "--hard", "FETCH_HEAD"],
-                    text=True,
-                    capture_output=True,
+                # Never reset or switch the live agent's checkout during a
+                # verification. Inspect immutable fetched Git objects only.
+                fetched = subprocess.run(
+                    ["git", "-C", str(control), "rev-parse", "FETCH_HEAD"],
+                    text=True, capture_output=True, timeout=10,
                 )
-                if reset.returncode != 0:
-                    last_sync_error = (reset.stderr or reset.stdout).strip()
-                else:
-                    request_seen = request_seen or (control / request_path).is_file()
-                    receipt_file = control / receipt_path
-                    if receipt_file.is_file():
-                        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
-                        if receipt.get("request_id") != request_id:
-                            raise ServiceError("verification receipt request_id mismatch")
-                        if receipt.get("state") != "succeeded":
-                            raise ServiceError(
-                                "verification request completed with state "
-                                + str(receipt.get("state"))
-                                + ": "
-                                + str(receipt.get("error") or "no error detail")
-                            )
-                        print("SETUP_OK")
-                        print("verification=end_to_end")
-                        print(f"verification_request_id={request_id}")
-                        print(f"automation_chat={chat_url}")
-                        return 0
+                if fetched.returncode != 0:
+                    last_sync_error = (fetched.stderr or fetched.stdout).strip()
+                    time.sleep(1.0)
+                    continue
+                head_sha = fetched.stdout.strip()
+                if not re.fullmatch(r"[0-9a-fA-F]{40,64}", head_sha):
+                    last_sync_error = "Git fetch returned an invalid control commit"
+                    time.sleep(1.0)
+                    continue
+                read_request = subprocess.run(
+                    ["git", "-C", str(control), "show", f"{head_sha}:{request_path}"],
+                    text=True, capture_output=True, timeout=10,
+                )
+                request_seen = request_seen or read_request.returncode == 0
+                read_receipt = subprocess.run(
+                    ["git", "-C", str(control), "show", f"{head_sha}:{receipt_path}"],
+                    text=True, capture_output=True, timeout=10,
+                )
+                if read_receipt.returncode == 0:
+                    receipt = json.loads(read_receipt.stdout)
+                    if receipt.get("request_id") != request_id:
+                        raise ServiceError("verification receipt request_id mismatch")
+                    if receipt.get("state") != "succeeded":
+                        raise ServiceError(
+                            "verification request completed with state "
+                            + str(receipt.get("state"))
+                            + ": "
+                            + str(receipt.get("error") or "no error detail")
+                        )
+                    print("SETUP_OK")
+                    print("verification=end_to_end")
+                    print(f"verification_request_id={request_id}")
+                    print(f"automation_chat={chat_url}")
+                    return 0
             else:
                 last_sync_error = (sync.stderr or sync.stdout).strip()
             time.sleep(1.0)

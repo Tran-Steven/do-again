@@ -197,7 +197,24 @@ class CliOnboardingTests(unittest.TestCase):
                 )
                 return {"response": "submitted", "chat_url": "https://chatgpt.com/c/project"}
 
-            fake_proc = subprocess.CompletedProcess([], 0, "", "")
+            git_calls = []
+
+            def fake_git_run(args, **kwargs):
+                git_calls.append(args)
+                verb = args[3]
+                if verb == "fetch":
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                if verb == "rev-parse":
+                    return subprocess.CompletedProcess(args, 0, "a" * 40 + "\n", "")
+                if verb == "show":
+                    target = args[-1].split(":", 1)[1]
+                    file = control / target
+                    return subprocess.CompletedProcess(
+                        args, 0 if file.is_file() else 128,
+                        file.read_text() if file.is_file() else "", ""
+                    )
+                raise AssertionError(f"unexpected/destructive git command: {args}")
+
             output = io.StringIO()
             with (
                 patch("do_again.cli.runtime_layout", return_value=Layout()),
@@ -206,11 +223,13 @@ class CliOnboardingTests(unittest.TestCase):
                 patch("do_again.cli.ensure_browser_running", return_value={"port": 9223}),
                 patch("do_again.cli.cdp.create_target", return_value=object()),
                 patch("do_again.cli.send_message", side_effect=fake_send),
-                patch("do_again.cli.subprocess.run", return_value=fake_proc),
+                patch("do_again.cli.subprocess.run", side_effect=fake_git_run),
                 redirect_stdout(output),
             ):
                 rc = verify_project(str(repo), timeout_seconds=1.0)
             self.assertEqual(rc, 0)
+            self.assertFalse(any(args[3] == "reset" for args in git_calls))
+            self.assertTrue(any(args[3] == "show" for args in git_calls))
             self.assertIn("SETUP_OK", output.getvalue())
             self.assertIn("verification=end_to_end", output.getvalue())
             self.assertIn(captured["request_id"], output.getvalue())
