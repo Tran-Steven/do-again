@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:29:05.370128+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "12df73c6bc63b7894cf9295a108d90c2b2546605c10a1cee80c1861af1ec57fd",
+  "request_id": "selfdev-sonary-orphan-cancel-preflight-20261008-126",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "12df73c6bc63b7894cf9295a108d90c2b2546605c10a1cee80c1861af1ec57fd",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-orphan-cancel-preflight-20261008-126/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 2.583,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1674,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-orphan-cancel-preflight-20261008-126/script.py",
+      "script_sha256": "4101e369c8c75b6084a3bb8d2448a2f16ed129a4c0cebeaf6e65565c0ce21eb8",
+      "stderr": "supported cancellation refused; no further mutation attempted\n",
+      "stderr_truncated": false,
+      "stdout": "=== cancel stdout ===\n\n=== cancel stderr ===\ndo-again: cancel: request is already claimed and cannot be safely cancelled\n\ncancel_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:29:01.937352+00:00",
+  "state": "failed",
+  "traceback": null
+}
