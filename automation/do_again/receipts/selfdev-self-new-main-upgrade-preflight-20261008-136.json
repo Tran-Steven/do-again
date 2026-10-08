@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:45:56.667392+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "035babb8c76965c18aab5dbbbe5d96debc2d3cd1f59a65fe6a7fe158d779fe79",
+  "request_id": "selfdev-self-new-main-upgrade-preflight-20261008-136",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "035babb8c76965c18aab5dbbbe5d96debc2d3cd1f59a65fe6a7fe158d779fe79",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-new-main-upgrade-preflight-20261008-136/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 2.428,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1027,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-new-main-upgrade-preflight-20261008-136/script.py",
+      "script_sha256": "374b958757ea7ec1020758bcefa462a059a1e6dd9e991b6817dd542de81f0c0d",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"dry_run\": {\n    \"rc\": 0,\n    \"stderr\": \"\",\n    \"stdout\": \"{\\n  \\\"applied\\\": false,\\n  \\\"deferred\\\": true,\\n  \\\"effective_blockers\\\": [\\n    {\\n      \\\"kind\\\": \\\"pending_requests\\\",\\n      \\\"request_ids\\\": [\\n        \\\"selfdev-self-new-main-upgrade-preflight-20261008-136\\\"\\n      ]\\n    },\\n    {\\n      \\\"kind\\\": \\\"executor_children\\\",\\n      \\\"processes\\\": [\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-new-main-upgrade-preflight-20261008-136/script.py\\\",\\n          \\\"pid\\\": 18952,\\n          \\\"ppid\\\": 49258\\n        },\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n          \\\"pid\\\": 18964,\\n          \\\"ppid\\\": 18952\\n        },\\n        {\\n          \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n          \\\"pid\\\": 18984,\\n          \\\"ppid\\\": 18964\\n        }\\n      ]\\n    },\\n    {\\n      \\\"kind\\\": \\\"browser_delivery_pending\\\",\\n      \\\"request_ids\\\": [\\n        \\\"selfdev-self-postreconcile-runtime-audit-20261008-135\\\"\\n      ],\\n      \\\"state\\\": \\\"browser_unresponsive\\\"\\n    }\\n  ],\\n  \\\"offline\\\": false,\\n  \\\"preflight\\\": {\\n    \\\"blockers\\\": [\\n      {\\n        \\\"kind\\\": \\\"pending_requests\\\",\\n        \\\"request_ids\\\": [\\n          \\\"selfdev-self-new-main-upgrade-preflight-20261008-136\\\"\\n        ]\\n      },\\n      {\\n        \\\"kind\\\": \\\"executor_children\\\",\\n        \\\"processes\\\": [\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-new-main-upgrade-preflight-20261008-136/script.py\\\",\\n            \\\"pid\\\": 18952,\\n            \\\"ppid\\\": 49258\\n          },\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n            \\\"pid\\\": 18964,\\n            \\\"ppid\\\": 18952\\n          },\\n          {\\n            \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n            \\\"pid\\\": 18984,\\n            \\\"ppid\\\": 18964\\n          }\\n        ]\\n      },\\n      {\\n        \\\"kind\\\": \\\"browser_delivery_pending\\\",\\n        \\\"request_ids\\\": [\\n          \\\"selfdev-self-postreconcile-runtime-audit-20261008-135\\\"\\n        ],\\n        \\\"state\\\": \\\"browser_unresponsive\\\"\\n      }\\n    ],\\n    \\\"features\\\": {\\n      \\\"liveness\\\": true,\\n      \\\"rollout\\\": true\\n    },\\n    \\\"ignored_shared_browser_children\\\": [],\\n    \\\"outbox_pending\\\": [\\n      \\\"selfdev-self-postreconcile-runtime-audit-20261008-135\\\"\\n    ],\\n    \\\"pending_requests\\\": [\\n      \\\"selfdev-self-new-main-upgrade-preflight-20261008-136\\\"\\n    ],\\n    \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n    \\\"runtime_hash\\\": \\\"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\\\",\\n    \\\"safe\\\": false,\\n    \\\"service\\\": {\\n      \\\"control_worktree\\\": \\\"/Users/steventran/.do_again/projects/41857a676462/control\\\",\\n      \\\"installed\\\": true,\\n      \\\"label\\\": \\\"io.github.tran-steven.do-again.41857a676462\\\",\\n      \\\"pid\\\": 49258,\\n      \\\"platform\\\": \\\"macos\\\",\\n      \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n      \\\"running\\\": true,\\n      \\\"runtime_dir\\\": \\\"/Users/steventran/.do_again/projects/41857a676462\\\",\\n      \\\"service_manager\\\": \\\"launchd\\\"\\n    },\\n    \\\"started_requests\\\": []\\n  }\\n}\\n\"\n  },\n  \"repo_head\": \"b5c09ec117b4cc9a3cb752ad248631a32a0b08eb\",\n  \"runtime_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"source_hash\": \"63a35d1c447bcc83a34ec7f30f144358aba9081f006fee22ce807a4ad9214b7c\"\n}\nSELF_NEW_MAIN_UPGRADE_PREFLIGHT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:45:53.743576+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
