@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
-  "last_request_id": "selfdev-ci-and-liveness-wip-audit-20261007-78",
+  "last_request_id": "selfdev-ci-doctor-contract-fix-20261007-79",
   "last_request_state": "succeeded",
   "pid": 60491,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-07T21:45:13.727579+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T01:06:42.617503+00:00"
+  "updated_at_utc": "2026-10-08T01:09:11.067539+00:00"
 }
