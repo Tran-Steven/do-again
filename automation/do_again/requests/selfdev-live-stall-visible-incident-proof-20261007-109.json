@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-live-stall-visible-incident-proof-20261007-109",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T04:38:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T04:58:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, tempfile, time, hashlib\nfrom pathlib import Path\nimport sys\n\nrepo=Path(\"/Users/steventran/do-again\")\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service import liveness\n\nconfig=liveness._settings(repo)\nif not config.get(\"continuous\"):\n    raise SystemExit(\"continuous mode is not enabled\")\nif not config.get(\"report_stalls\"):\n    raise SystemExit(\"stall issue reporting is not enabled\")\n\nnow=time.time()\nseed={\n    \"receipt_id\":\"live-stall-proof\",\n    \"progress_at\":now-(config[\"idle_seconds\"]+config[\"recovery_seconds\"]+60),\n    \"attempts\":2,\n    \"last_resume_at\":now-(config[\"recovery_seconds\"]+60),\n    \"state\":\"recovering\",\n}\n\ndecided, action=liveness._decision(\n    seed,\n    receipt_id=\"live-stall-proof\",\n    receipt_time=seed[\"progress_at\"],\n    pending=False,\n    busy=False,\n    now=now,\n    idle_seconds=config[\"idle_seconds\"],\n    recovery_seconds=config[\"recovery_seconds\"],\n)\nprint(\"decision_action=\"+action)\nprint(\"decision_state=\"+str(decided.get(\"state\")))\nif action!=\"report\" or decided.get(\"state\")!=\"stalled\":\n    raise SystemExit(\"bounded watchdog did not classify deliberate no-progress as reportable stall\")\n\nfirst=liveness._report_stall(repo,config,dict(decided),reason=\"idle\")\nprint(\"first_report=\"+json.dumps(first,sort_keys=True))\nif first.get(\"issue_report\") not in {\"created\",\"existing\"} or not first.get(\"issue_number\"):\n    raise SystemExit(\"stall reporter did not surface a visible issue\")\n\n# Fresh state simulates restart: dedupe must discover the same open issue instead of creating another.\nfresh=dict(decided)\nfresh.pop(\"issue_number\",None)\nfresh.pop(\"issue_report\",None)\nfresh.pop(\"next_report_at\",None)\nsecond=liveness._report_stall(repo,config,fresh,reason=\"idle\")\nprint(\"second_report=\"+json.dumps(second,sort_keys=True))\nif second.get(\"issue_report\")!=\"existing\":\n    raise SystemExit(\"restart-style stall report was not deduplicated\")\nif second.get(\"issue_number\")!=first.get(\"issue_number\"):\n    raise SystemExit(\"dedupe resolved to a different issue\")\n\n# Reporter state is the local no-secrets incident trace for this proof. Validate it contains no repo parent path.\nblob=json.dumps({\"first\":first,\"second\":second},sort_keys=True)\nif str(repo.parent) in blob:\n    raise SystemExit(\"local stall report state leaked parent path\")\n\nprint(json.dumps({\n    \"issue_number\":first.get(\"issue_number\"),\n    \"first_issue_report\":first.get(\"issue_report\"),\n    \"second_issue_report\":second.get(\"issue_report\"),\n    \"decision_state\":decided.get(\"state\"),\n    \"recovery_seconds\":config[\"recovery_seconds\"],\n    \"idle_seconds\":config[\"idle_seconds\"],\n},indent=2,sort_keys=True))\nprint(\"LIVE_STALL_VISIBLE_INCIDENT_ACCEPTANCE_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
