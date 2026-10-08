@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:48:50.322621+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "d5be674fddc3b884ec6b07179d447ad8b839082f4efa707c4ffb629f49a0b424",
+  "request_id": "selfdev-self-clean-new-main-upgrade-preflight-20261008-138",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "d5be674fddc3b884ec6b07179d447ad8b839082f4efa707c4ffb629f49a0b424",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-clean-new-main-upgrade-preflight-20261008-138/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 2.41,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1033,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-clean-new-main-upgrade-preflight-20261008-138/script.py",
+      "script_sha256": "6bb405e0a6a906756719c99e95dac52055bd015105c17f790df5d11da91961d0",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"dry_run\": {\n    \"rc\": 0,\n    \"stderr\": \"\",\n    \"stdout\": \"{\\n  \\\"applied\\\": false,\\n  \\\"deferred\\\": true,\\n  \\\"effective_blockers\\\": [\\n    {\\n      \\\"kind\\\": \\\"pending_requests\\\",\\n      \\\"request_ids\\\": [\\n        \\\"selfdev-self-clean-new-main-upgrade-preflight-20261008-138\\\"\\n      ]\\n    },\\n    {\\n      \\\"kind\\\": \\\"executor_children\\\",\\n      \\\"processes\\\": [\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-clean-new-main-upgrade-preflight-20261008-138/script.py\\\",\\n          \\\"pid\\\": 22611,\\n          \\\"ppid\\\": 49258\\n        },\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n          \\\"pid\\\": 22614,\\n          \\\"ppid\\\": 22611\\n        },\\n        {\\n          \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n          \\\"pid\\\": 22625,\\n          \\\"ppid\\\": 22614\\n        }\\n      ]\\n    }\\n  ],\\n  \\\"offline\\\": false,\\n  \\\"preflight\\\": {\\n    \\\"blockers\\\": [\\n      {\\n        \\\"kind\\\": \\\"pending_requests\\\",\\n        \\\"request_ids\\\": [\\n          \\\"selfdev-self-clean-new-main-upgrade-preflight-20261008-138\\\"\\n        ]\\n      },\\n      {\\n        \\\"kind\\\": \\\"executor_children\\\",\\n        \\\"processes\\\": [\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-clean-new-main-upgrade-preflight-20261008-138/script.py\\\",\\n            \\\"pid\\\": 22611,\\n            \\\"ppid\\\": 49258\\n          },\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n            \\\"pid\\\": 22614,\\n            \\\"ppid\\\": 22611\\n          },\\n          {\\n            \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n            \\\"pid\\\": 22625,\\n            \\\"ppid\\\": 22614\\n          }\\n        ]\\n      }\\n    ],\\n    \\\"features\\\": {\\n      \\\"liveness\\\": true,\\n      \\\"rollout\\\": true\\n    },\\n    \\\"ignored_shared_browser_children\\\": [],\\n    \\\"outbox_pending\\\": [],\\n    \\\"pending_requests\\\": [\\n      \\\"selfdev-self-clean-new-main-upgrade-preflight-20261008-138\\\"\\n    ],\\n    \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n    \\\"runtime_hash\\\": \\\"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\\\",\\n    \\\"safe\\\": false,\\n    \\\"service\\\": {\\n      \\\"control_worktree\\\": \\\"/Users/steventran/.do_again/projects/41857a676462/control\\\",\\n      \\\"installed\\\": true,\\n      \\\"label\\\": \\\"io.github.tran-steven.do-again.41857a676462\\\",\\n      \\\"pid\\\": 49258,\\n      \\\"platform\\\": \\\"macos\\\",\\n      \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n      \\\"running\\\": true,\\n      \\\"runtime_dir\\\": \\\"/Users/steventran/.do_again/projects/41857a676462\\\",\\n      \\\"service_manager\\\": \\\"launchd\\\"\\n    },\\n    \\\"started_requests\\\": []\\n  }\\n}\\n\"\n  },\n  \"repo_head\": \"b5c09ec117b4cc9a3cb752ad248631a32a0b08eb\",\n  \"runtime_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"source_hash\": \"63a35d1c447bcc83a34ec7f30f144358aba9081f006fee22ce807a4ad9214b7c\"\n}\nSELF_CLEAN_NEW_MAIN_UPGRADE_PREFLIGHT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:48:47.381865+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
