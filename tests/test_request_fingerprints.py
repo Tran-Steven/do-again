@@ -29,6 +29,9 @@ class RequestFingerprintTests(unittest.TestCase):
     def agent(self):
         agent = Agent(repo=self.repo, control_worktree=self.control, branch="operator-control", policy_path=self.policy, state_dir=self.state)
         agent.publish_json = lambda relative, value, message: atomic_json(self.control / relative, value)
+        # This fixture models the control store with local JSON rather than Git.
+        # Explicitly mock synchronization when exercising conflict publishing.
+        agent.sync = lambda: None
         agent.acquire_remote_claim = lambda request: atomic_json(self.control / agent.claim_relative(request["request_id"]), {"request_fingerprint": request_fingerprint(request)}) or True
 
         def execute(request):

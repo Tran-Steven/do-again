@@ -249,6 +249,16 @@ def status(path: str = ".") -> int:
                     print(f"liveness_issue_report={liveness['issue_report']}")
                 if liveness.get("issue_number"):
                     print(f"liveness_issue_number={liveness['issue_number']}")
+        stale_path = layout.state_dir / "stale_request_blocked.json"
+        if stale_path.is_file():
+            try:
+                stale = json.loads(stale_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                stale = {}
+            if isinstance(stale, dict) and stale.get("request_id"):
+                print("stale_request_blocked=true")
+                print(f"stale_request_id={stale['request_id']}")
+                print(f"stale_request_reason={stale.get('reason', 'unknown')}")
         if browser.get("auth_required"):
             print("browser_action=run do-again setup")
     return 0
