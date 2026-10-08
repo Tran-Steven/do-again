@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ci-lifecycle-failure-audit-20261007-95",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T03:11:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T03:31:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nimport subprocess\n\nwt=Path(\"/Users/steventran/.do_again/lifecycle-ci-20261007\")\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=False)\n\nprint(\"branch=\"+run([\"git\",\"branch\",\"--show-current\"]).stdout.strip())\nprint(\"head=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status:\\n\"+run([\"git\",\"status\",\"--porcelain=v1\"]).stdout)\nprint(\"diffstat:\\n\"+run([\"git\",\"diff\",\"--stat\"]).stdout)\nprint(\"diff_names:\\n\"+run([\"git\",\"diff\",\"--name-only\"]).stdout)\n\np=wt/\"tests/test_request_fingerprints.py\"\nlines=p.read_text().splitlines()\nprint(\"=== imports ===\")\nfor i in range(min(35,len(lines))):\n    print(f\"{i+1}: {lines[i]}\")\nprint(\"=== new tests area ===\")\nfor i in range(max(0,len(lines)-70),len(lines)):\n    print(f\"{i+1}: {lines[i]}\")\n\nprint(\"=== schema/liveness syntax ===\")\nfor rel in [\"src/do_again/core/schema.py\",\"src/do_again/service/liveness.py\"]:\n    q=run([\"python3\",\"-m\",\"py_compile\",rel])\n    print(rel,q.returncode,q.stderr)\n",
+    "cwd": "/Users/steventran/.do_again/lifecycle-ci-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
