@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:25:20.434306+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "fa9881d676e73f716ddeff6d17a8b2e4b7a95dea05591161dc2b0e3e3d4d8ed6",
+  "request_id": "selfdev-sonary-current-runtime-preflight-20261008-123",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "fa9881d676e73f716ddeff6d17a8b2e4b7a95dea05591161dc2b0e3e3d4d8ed6",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-current-runtime-preflight-20261008-123/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 2.087,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1388,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-current-runtime-preflight-20261008-123/script.py",
+      "script_sha256": "3227ad36114a47ef47fc49fc6f846b17c5313f08289eb998dc92ff1d7714d0d4",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T05:15:59.440215+00:00\",\n    \"state\": \"ready\"\n  },\n  \"dry_run\": {\n    \"rc\": 0,\n    \"stderr\": \"\",\n    \"stdout\": \"{\\n  \\\"applied\\\": false,\\n  \\\"deferred\\\": true,\\n  \\\"effective_blockers\\\": [\\n    {\\n      \\\"kind\\\": \\\"pending_requests\\\",\\n      \\\"request_ids\\\": [\\n        \\\"sonary-daw-typecheck-stage-isolation-20261008-143\\\"\\n      ]\\n    }\\n  ],\\n  \\\"offline\\\": false,\\n  \\\"preflight\\\": {\\n    \\\"blockers\\\": [\\n      {\\n        \\\"kind\\\": \\\"pending_requests\\\",\\n        \\\"request_ids\\\": [\\n          \\\"sonary-daw-typecheck-stage-isolation-20261008-143\\\"\\n        ]\\n      }\\n    ],\\n    \\\"features\\\": {\\n      \\\"liveness\\\": true,\\n      \\\"rollout\\\": true\\n    },\\n    \\\"ignored_shared_browser_children\\\": [],\\n    \\\"outbox_pending\\\": [],\\n    \\\"pending_requests\\\": [\\n      \\\"sonary-daw-typecheck-stage-isolation-20261008-143\\\"\\n    ],\\n    \\\"repo\\\": \\\"/Users/steventran/Sonary\\\",\\n    \\\"runtime_hash\\\": \\\"130cdb7f857513c486e910f35d085967dc4d9d1f6662cebe6881f0328c8bafd2\\\",\\n    \\\"safe\\\": false,\\n    \\\"service\\\": {\\n      \\\"control_worktree\\\": \\\"/Users/steventran/.do_again/projects/d05c35935833/control\\\",\\n      \\\"installed\\\": true,\\n      \\\"label\\\": \\\"io.github.tran-steven.do-again.d05c35935833\\\",\\n      \\\"pid\\\": null,\\n      \\\"platform\\\": \\\"macos\\\",\\n      \\\"repo\\\": \\\"/Users/steventran/Sonary\\\",\\n      \\\"running\\\": false,\\n      \\\"runtime_dir\\\": \\\"/Users/steventran/.do_again/projects/d05c35935833\\\",\\n      \\\"service_manager\\\": \\\"launchd\\\"\\n    },\\n    \\\"started_requests\\\": []\\n  }\\n}\\n\"\n  },\n  \"liveness\": {\n    \"attempts\": 0,\n    \"busy_since\": 1791436528.566805,\n    \"goal_state\": \"in_progress\",\n    \"progress_at\": 1791436502.1097744,\n    \"receipt_id\": \"sonary-daw-typecheck-regression-gate-20261008-142\",\n    \"state\": \"working\"\n  },\n  \"runtime_hash\": \"130cdb7f857513c486e910f35d085967dc4d9d1f6662cebe6881f0328c8bafd2\",\n  \"service_state\": \"platform=macos\\nservice_manager=launchd\\nrepo=/Users/steventran/Sonary\\nlabel=io.github.tran-steven.do-again.d05c35935833\\ninstalled=True\\nrunning=False\\npid=None\\nruntime_dir=/Users/steventran/.do_again/projects/d05c35935833\\ncontrol_worktree=/Users/steventran/.do_again/projects/d05c35935833/control\\nbrowser_enabled=True\\nbrowser_running=True\\nbrowser_mode=background\\nbrowser_authenticated=True\\nbrowser_session_ready=True\\nautomation_chat=https://chatgpt.com/c/6ac6c4fd-3c50-83e8-b727-6a4ea8a290f3\\nbrowser_delivery_state=ready\\nbrowser_pending_receipts=0\\nliveness_state=working\\nliveness_last_progress=1791436502.1097744\\nliveness_recovery_attempts=0\\n\",\n  \"source_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"source_head\": \"f5179f78ec60017a786743a548313f60f3d01a41\",\n  \"target\": \"/Users/steventran/Sonary\"\n}\nSONARY_CURRENT_RUNTIME_PREFLIGHT_AUDIT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:25:18.095381+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
