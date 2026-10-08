@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:33:32.000238+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "e7821a3f186e513b2a4bdb1ec8550e4f09c8ff0179a480cc708d0a4a0bf0adc0",
+  "request_id": "selfdev-sonary-stale-started-recovery-20261008-128",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "e7821a3f186e513b2a4bdb1ec8550e4f09c8ff0179a480cc708d0a4a0bf0adc0",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-stale-started-recovery-20261008-128/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 31.51,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 2170,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-stale-started-recovery-20261008-128/script.py",
+      "script_sha256": "c91125bae3c0326f16f7441941206edb0349f5bf88c8101f0da97820c6488876",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== recovery stdout ===\n\n=== recovery stderr ===\n\nrecovery_rc=0\n{\n  \"ledger\": {\n    \"receipt\": {\n      \"agent_instance_id\": \"Stevens-Mac-mini.local:90867:1791466383:97ad9bfca1ee\",\n      \"error\": \"A prior agent instance began this request but did not durably record its completion. Refusing automatic replay.\",\n      \"finished_at_utc\": \"2026-10-08T13:33:07.938674+00:00\",\n      \"host\": \"Stevens-Mac-mini.local\",\n      \"operation\": \"scratch_script\",\n      \"request_fingerprint\": \"39a758cd7c796c8a55abffb21b3de8b60f1a7ac9ed7a73c2e707630127ab4ffc\",\n      \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n      \"result\": null,\n      \"schema_version\": 1,\n      \"started_at_utc\": \"2026-10-08T05:15:39.586694+00:00\",\n      \"state\": \"blocked_ambiguous_replay\",\n      \"traceback\": null\n    },\n    \"request_fingerprint\": \"39a758cd7c796c8a55abffb21b3de8b60f1a7ac9ed7a73c2e707630127ab4ffc\",\n    \"state\": \"terminal\"\n  },\n  \"receipt\": {\n    \"agent_instance_id\": \"Stevens-Mac-mini.local:90867:1791466383:97ad9bfca1ee\",\n    \"error\": \"A prior agent instance began this request but did not durably record its completion. Refusing automatic replay.\",\n    \"finished_at_utc\": \"2026-10-08T13:33:07.938674+00:00\",\n    \"host\": \"Stevens-Mac-mini.local\",\n    \"operation\": \"scratch_script\",\n    \"request_fingerprint\": \"39a758cd7c796c8a55abffb21b3de8b60f1a7ac9ed7a73c2e707630127ab4ffc\",\n    \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n    \"result\": null,\n    \"schema_version\": 1,\n    \"started_at_utc\": \"2026-10-08T05:15:39.586694+00:00\",\n    \"state\": \"blocked_ambiguous_replay\",\n    \"traceback\": null\n  }\n}\nSONARY_STALE_STARTED_RECOVERY_ACCEPTANCE_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:32:59.799604+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
