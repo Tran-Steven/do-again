@@ -30,8 +30,9 @@ class AuthorityRegistry:
     this registry alone does not provide an OS security boundary.
     """
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, owner_uid: int | None = None):
         self.path = path.expanduser().absolute()
+        self.owner_uid = os.getuid() if owner_uid is None and os.name == "posix" else owner_uid
 
     def _check_path(self) -> None:
         for path in (self.path, *self.path.parents):
@@ -41,7 +42,7 @@ class AuthorityRegistry:
             stat = self.path.stat()
             if not self.path.is_file() or stat.st_nlink != 1:
                 raise AuthorityDenied("operator authority must be an unaliased regular file")
-            if os.name == "posix" and (stat.st_uid != os.getuid() or stat.st_mode & 0o077):
+            if os.name == "posix" and (stat.st_uid != self.owner_uid or stat.st_mode & 0o077):
                 raise AuthorityDenied("operator authority must be privately owned")
 
     def initialize(self) -> None:
