@@ -86,6 +86,18 @@ do-again summary --hours 8
 do-again summary --json
 ~~~
 
+To update a deliberately stopped project without starting it or replaying
+pending requests, use the guarded offline runtime stage:
+
+~~~bash
+do-again upgrade /path/to/stopped-project --apply --offline
+~~~
+
+This refuses running services, started requests, unsettled browser deliveries,
+and active executor children. Queued *unstarted* requests are preserved and
+only the backed-up copied runtime is replaced. The service remains stopped
+until explicitly started later.
+
 The reports are also saved as `session_reports/latest.md` and
 `session_reports/latest.json` after a `do-again stop`. Stopping one
 project does not stop other projects; closing a ChatGPT tab does not stop

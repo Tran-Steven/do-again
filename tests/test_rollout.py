@@ -35,6 +35,92 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
         with patch.object(rollout, "service_status", return_value=self.status):
             return rollout.assess_upgrade(self.repo, process_rows=rows or [])
 
+    def test_offline_upgrade_stages_stopped_runtime_preserving_pending_request(self):
+        self.status = {"installed": True, "running": False, "pid": None}
+        request = self.layout.control_worktree / "automation/do_again/requests/r1.json"
+        request.write_text('{"request_id":"r1"}')
+        marker = self.layout.state_dir / "keep.json"
+        marker.write_text('{"user_state":"preserve"}')
+        stop, restart = Mock(), Mock()
+        with patch.object(rollout, "find_repo", return_value=self.repo), patch.object(
+            rollout, "service_status", return_value=self.status
+        ):
+            report=rollout.staged_upgrade(self.repo,apply=True,offline=True,
+                                          process_rows=[],stop=stop,restart=restart)
+        self.assertTrue(report["applied"])
+        self.assertFalse(report["deferred"])
+        self.assertTrue(report["verification"]["hash_matches"])
+        self.assertFalse(report["verification"]["service"]["running"])
+        self.assertTrue(request.exists())
+        self.assertTrue(marker.exists())
+        tx=json.loads((self.layout.state_dir/"runtime_upgrade.json").read_text())
+        self.assertTrue(tx["offline"])
+        self.assertEqual(tx["queued_requests_preserved"], ["r1"])
+        stop.assert_not_called()
+        restart.assert_not_called()
+
+    def test_offline_upgrade_refuses_running_service(self):
+        stop, restart=Mock(),Mock()
+        with patch.object(rollout,"find_repo",return_value=self.repo),patch.object(
+            rollout,"service_status",return_value=self.status
+        ):
+            report=rollout.staged_upgrade(self.repo,apply=True,offline=True,
+                                          process_rows=[],stop=stop,restart=restart)
+        self.assertFalse(report["applied"])
+        self.assertEqual(report["effective_blockers"][0]["kind"],"offline_requires_stopped_service")
+        stop.assert_not_called()
+        restart.assert_not_called()
+
+    def test_offline_upgrade_refuses_started_ledger(self):
+        self.status={"installed":True,"running":False,"pid":None}
+        q=self.layout.control_worktree/"automation/do_again/requests/r1.json"
+        q.write_text('{}')
+        started=self.layout.state_dir/"requests/r1.json"
+        started.parent.mkdir(parents=True)
+        started.write_text('{"state":"started"}')
+        with patch.object(rollout,"find_repo",return_value=self.repo),patch.object(
+            rollout,"service_status",return_value=self.status
+        ):
+            report=rollout.staged_upgrade(self.repo,apply=True,offline=True,process_rows=[])
+        self.assertFalse(report["applied"])
+        self.assertIn("started_requests",{x["kind"] for x in report["effective_blockers"]})
+
+    def test_offline_upgrade_refuses_outbox_unacknowledged(self):
+        self.status={"installed":True,"running":False,"pid":None}
+        outbox=self.layout.state_dir/"browser_outbox"
+        outbox.mkdir()
+        (outbox/"r1.json").write_text('{}')
+        with patch.object(rollout,"find_repo",return_value=self.repo),patch.object(
+            rollout,"service_status",return_value=self.status
+        ):
+            report=rollout.staged_upgrade(self.repo,apply=True,offline=True,process_rows=[])
+        self.assertFalse(report["applied"])
+        self.assertIn("browser_delivery_pending",{x["kind"] for x in report["effective_blockers"]})
+
+    def test_offline_upgrade_defers_when_execution_claim_appears_during_staging(self):
+        self.status={"installed":True,"running":False,"pid":None}
+        q=self.layout.control_worktree/"automation/do_again/requests/r1.json"
+        q.write_text('{}')
+        original=rollout._stage_source
+        def stage_then_claim(layout,tx):
+            result=original(layout,tx)
+            ledger=layout.state_dir/"requests/r1.json"
+            ledger.parent.mkdir(parents=True,exist_ok=True)
+            ledger.write_text('{"state":"started"}')
+            return result
+        stop,restart=Mock(),Mock()
+        with patch.object(rollout,"find_repo",return_value=self.repo),patch.object(
+            rollout,"service_status",return_value=self.status
+        ),patch.object(rollout,"_stage_source",side_effect=stage_then_claim):
+            report=rollout.staged_upgrade(self.repo,apply=True,offline=True,process_rows=[],
+                                          stop=stop,restart=restart)
+        self.assertFalse(report["applied"])
+        self.assertTrue(report["deferred"])
+        self.assertIn("started_requests",{x["kind"] for x in report["preflight"]["blockers"]})
+        self.assertEqual((self.layout.runtime_source/"do_again/service/daemon.py").read_text(),"OLD=1\n")
+        stop.assert_not_called()
+        restart.assert_not_called()
+
     def test_pending_request_blocks_upgrade(self):
         req = self.layout.control_worktree / "automation/do_again/requests/r1.json"
         req.write_text("{}")

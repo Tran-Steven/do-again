@@ -1149,6 +1149,11 @@ def main() -> int:
         action="store_true",
         help="Apply only when the project is provably quiescent; otherwise defer without restart",
     )
+    upgrade_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Stage only a stopped project's runtime, preserving unstarted queued requests without starting service",
+    )
     history_parser = sub.add_parser(
         "history", help="Show recent durable Do Again request history"
     )
@@ -1277,7 +1282,7 @@ def main() -> int:
         return project_summary(args.path, hours=args.hours, json_output=args.json)
     if args.command == "upgrade":
         try:
-            value = staged_upgrade(args.path, apply=args.apply)
+            value = staged_upgrade(args.path, apply=args.apply, offline=args.offline)
         except ServiceError as exc:
             print(f"do-again: upgrade: {exc}", file=sys.stderr)
             return 1
