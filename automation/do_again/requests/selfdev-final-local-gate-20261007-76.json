@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-final-local-gate-20261007-76",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:52:50.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:32:50.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport os, subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"0fa1a0608a98fb975f2c7387635c049578b613bb\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check,env=env)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip()\nif head!=expected or branch!=\"feat/self-dogfood-20261007\" or status:\n    raise SystemExit(f\"unexpected state head={head} branch={branch} status={status!r}\")\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\n\nsuite=run([\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests\",\"-v\"],check=False,env=env)\nprint(\"=== full suite stdout ===\")\nprint(suite.stdout)\nprint(\"=== full suite stderr ===\")\nprint(suite.stderr)\nprint(\"full_suite_rc=\"+str(suite.returncode))\nif suite.returncode!=0:\n    raise SystemExit(suite.returncode)\n\nsoak=run([\"python3\",\"tools/agent_soak.py\",\"--requests\",\"250\"],check=False,env=env)\nprint(\"=== soak stdout ===\")\nprint(soak.stdout)\nprint(\"=== soak stderr ===\")\nprint(soak.stderr)\nprint(\"soak_rc=\"+str(soak.returncode))\nif soak.returncode!=0:\n    raise SystemExit(soak.returncode)\n\nprint(\"head_after=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 1200
+  }
+}
