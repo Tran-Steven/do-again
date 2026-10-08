@@ -354,3 +354,5 @@ CI covers Python 3.11, 3.12, and 3.13 across Linux, macOS, and Windows, plus bro
 MIT
 
 Rollout ignores only children positively identified as exited zombies. Live children and children with unavailable process state still block cutover. Process filtering does not override started-ledger or uncertain-delivery blockers.
+
+Browser submission uses one Enter gesture. Missing composer acceptance and all exceptions after that gesture are uncertain and prohibit a fallback click or automatic resend. Pre-dispatch composer failures remain distinguishable. A durable pre-dispatch intent journal and separate acknowledgment are still required before M3 acceptance.
