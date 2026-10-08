@@ -124,6 +124,23 @@ class CiUncertainDeliveryTests(unittest.TestCase):
             self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "stalled_ci_handoff")
         send.assert_called_once()
 
+    def test_failed_ci_unknown_send_escalates_without_duplicate(self):
+        send, _ = self.mocks()
+        send.side_effect = TimeoutError("CDP submit result uncertain")
+        failed = dict(TERMINAL, conclusion="failure")
+        with patch.object(liveness, "_github_actions_run", return_value=failed):
+            with patch.object(liveness.time, "time", return_value=1000.0):
+                with self.assertRaises(TimeoutError):
+                    liveness.check_liveness(self.repo, self.control, self.state)
+            self.assertEqual(self.snapshot()["ci_conclusion"], "failure")
+            with patch.object(liveness.time, "time", return_value=1061.0):
+                self.assertEqual(
+                    liveness.check_liveness(self.repo, self.control, self.state),
+                    "stalled_ci_handoff",
+                )
+            self.assertIn("no subsequent goal transition", self.snapshot()["ci_error"])
+        send.assert_called_once()
+
     def test_pending_request_prevents_parallel_ci_resume(self):
         send, _ = self.mocks()
         requests = self.control / "automation/do_again/requests"
