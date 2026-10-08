@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import signal
+import shutil
 import socket
 import subprocess
 import sys
@@ -78,13 +79,92 @@ class Agent:
             timeout=timeout,
         )
 
+    def _recover_stale_index_lock(self, error: str) -> bool:
+        """Repair only a demonstrably orphaned Git worktree lock.
+
+        Git's 'index.lock' error can persist after a killed/restarted process,
+        permanently blocking Do Again while its liveness monitor keeps retrying.
+        If ownership cannot be established, fail closed.
+        """
+        if not all(part in error.lower() for part in ("index.lock", "file exists")):
+            return False
+        if sys.platform not in {"darwin", "linux"} or not shutil.which("lsof"):
+            return False
+        location = self.git("rev-parse", "--git-path", "index.lock", timeout=8)
+        if location.returncode != 0 or not location.stdout.strip():
+            return False
+        lock = Path(location.stdout.strip())
+        if not lock.is_absolute():
+            lock = self.control_worktree / lock
+        lock = lock.resolve()
+        try:
+            st = lock.stat()
+        except FileNotFoundError:
+            return False
+        if st.st_size != 0 or time.time() - st.st_mtime < 600:
+            return False
+        git_dir = self.git("rev-parse", "--absolute-git-dir", timeout=8)
+        if git_dir.returncode != 0:
+            return False
+        expected = Path(git_dir.stdout.strip()).resolve() / "index.lock"
+        if lock != expected:
+            return False
+        try:
+            opened = subprocess.run(
+                ["lsof", "-n", "--", str(lock)],
+                capture_output=True, text=True, timeout=8,
+            )
+            if opened.returncode != 1 or opened.stdout.strip():
+                return False
+            processes = subprocess.run(
+                ["ps", "-axo", "pid=,ppid=,command="],
+                capture_output=True, text=True, timeout=8,
+            )
+            if processes.returncode != 0:
+                return False
+            for line in processes.stdout.splitlines():
+                fields = line.strip().split(None, 2)
+                if len(fields) != 3:
+                    continue
+                cmd = fields[2]
+                binary = Path(cmd.split(None, 1)[0]).name
+                if (binary == "git" or binary.startswith("git-")) and (
+                    str(self.control_worktree) in cmd or str(self.repo) in cmd
+                ):
+                    return False
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        # Re-stat immediately before unlinking, rejecting any changed owner.
+        try:
+            current = lock.stat()
+            if (current.st_ino, current.st_mtime_ns, current.st_size) != (
+                st.st_ino, st.st_mtime_ns, st.st_size
+            ):
+                return False
+            lock.unlink()
+        except OSError:
+            return False
+        atomic_json(self.state_dir / "stale_git_lock_recovery.json", {
+            "schema_version": 1,
+            "state": "recovered",
+            "kind": "orphaned_control_index_lock",
+            "at_utc": utc_now().isoformat(),
+            "control_worktree": str(self.control_worktree),
+        })
+        return True
+
     def require_git(self, *args: str, timeout: float = 60) -> str:
         proc = self.git(*args, timeout=timeout)
         if proc.returncode != 0:
-            raise OperatorError(
-                f"git {' '.join(args)} failed rc={proc.returncode}: "
-                f"{(proc.stderr or proc.stdout).strip()}"
-            )
+            if self._recover_stale_index_lock(proc.stderr or proc.stdout):
+                # Exactly one retry. Never retry a Git command following an
+                # ambiguous timeout or if the prior attempt may have committed.
+                proc = self.git(*args, timeout=timeout)
+            if proc.returncode != 0:
+                raise OperatorError(
+                    f"git {' '.join(args)} failed rc={proc.returncode}: "
+                    f"{(proc.stderr or proc.stdout).strip()}"
+                )
         return proc.stdout
 
     def sync(self) -> None:
