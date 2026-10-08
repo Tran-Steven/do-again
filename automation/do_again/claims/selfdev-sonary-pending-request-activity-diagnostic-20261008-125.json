@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:27:31.742566+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "96fc4b273569e841b3cbc37bf3df0bd4af39b04756b5dc7ce202fe377a795520",
+  "request_id": "selfdev-sonary-pending-request-activity-diagnostic-20261008-125",
+  "schema_version": 1
+}
