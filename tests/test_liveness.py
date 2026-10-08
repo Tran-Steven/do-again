@@ -25,23 +25,12 @@ class LivenessDecisionTests(unittest.TestCase):
             busy=False, now=240, idle_seconds=60, recovery_seconds=60,
         )
         self.assertEqual(action, "wait")
-        second, action = liveness._decision(
+        stalled, action = liveness._decision(
             first, receipt_id="r1", receipt_time=100, pending=False,
             busy=False, now=262, idle_seconds=60, recovery_seconds=60,
         )
-        self.assertEqual(action, "resume")
-        second.update(attempts=2, last_resume_at=263)
-        _, action = liveness._decision(
-            second, receipt_id="r1", receipt_time=100, pending=False,
-            busy=False, now=280, idle_seconds=60, recovery_seconds=60,
-        )
-        self.assertEqual(action, "wait")
-        stalled, action = liveness._decision(
-            second, receipt_id="r1", receipt_time=100, pending=False,
-            busy=False, now=324, idle_seconds=60, recovery_seconds=60,
-        )
         self.assertEqual(action, "report")
-        self.assertEqual(stalled["state"], "stalled")
+        self.assertEqual(stalled["state"], "stalled_idle_handoff")
 
     def test_stuck_generation_is_reported_without_prompting(self):
         old = {"receipt_id": "r1", "progress_at": 100.0, "busy_since": 100.0}
@@ -117,6 +106,67 @@ class LivenessIntegrationTests(unittest.TestCase):
         send.assert_called_once()
         record = json.loads((self.state / "liveness.json").read_text())
         self.assertEqual(record["attempts"], 1)
+
+    def test_idle_resume_timeout_never_replays_even_after_recovery_deadline(self):
+        mocks = self._mock_browser()
+        send = mocks[-1]
+        send.side_effect = TimeoutError("CDP click response timed out")
+        with self.assertRaises(TimeoutError):
+            liveness.check_liveness(self.repo, self.control, self.state)
+        row=json.loads((self.state/"liveness.json").read_text())
+        self.assertTrue(row["idle_resume_marker"].startswith("DO_AGAIN_LIVENESS_CONTINUE token="))
+        self.assertEqual(row["idle_resume_phase"],"uncertain")
+        self.assertEqual(row["attempts"],1)
+        send.side_effect=None
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_delivery_uncertain")
+        row["idle_resume_at"]=time.time()-120
+        (self.state/"liveness.json").write_text(json.dumps(row))
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"stalled_idle_handoff")
+        self.assertIn("No receipt arrived",json.loads((self.state/"liveness.json").read_text())["idle_resume_error"])
+        send.assert_called_once()
+
+    def test_unreachable_browser_still_escalates_at_local_deadline(self):
+        mocks=self._mock_browser()
+        mocks[-1].side_effect=TimeoutError("CDP send outcome unknown")
+        with self.assertRaises(TimeoutError):
+            liveness.check_liveness(self.repo,self.control,self.state)
+        row=json.loads((self.state/"liveness.json").read_text())
+        row["idle_resume_at"]=time.time()-120
+        (self.state/"liveness.json").write_text(json.dumps(row))
+        with patch.object(liveness.browser,"ensure_browser_running",side_effect=OSError("browser offline")) as startup:
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"stalled_idle_handoff")
+            startup.assert_not_called()
+        mocks[-1].assert_called_once()
+
+    def test_submitted_and_observed_message_not_treated_as_completed(self):
+        mocks=self._mock_browser()
+        send=mocks[-1]
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
+        self.assertIn("DO_AGAIN_LIVENESS_CONTINUE token=",send.call_args.args[1])
+        mocks[5].return_value=True
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_handoff_observed")
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_handoff_observed")
+        send.assert_called_once()
+        self.assertEqual(json.loads((self.state/"liveness.json").read_text())["idle_resume_phase"],"observed")
+
+    def test_new_receipt_clears_legacy_idle_marker(self):
+        mocks=self._mock_browser()
+        liveness.check_liveness(self.repo,self.control,self.state)
+        (self.receipts/"r2.json").write_text('{"request_id":"r2"}')
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_grace")
+        row=json.loads((self.state/"liveness.json").read_text())
+        self.assertEqual(row["attempts"],0)
+        self.assertNotIn("idle_resume_marker",row)
+        mocks[-1].assert_called_once()
+
+    def test_preupgrade_unverified_resume_fails_closed(self):
+        mocks=self._mock_browser()
+        (self.state/"liveness.json").write_text(json.dumps({
+            "receipt_id":"r1","progress_at":time.time()-3600,
+            "attempts":1,"last_resume_at":time.time()-3600,"state":"recovering"
+        }))
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"stalled_legacy_continuation_unverified")
+        mocks[-1].assert_not_called()
 
     def test_busy_chat_does_not_receive_prompt(self):
         mocks = self._mock_browser()

@@ -97,15 +97,15 @@ def _decision(
         value["state"] = "idle_grace"
         return value, "wait"
     attempts = int(value.get("attempts", 0))
-    if attempts >= 2:
+    # A browser send can have succeeded before its CDP response timed out.
+    # Never submit the same idle-continuation intent a second time merely
+    # because no Git receipt has arrived; escalate for operator inspection.
+    if attempts:
         if now - float(value.get("last_resume_at", 0)) < recovery_seconds:
             value["state"] = "recovering"
             return value, "wait"
-        value["state"] = "stalled"
+        value["state"] = "stalled_idle_handoff"
         return value, "report"
-    if attempts and now - float(value.get("last_resume_at", 0)) < recovery_seconds:
-        value["state"] = "recovering"
-        return value, "wait"
     value["state"] = "continuation_due"
     return value, "resume"
 
@@ -435,6 +435,23 @@ def check_liveness(repo: Path, control: Path, state_dir: Path) -> str:
             new_state = _report_stall(repo, config, new_state, reason="pending")
         atomic_json(path, new_state)
         return str(new_state["state"])
+    # Escalation must not depend on a healthy browser/CDP connection. An
+    # unknown send can remain invisible to all DOM probes indefinitely.
+    if receipt_id == str(value.get("receipt_id") or ""):
+        marker = str(value.get("idle_resume_marker") or "")
+        age = time.time() - float(value.get("idle_resume_at") or time.time())
+        if marker and age >= config["recovery_seconds"]:
+            value["state"] = "stalled_idle_handoff"
+            value["idle_resume_error"] = "No receipt arrived before browser-handoff deadline"
+            value = _report_stall(repo, config, value, reason="idle")
+            atomic_json(path, value)
+            return str(value["state"])
+        if int(value.get("attempts", 0)) and not marker:
+            value["state"] = "stalled_legacy_continuation_unverified"
+            value["idle_resume_error"] = "Old continuation lacks delivery marker; manual reconciliation required"
+            value = _report_stall(repo, config, value, reason="idle")
+            atomic_json(path, value)
+            return str(value["state"])
     session = browser.ensure_browser_running(verify_auth=True)
     record = browser.project_record(repo)
     url = str(record.get("chat_url") or "")
@@ -445,6 +462,35 @@ def check_liveness(repo: Path, control: Path, state_dir: Path) -> str:
         target = cdp.create_target(int(session["port"]), url, background=True)
         target, _ = browser.wait_for_authenticated(int(session["port"]), target=target, chat_url=url, timeout=30.0)
     busy = bool(browser._assistant_snapshot(target).get("busy"))
+    # A prior intent can have been accepted despite an unknown CDP result.
+    # Read only the exact bound conversation, never submit again on restart.
+    marker = str(value.get("idle_resume_marker") or "")
+    if marker and receipt_id == str(value.get("receipt_id") or ""):
+        try:
+            if browser._page_contains(target, marker):
+                value["idle_resume_phase"] = "observed"
+                value.pop("idle_resume_probe_error", None)
+        except (browser.BrowserError, TimeoutError, OSError) as exc:
+            value["idle_resume_probe_error"] = type(exc).__name__
+        age = time.time() - float(value.get("idle_resume_at") or time.time())
+        if age >= config["recovery_seconds"]:
+            value["state"] = "stalled_idle_handoff"
+            value["idle_resume_error"] = "No new execution receipt or explicit goal transition after continuation"
+            value = _report_stall(repo, config, value, reason="idle")
+        else:
+            value["state"] = ("idle_handoff_observed" if value.get("idle_resume_phase") == "observed"
+                              else "idle_delivery_uncertain" if value.get("idle_resume_phase") == "uncertain"
+                              else "recovering")
+        atomic_json(path, value)
+        return str(value["state"])
+    if int(value.get("attempts", 0)) and not marker and receipt_id == str(value.get("receipt_id") or ""):
+        # Legacy in-flight sends predate durable markers. Their delivery is
+        # indeterminate; do not issue a duplicate on upgrade.
+        value["state"] = "stalled_legacy_continuation_unverified"
+        value["idle_resume_error"] = "Old continuation lacks delivery marker; manual reconciliation required"
+        value = _report_stall(repo, config, value, reason="idle")
+        atomic_json(path, value)
+        return str(value["state"])
     value, action = _decision(
         value, receipt_id=receipt_id, receipt_time=receipt_time, pending=False,
         busy=busy, now=time.time(), idle_seconds=config["idle_seconds"],
@@ -463,11 +509,25 @@ def check_liveness(repo: Path, control: Path, state_dir: Path) -> str:
             "continuous mode. If blocked, identify the precise blocker and do not repeat an "
             "unchanged action. Never submit real applications without separate authorization."
         )
-        value["attempts"] = int(value.get("attempts", 0)) + 1
+        # Persist a deterministic marker before any uncertain browser side
+        # effect, so a crash/restart cannot duplicate this continuation.
+        fingerprint = f"{repo.resolve()}:{receipt_id}:{value.get('progress_at')}:{value.get('goal_id')}"
+        marker = "DO_AGAIN_LIVENESS_CONTINUE token=" + hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:20]
+        value["attempts"] = 1
         value["last_resume_at"] = time.time()
-        value["state"] = "recovering"
+        value["idle_resume_at"] = value["last_resume_at"]
+        value["idle_resume_marker"] = marker
+        value["idle_resume_phase"] = "uncertain"
+        value["state"] = "idle_delivery_uncertain"
         atomic_json(path, value)
-        browser.send_message(target, prompt, wait_for_response=False)
+        try:
+            browser.send_message(target, marker + ": " + prompt, wait_for_response=False)
+        except Exception as exc:
+            value["idle_resume_probe_error"] = type(exc).__name__
+            atomic_json(path, value)
+            raise
+        value["idle_resume_phase"] = "submitted_unverified"
+        value["state"] = "recovering"
     elif action in {"report", "report_busy"}:
         value = _report_stall(repo, config, value, reason="busy" if action == "report_busy" else "idle")
     atomic_json(path, value)
