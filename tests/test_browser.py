@@ -414,6 +414,7 @@ class BrowserRuntimeTests(unittest.TestCase):
                 )
                 with (
                     patch("do_again.browser.runtime.cdp.create_target", return_value=new_target),
+                    patch("do_again.browser.runtime.secrets.token_hex", return_value="fixedtoken"),
                     patch("do_again.browser.runtime.cdp.evaluate", return_value=[]),
                     patch(
                         "do_again.browser.runtime.wait_for_authenticated",
@@ -422,7 +423,7 @@ class BrowserRuntimeTests(unittest.TestCase):
                     patch(
                         "do_again.browser.runtime.send_message",
                         return_value={
-                            "response": "DO_AGAIN_PROJECT_READY",
+                            "response": "DO_AGAIN_HANDOFF_READY fixedtoken",
                             "chat_url": "https://chatgpt.com/c/new",
                         },
                     ),

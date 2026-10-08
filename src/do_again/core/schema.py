@@ -103,10 +103,47 @@ def validate_request(
         raise OperatorError("expected must be an object")
     if not isinstance(limits, dict):
         raise OperatorError("limits must be an object")
+    continuation = request.get("continuation")
+    if continuation is not None:
+        if not isinstance(continuation, dict):
+            raise OperatorError("continuation must be an object")
+        acknowledged = continuation.get("acknowledged_receipts", [])
+        if not isinstance(acknowledged, list) or any(
+            not isinstance(value, str) or not REQUEST_ID_RE.fullmatch(value)
+            for value in acknowledged
+        ):
+            raise OperatorError("continuation.acknowledged_receipts must be valid request IDs")
+        if len(set(acknowledged)) != len(acknowledged):
+            raise OperatorError("continuation.acknowledged_receipts must not contain duplicates")
+        goal_state = continuation.get("goal_state", "in_progress")
+        if goal_state not in {"in_progress", "completed", "blocked"}:
+            raise OperatorError("continuation.goal_state must be in_progress, completed, or blocked")
+        goal_id = continuation.get("goal_id")
+        if goal_id is not None and (
+            not isinstance(goal_id, str) or not REQUEST_ID_RE.fullmatch(goal_id)
+        ):
+            raise OperatorError("continuation.goal_id must be a valid identifier")
+        summary = continuation.get("summary")
+        if summary is not None and (
+            not isinstance(summary, str) or len(summary.strip()) > 2000
+        ):
+            raise OperatorError("continuation.summary must be a string up to 2000 characters")
+        normalized_continuation = {
+            "acknowledged_receipts": acknowledged,
+            "goal_state": goal_state,
+        }
+        if goal_id is not None:
+            normalized_continuation["goal_id"] = goal_id
+        if summary is not None:
+            normalized_continuation["summary"] = summary.strip()
+    else:
+        normalized_continuation = None
     normalized = dict(request)
     normalized["args"] = args
     normalized["expected"] = expected
     normalized["limits"] = limits
+    if normalized_continuation is not None:
+        normalized["continuation"] = normalized_continuation
     return normalized
 
 

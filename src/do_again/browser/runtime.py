@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -94,6 +95,7 @@ def _default_config() -> dict[str, Any]:
         "authenticated": False,
         "last_authenticated_utc": None,
         "last_headless_verified_utc": None,
+        "rollover_char_threshold": 180000,
     }
 
 
@@ -978,6 +980,629 @@ return hits[0] || '';
     return str(value or "").strip()
 
 
+
+def _chat_id(chat_url: str) -> str:
+    if "/c/" not in chat_url:
+        return ""
+    return chat_url.split("/c/", 1)[1].split("?", 1)[0].split("#", 1)[0]
+
+
+def _project_browser_dir(repo: Path) -> Path:
+    path = browser_paths().root / "project_state" / _project_key(repo)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _owned_chat_registry_path(repo: Path) -> Path:
+    return _project_browser_dir(repo) / "owned_chats.json"
+
+
+def _rollover_transaction_path(repo: Path) -> Path:
+    return _project_browser_dir(repo) / "rollover_transaction.json"
+
+
+def _checkpoint_path(repo: Path, token: str) -> Path:
+    return _project_browser_dir(repo) / "checkpoints" / f"{token}.json"
+
+
+def _record_owned_chat(
+    repo: Path,
+    chat_url: str,
+    *,
+    created_reason: str,
+    handoff_token: str | None = None,
+) -> dict[str, Any]:
+    registry = _read_json(_owned_chat_registry_path(repo))
+    chats = registry.get("chats")
+    if not isinstance(chats, list):
+        chats = []
+    chat_id = _chat_id(chat_url)
+    if not chat_id:
+        raise BrowserError("cannot register owned chat without a conversation id")
+    existing = next((row for row in chats if row.get("chat_id") == chat_id), None)
+    if existing is None:
+        existing = {
+            "chat_id": chat_id,
+            "chat_url": chat_url,
+            "repo": str(repo.resolve()),
+            "project_key": _project_key(repo),
+            "created_reason": created_reason,
+            "created_utc": _utc_now(),
+            "archive_state": "active",
+        }
+        if handoff_token:
+            existing["handoff_token"] = handoff_token
+        chats.append(existing)
+    registry = {"schema_version": 1, "chats": chats, "updated_utc": _utc_now()}
+    _atomic_json(_owned_chat_registry_path(repo), registry)
+    return existing
+
+
+def _archive_queue_path(repo: Path) -> Path:
+    return _project_browser_dir(repo) / "archive_queue.json"
+
+
+def _all_bound_chat_ids() -> set[str]:
+    bound: set[str] = set()
+    projects = browser_paths().projects
+    if not projects.is_dir():
+        return bound
+    for path in projects.glob("*.json"):
+        try:
+            record = _read_json(path)
+        except BrowserError:
+            continue
+        chat_id = _chat_id(str(record.get("chat_url") or ""))
+        if chat_id:
+            bound.add(chat_id)
+    return bound
+
+
+def _candidate_receipt_evidence(repo: Path, chat_id: str) -> list[dict[str, Any]]:
+    control = _control_worktree_for_repo(repo)
+    receipts_dir = control / "automation/do_again/receipts"
+    evidence: list[dict[str, Any]] = []
+    if not receipts_dir.is_dir():
+        return evidence
+    for path in sorted(receipts_dir.glob("*.json")):
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if chat_id not in raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        evidence.append(
+            {
+                "receipt": path.name,
+                "request_id": payload.get("request_id"),
+                "state": payload.get("state"),
+                "operation": payload.get("operation"),
+                "sha256": _sha256_file(path),
+            }
+        )
+    return evidence
+
+
+def chat_cleanup_inventory(
+    repo: Path,
+    *,
+    candidate_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    repo = repo.resolve()
+    registry = _read_json(_owned_chat_registry_path(repo))
+    rows: list[dict[str, Any]] = []
+    bound = _all_bound_chat_ids()
+    seen: set[str] = set()
+
+    chats = registry.get("chats")
+    if isinstance(chats, list):
+        for chat in chats:
+            chat_id = str(chat.get("chat_id") or "")
+            if not chat_id:
+                continue
+            seen.add(chat_id)
+            active = chat_id in bound
+            archive_state = str(chat.get("archive_state") or "active")
+            rows.append(
+                {
+                    "chat_id": chat_id,
+                    "chat_url": chat.get("chat_url"),
+                    "provenance": "owned_registry",
+                    "ownership_verified": True,
+                    "active_bound": active,
+                    "archive_state": archive_state,
+                    "eligible": (not active and archive_state != "archived"),
+                    "reason": (
+                        "currently_bound"
+                        if active
+                        else "already_archived"
+                        if archive_state == "archived"
+                        else "verified_owned_inactive"
+                    ),
+                }
+            )
+
+    for chat_id in candidate_ids or []:
+        chat_id = str(chat_id).strip()
+        if not chat_id or chat_id in seen:
+            continue
+        evidence = _candidate_receipt_evidence(repo, chat_id)
+        active = chat_id in bound
+        rows.append(
+            {
+                "chat_id": chat_id,
+                "chat_url": f"https://chatgpt.com/c/{chat_id}",
+                "provenance": "historical_candidate",
+                "ownership_verified": False,
+                "active_bound": active,
+                "archive_state": "unverified",
+                "eligible": False,
+                "reason": (
+                    "currently_bound"
+                    if active
+                    else "needs_content_verification"
+                    if evidence
+                    else "no_corroborating_receipts"
+                ),
+                "evidence": evidence,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "repo": str(repo),
+        "active_bound_chat_ids": sorted(bound),
+        "candidates": rows,
+        "generated_utc": _utc_now(),
+    }
+
+
+def archive_queue_status(repo: Path) -> dict[str, Any]:
+    value = _read_json(_archive_queue_path(repo))
+    items = value.get("items")
+    if not isinstance(items, list):
+        items = []
+    return {
+        "schema_version": 1,
+        "repo": str(repo.resolve()),
+        "items": items,
+        "updated_utc": value.get("updated_utc"),
+    }
+
+
+def queue_verified_archives(
+    repo: Path,
+    *,
+    candidate_ids: list[str] | None = None,
+    apply: bool = False,
+) -> dict[str, Any]:
+    inventory = chat_cleanup_inventory(repo, candidate_ids=candidate_ids)
+    eligible = [row for row in inventory["candidates"] if row.get("eligible")]
+    queue = archive_queue_status(repo)
+    items = list(queue["items"])
+    existing = {str(item.get("chat_id") or ""): item for item in items}
+    queued: list[str] = []
+
+    if apply:
+        for row in eligible:
+            chat_id = str(row["chat_id"])
+            prior = existing.get(chat_id)
+            if prior and prior.get("state") in {"pending", "archived"}:
+                continue
+            item = {
+                "chat_id": chat_id,
+                "chat_url": row.get("chat_url"),
+                "project_key": _project_key(repo),
+                "state": "pending",
+                "attempts": 0,
+                "queued_utc": _utc_now(),
+                "last_error": None,
+            }
+            if prior:
+                items[items.index(prior)] = item
+            else:
+                items.append(item)
+            existing[chat_id] = item
+            queued.append(chat_id)
+        _atomic_json(
+            _archive_queue_path(repo),
+            {"schema_version": 1, "items": items, "updated_utc": _utc_now()},
+        )
+
+    return {
+        "dry_run": not apply,
+        "eligible_chat_ids": [str(row["chat_id"]) for row in eligible],
+        "queued_chat_ids": queued,
+        "inventory": inventory,
+        "queue": archive_queue_status(repo),
+    }
+
+def _chat_has_bootstrap_markers(
+    target: cdp.Target,
+    *,
+    repo: Path,
+    remote_url: str,
+    control_branch: str,
+) -> bool:
+    required = [
+        "Do Again automation workspace bootstrap.",
+        f"Project: {repo.name}",
+        f"Repository: {remote_url}",
+        f"Control branch: {control_branch}",
+        "DO_AGAIN_PROJECT_READY",
+    ]
+    return all(_page_contains(target, marker) for marker in required)
+
+
+def _verify_historical_chat_ownership(
+    repo: Path,
+    chat_url: str,
+    *,
+    port: int,
+) -> dict[str, Any]:
+    record = project_record(repo)
+    remote_url = str(record.get("remote_url") or "")
+    control_branch = str(record.get("control_branch") or "operator-control")
+    if not remote_url:
+        raise BrowserError("project browser record is missing remote_url")
+    target = _find_chatgpt_target(port, chat_url)
+    created = False
+    if target is None:
+        target = cdp.create_target(port, chat_url, background=True)
+        created = True
+    try:
+        target, _ = wait_for_authenticated(
+            port, chat_url=chat_url, timeout=30.0, target=target
+        )
+        owned = _chat_has_bootstrap_markers(
+            target,
+            repo=repo,
+            remote_url=remote_url,
+            control_branch=control_branch,
+        )
+        return {
+            "owned": owned,
+            "chat_url": chat_url,
+            "evidence": "bootstrap_markers" if owned else "bootstrap_markers_missing",
+        }
+    finally:
+        if created:
+            cdp.close_target(port, target.id)
+
+
+def verify_candidate_chat(
+    repo: Path,
+    chat_id: str,
+) -> dict[str, Any]:
+    repo = repo.resolve()
+    chat_id = str(chat_id).strip()
+    if not chat_id:
+        raise BrowserError("chat id is required")
+    if chat_id in _all_bound_chat_ids():
+        return {
+            "chat_id": chat_id,
+            "verified": False,
+            "reason": "currently_bound",
+        }
+    evidence = _candidate_receipt_evidence(repo, chat_id)
+    if not evidence:
+        return {
+            "chat_id": chat_id,
+            "verified": False,
+            "reason": "no_corroborating_receipts",
+        }
+    status = ensure_browser_running(verify_auth=True)
+    result = _verify_historical_chat_ownership(
+        repo,
+        f"https://chatgpt.com/c/{chat_id}",
+        port=int(status["port"]),
+    )
+    if not result.get("owned"):
+        return {
+            "chat_id": chat_id,
+            "verified": False,
+            "reason": "bootstrap_markers_missing",
+            "receipt_evidence": evidence,
+        }
+    _record_owned_chat(
+        repo,
+        f"https://chatgpt.com/c/{chat_id}",
+        created_reason="historical_verified",
+    )
+    registry = _read_json(_owned_chat_registry_path(repo))
+    chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
+    for row in chats:
+        if str(row.get("chat_id") or "") == chat_id:
+            row["verified_from"] = "bootstrap_markers_and_receipts"
+            row["verified_utc"] = _utc_now()
+            break
+    registry["updated_utc"] = _utc_now()
+    _atomic_json(_owned_chat_registry_path(repo), registry)
+    return {
+        "chat_id": chat_id,
+        "verified": True,
+        "reason": "bootstrap_markers_and_receipts",
+        "receipt_evidence": evidence,
+    }
+
+
+_ARCHIVE_CHAT_JS = r"""(() => {
+const visible = el => {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  const s = getComputedStyle(el);
+  return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+};
+const text = el => String(el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim();
+
+const archiveButtons = Array.from(document.querySelectorAll('button,[role="menuitem"]'))
+  .filter(visible)
+  .filter(el => /^archive( chat| conversation)?$/i.test(text(el)));
+if (archiveButtons.length === 1) {
+  archiveButtons[0].click();
+  return 'clicked_archive';
+}
+if (archiveButtons.length > 1) return 'ambiguous_archive';
+
+const menuButtons = Array.from(document.querySelectorAll('button'))
+  .filter(visible)
+  .filter(el => {
+    const label = text(el);
+    return /^(more|more options|conversation options)$/i.test(label) ||
+      /more options|conversation options/i.test(el.getAttribute('aria-label') || '');
+  });
+if (menuButtons.length !== 1) return menuButtons.length ? 'ambiguous_menu' : 'no_menu';
+menuButtons[0].click();
+return 'opened_menu';
+})()"""
+
+
+def _archive_chat_via_ui(target: cdp.Target) -> str:
+    first = str(cdp.evaluate(target, _ARCHIVE_CHAT_JS, timeout=10.0, user_gesture=True) or "")
+    if first == "clicked_archive":
+        return first
+    if first != "opened_menu":
+        raise BrowserError(f"archive control unavailable: {first or 'unknown'}")
+    time.sleep(0.2)
+    second = str(cdp.evaluate(target, _ARCHIVE_CHAT_JS, timeout=10.0, user_gesture=True) or "")
+    if second != "clicked_archive":
+        raise BrowserError(f"archive action unavailable after opening menu: {second or 'unknown'}")
+    return second
+
+
+def process_archive_queue(repo: Path) -> dict[str, Any]:
+    repo = repo.resolve()
+    queue = archive_queue_status(repo)
+    items = list(queue["items"])
+    if not items:
+        return queue
+
+    browser = ensure_browser_running(verify_auth=True)
+    port = int(browser["port"])
+    bound = _all_bound_chat_ids()
+    registry = _read_json(_owned_chat_registry_path(repo))
+    chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
+    owned = {str(row.get("chat_id") or ""): row for row in chats}
+
+    for item in items:
+        if item.get("state") == "archived":
+            continue
+        chat_id = str(item.get("chat_id") or "")
+        row = owned.get(chat_id)
+        if not row:
+            item["state"] = "blocked_unowned"
+            item["last_error"] = "chat is not in the verified owned-chat registry"
+            continue
+        if chat_id in bound:
+            item["state"] = "blocked_active"
+            item["last_error"] = "chat is currently bound to an active project"
+            continue
+
+        target = None
+        try:
+            item["attempts"] = int(item.get("attempts") or 0) + 1
+            target = cdp.create_target(
+                port,
+                str(item.get("chat_url") or row.get("chat_url") or ""),
+                background=True,
+            )
+            target, _ = wait_for_authenticated(
+                port, chat_url=target.url, timeout=30.0, target=target
+            )
+            if chat_id in _all_bound_chat_ids():
+                raise BrowserError("chat became active before archive")
+            outcome = _archive_chat_via_ui(target)
+            if outcome != "clicked_archive":
+                raise BrowserError(f"archive did not complete: {outcome}")
+            item["state"] = "archived"
+            item["archived_utc"] = _utc_now()
+            item["last_error"] = None
+            row["archive_state"] = "archived"
+            row["archived_utc"] = item["archived_utc"]
+        except Exception as exc:
+            if item.get("state") not in {"blocked_active", "blocked_unowned"}:
+                item["state"] = "retry"
+                item["last_error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            if target is not None:
+                cdp.close_target(port, target.id)
+
+    _atomic_json(
+        _archive_queue_path(repo),
+        {"schema_version": 1, "items": items, "updated_utc": _utc_now()},
+    )
+    registry["chats"] = chats
+    registry["updated_utc"] = _utc_now()
+    _atomic_json(_owned_chat_registry_path(repo), registry)
+    return archive_queue_status(repo)
+
+
+
+
+def _control_worktree_for_repo(repo: Path) -> Path:
+    home = Path(
+        os.environ.get("DO_AGAIN_HOME", str(Path.home() / ".do_again"))
+    ).expanduser().resolve()
+    return home / "projects" / _project_key(repo) / "control"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _build_rollover_checkpoint(
+    repo: Path,
+    record: dict[str, Any],
+    *,
+    token: str,
+    objective: str = "Continue the existing Do Again automation goal from Git and receipts.",
+) -> dict[str, Any]:
+    repo = repo.resolve()
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        text=True, capture_output=True,
+    )
+    branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        text=True, capture_output=True,
+    )
+    control = _control_worktree_for_repo(repo)
+    requests_dir = control / "automation/do_again/requests"
+    receipts_dir = control / "automation/do_again/receipts"
+    receipts: dict[str, dict[str, Any]] = {}
+    if receipts_dir.is_dir():
+        for path in sorted(receipts_dir.glob("*.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            request_id = str(payload.get("request_id") or path.stem)
+            receipts[request_id] = {
+                "state": payload.get("state"),
+                "sha256": _sha256_file(path),
+            }
+    request_ids = sorted(path.stem for path in requests_dir.glob("*.json")) if requests_dir.is_dir() else []
+    completed = sorted(request_id for request_id in request_ids if request_id in receipts)
+    pending = sorted(request_id for request_id in request_ids if request_id not in receipts)
+
+    request_rows: list[tuple[str, dict[str, Any]]] = []
+    if requests_dir.is_dir():
+        for path in requests_dir.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict):
+                request_rows.append((str(payload.get("issued_at_utc") or ""), payload))
+    request_rows.sort(key=lambda item: item[0])
+
+    latest_continuation = None
+    for _, payload in reversed(request_rows):
+        continuation = payload.get("continuation")
+        if isinstance(continuation, dict):
+            latest_continuation = continuation
+            break
+
+    if latest_continuation and latest_continuation.get("summary"):
+        objective = str(latest_continuation.get("summary"))
+    unresolved = [
+        {"request_id": request_id, "state": row.get("state")}
+        for request_id, row in sorted(receipts.items())
+        if str(row.get("state") or "") not in {"succeeded", "cancelled"}
+    ]
+    if pending:
+        next_action = f"Inspect and complete pending request {pending[-1]}, then continue the existing goal once."
+    elif unresolved:
+        next_action = f"Inspect unresolved receipt {unresolved[-1]['request_id']} and continue with a newly scoped request if needed."
+    else:
+        next_action = "Continue the existing goal from the latest acknowledged receipt and Git state."
+
+    checkpoint = {
+        "schema_version": 1,
+        "handoff_token": token,
+        "project": repo.name,
+        "repo": str(repo),
+        "objective": objective,
+        "branch": branch.stdout.strip() if branch.returncode == 0 else None,
+        "head": head.stdout.strip() if head.returncode == 0 else None,
+        "control_branch": record.get("control_branch"),
+        "active_chat_url": record.get("chat_url"),
+        "completed_request_ids": completed,
+        "pending_request_ids": pending,
+        "receipts": {key: receipts[key] for key in completed},
+        "latest_operator_progress": latest_continuation,
+        "unresolved_issues": unresolved,
+        "next_action": next_action,
+        "created_utc": _utc_now(),
+    }
+    _atomic_json(_checkpoint_path(repo, token), checkpoint)
+    return checkpoint
+
+
+def _checkpoint_transfer_view(checkpoint: dict[str, Any], *, max_completed: int = 40, max_pending: int = 40) -> dict[str, Any]:
+    completed = list(checkpoint.get("completed_request_ids") or [])
+    pending = list(checkpoint.get("pending_request_ids") or [])
+    receipt_rows = checkpoint.get("receipts") if isinstance(checkpoint.get("receipts"), dict) else {}
+    selected_completed = completed[-max_completed:]
+    selected_pending = pending[-max_pending:]
+    return {
+        "schema_version": checkpoint.get("schema_version"),
+        "handoff_token": checkpoint.get("handoff_token"),
+        "project": checkpoint.get("project"),
+        "repo": checkpoint.get("repo"),
+        "objective": checkpoint.get("objective"),
+        "branch": checkpoint.get("branch"),
+        "head": checkpoint.get("head"),
+        "control_branch": checkpoint.get("control_branch"),
+        "active_chat_url": checkpoint.get("active_chat_url"),
+        "completed_request_ids": selected_completed,
+        "completed_request_count": len(completed),
+        "pending_request_ids": selected_pending,
+        "pending_request_count": len(pending),
+        "receipts": {key: receipt_rows[key] for key in selected_completed if key in receipt_rows},
+        "latest_operator_progress": checkpoint.get("latest_operator_progress"),
+        "unresolved_issues": list(checkpoint.get("unresolved_issues") or [])[-20:],
+        "next_action": checkpoint.get("next_action"),
+        "created_utc": checkpoint.get("created_utc"),
+        "durable_checkpoint_path": checkpoint.get("durable_checkpoint_path"),
+    }
+
+
+def _conversation_pressure_chars(target: cdp.Target) -> int:
+    expression = "(() => {" + _MESSAGE_NODES_JS + r"""
+const nodes = messageNodes();
+return nodes.reduce((sum, el) => sum + String(el.innerText || el.textContent || '').length, 0);
+})()"""
+    try:
+        value = cdp.evaluate(target, expression, timeout=10.0)
+    except Exception:
+        # Proactive rollover is best-effort. A transient metrics read must not
+        # block receipt delivery; the context-limit warning remains the hard fallback.
+        return 0
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _rollover_needed(target: cdp.Target) -> bool:
+    warning = _context_limit_warning(target)
+    if warning:
+        return True
+    config = load_config()
+    threshold = int(config.get("rollover_char_threshold") or 180000)
+    if threshold < 20000:
+        threshold = 20000
+    return _conversation_pressure_chars(target) >= threshold
+
+
 def _rollover_project_chat(
     repo: Path,
     record: dict[str, Any],
@@ -991,42 +1616,121 @@ def _rollover_project_chat(
     if not remote_url:
         raise BrowserError("project browser record is missing remote_url")
 
-    handoff = []
-    if old_target is not None:
-        try:
-            handoff = cdp.evaluate(old_target, "(() => {" + _MESSAGE_NODES_JS + r"""
-return messageNodes().slice(-8).map(el => ({role: el.getAttribute('data-message-author-role') || (el.querySelector('[data-conversation-role]') || {}).getAttribute?.('data-conversation-role'), text: (el.innerText || '').slice(-4000)}));
-})()""", timeout=10.0)
-        except BrowserError:
-            pass
-    prompt = _bootstrap_prompt(repo, remote_url, control_branch) + (
-        "\n\nThis is a rollover from a previous automation conversation that reached "
-        "its context limit. Treat the Git control branch and receipts as the "
-        "source of truth. Do not invent missing work or state."
+    token = secrets.token_hex(16)
+    checkpoint = _build_rollover_checkpoint(repo, record, token=token)
+    checkpoint["durable_checkpoint_path"] = str(_checkpoint_path(repo, token))
+    _atomic_json(_checkpoint_path(repo, token), checkpoint)
+    transfer_checkpoint = _checkpoint_transfer_view(checkpoint)
+    transaction = {
+        "schema_version": 1,
+        "handoff_token": token,
+        "state": "prepared",
+        "predecessor_chat_url": previous_url or None,
+        "successor_chat_url": None,
+        "checkpoint_path": str(_checkpoint_path(repo, token)),
+        "created_utc": _utc_now(),
+        "updated_utc": _utc_now(),
+        "archive_state": "not_started",
+    }
+    _atomic_json(_rollover_transaction_path(repo), transaction)
+
+    prompt = _bootstrap_prompt(repo, remote_url, control_branch, readiness_marker=None) + (
+        "\n\nThis is a transactional Do Again rollover. Git, requests, receipts, and the "
+        "structured checkpoint below are the source of truth. Do not invent missing state."
+        "\nHandoff token: " + token
+        + "\nCheckpoint JSON:\n" + json.dumps(checkpoint, ensure_ascii=False, sort_keys=True)
+        + "\n\nAfter verifying the checkpoint, reply exactly: DO_AGAIN_HANDOFF_READY " + token
     )
-    if previous_url:
-        prompt += f"\nPrevious automation conversation: {previous_url}"
-    if isinstance(handoff, list) and handoff:
-        prompt += "\nRecent conversation excerpts for continuity; verify work against Git and receipts:\n" + json.dumps(handoff, ensure_ascii=False)
 
-    target, result = _bootstrap_new_chat(port, prompt)
-    new_url = result["chat_url"]
+    target = cdp.create_target(port, CHATGPT_URL, background=True)
+    try:
+        target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
+        result = send_message(target, prompt, timeout=180.0)
+        new_url = str(result.get("chat_url") or "")
+        transaction["successor_chat_url"] = new_url or None
+        transaction["state"] = "successor_created"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
 
-    updated = register_project(
-        repo,
-        remote_url=remote_url,
-        control_branch=control_branch,
-        chat_url=new_url,
-    )
-    updated["previous_chat_url"] = previous_url or None
-    updated["rollover_count"] = int(record.get("rollover_count") or 0) + 1
-    updated["last_rollover_utc"] = _utc_now()
-    updated["rollover_handoff"] = handoff
-    _atomic_json(_project_record_path(repo), updated)
+        expected = "DO_AGAIN_HANDOFF_READY " + token
+        if str(result.get("response") or "").strip() != expected:
+            raise BrowserError("successor chat did not acknowledge the exact rollover handoff token")
+        if "/c/" not in new_url:
+            raise BrowserError("successor chat did not bind a conversation URL")
 
-    if old_target is not None and old_target.id != target.id:
-        cdp.close_target(port, old_target.id)
-    return target, updated
+        transaction["state"] = "acknowledged"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
+        _record_owned_chat(
+            repo,
+            new_url,
+            created_reason="rollover",
+            handoff_token=token,
+        )
+
+        updated = register_project(
+            repo,
+            remote_url=remote_url,
+            control_branch=control_branch,
+            chat_url=new_url,
+        )
+        updated["previous_chat_url"] = previous_url or None
+        updated["rollover_count"] = int(record.get("rollover_count") or 0) + 1
+        updated["last_rollover_utc"] = _utc_now()
+        updated["last_handoff_token"] = token
+        updated["last_checkpoint_path"] = str(_checkpoint_path(repo, token))
+        _atomic_json(_project_record_path(repo), updated)
+
+        transaction["state"] = "bound"
+        transaction["archive_state"] = "pending" if previous_url else "not_applicable"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
+
+        if previous_url:
+            previous_id = _chat_id(previous_url)
+            registry = _read_json(_owned_chat_registry_path(repo))
+            chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
+            predecessor = next(
+                (row for row in chats if str(row.get("chat_id") or "") == previous_id),
+                None,
+            )
+            if predecessor is not None:
+                queue_verified_archives(repo, candidate_ids=[previous_id], apply=True)
+                try:
+                    archive_result = process_archive_queue(repo)
+                    archived = next(
+                        (
+                            row for row in archive_result.get("items", [])
+                            if str(row.get("chat_id") or "") == previous_id
+                        ),
+                        None,
+                    )
+                    transaction["archive_state"] = str(
+                        (archived or {}).get("state") or "pending"
+                    )
+                    if archived and archived.get("last_error"):
+                        transaction["archive_error"] = archived.get("last_error")
+                except Exception as archive_exc:
+                    transaction["archive_state"] = "retry"
+                    transaction["archive_error"] = f"{type(archive_exc).__name__}: {archive_exc}"
+                transaction["updated_utc"] = _utc_now()
+                _atomic_json(_rollover_transaction_path(repo), transaction)
+            else:
+                transaction["archive_state"] = "blocked_unowned"
+                transaction["archive_error"] = "predecessor is not in the verified owned-chat registry"
+                transaction["updated_utc"] = _utc_now()
+                _atomic_json(_rollover_transaction_path(repo), transaction)
+
+        if old_target is not None and old_target.id != target.id:
+            cdp.close_target(port, old_target.id)
+        return target, updated
+    except Exception as exc:
+        transaction["state"] = "failed"
+        transaction["error"] = f"{type(exc).__name__}: {exc}"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
+        cdp.close_target(port, target.id)
+        raise
 
 
 def _project_key(repo: Path) -> str:
@@ -1071,16 +1775,23 @@ def register_project(
     return value
 
 
-def _bootstrap_prompt(repo: Path, remote_url: str, control_branch: str) -> str:
-    return f"""Do Again automation workspace bootstrap.
+def _bootstrap_prompt(
+    repo: Path,
+    remote_url: str,
+    control_branch: str,
+    *,
+    readiness_marker: str | None = "DO_AGAIN_PROJECT_READY",
+) -> str:
+    prompt = f"""Do Again automation workspace bootstrap.
 
 Project: {repo.name}
 Repository: {remote_url}
 Control branch: {control_branch}
 
-When development work is requested in this conversation, use the Do Again request/receipt loop for local execution. Submit scoped request JSON files under automation/do_again/requests on the control branch, read matching receipts under automation/do_again/receipts, inspect failures, and iterate until the goal is actually complete. Do not claim a local action succeeded without a receipt.
-
-Reply exactly: DO_AGAIN_PROJECT_READY"""
+When development work is requested in this conversation, use the Do Again request/receipt loop for local execution. Submit scoped request JSON files under automation/do_again/requests on the control branch, read matching receipts under automation/do_again/receipts, inspect failures, and iterate until the goal is actually complete. Do not claim a local action succeeded without a receipt."""
+    if readiness_marker:
+        prompt += f"\n\nReply exactly: {readiness_marker}"
+    return prompt
 
 
 def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, Any]]:
@@ -1120,6 +1831,7 @@ def ensure_project_chat(
 
     _, result = _bootstrap_new_chat(port, _bootstrap_prompt(repo, remote_url, control_branch))
     chat_url = result["chat_url"]
+    _record_owned_chat(repo, chat_url, created_reason="bootstrap")
     return register_project(
         repo,
         remote_url=remote_url,
@@ -1220,11 +1932,10 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
     if target is None:
         target = cdp.create_target(port, chat_url, background=True)
 
-    warning = _context_limit_warning(target)
-    if warning:
+    if _rollover_needed(target):
         if _assistant_snapshot(target).get("busy"):
             raise BrowserError(
-                "context limit detected while ChatGPT is still busy; retrying later"
+                "rollover needed while ChatGPT is still busy; retrying later"
             )
         target, record = _rollover_project_chat(
             repo,

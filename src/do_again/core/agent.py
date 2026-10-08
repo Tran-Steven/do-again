@@ -62,6 +62,7 @@ class Agent:
         self.invalid_dir = self.control_worktree / "automation/do_again/invalid"
         self.conflicts_dir = self.control_worktree / "automation/do_again/conflicts"
         self.claims_dir = self.control_worktree / "automation/do_again/claims"
+        self.cancellations_dir = self.control_worktree / "automation/do_again/cancellations"
         self.ledger_dir = self.state_dir / "ledger"
         self.locks_dir = self.state_dir / "locks"
         self.stop_requested = False
@@ -182,6 +183,19 @@ class Agent:
 
     def claim_payload(self, request_id: str) -> dict[str, Any] | None:
         path = self.control_worktree / self.claim_relative(request_id)
+        if not path.is_file():
+            return None
+        try:
+            value = read_json(path)
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def cancellation_relative(self, request_id: str) -> Path:
+        return Path(f"automation/do_again/cancellations/{request_id}.json")
+
+    def cancellation_payload(self, request_id: str) -> dict[str, Any] | None:
+        path = self.control_worktree / self.cancellation_relative(request_id)
         if not path.is_file():
             return None
         try:
@@ -412,6 +426,37 @@ class Agent:
     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:
         atomic_json(self.ledger_path(request_id), value)
 
+    def record_operator_progress(
+        self,
+        request: dict[str, Any],
+        *,
+        request_id: str,
+        fingerprint: str,
+    ) -> None:
+        continuation = request.get("continuation")
+        if not isinstance(continuation, dict):
+            return
+        acknowledged = list(continuation.get("acknowledged_receipts", []))
+        missing = [value for value in acknowledged if not self.receipt_exists(value)]
+        if missing:
+            raise OperatorError(
+                "continuation acknowledges receipts that are not durably published: "
+                + ", ".join(missing)
+            )
+        atomic_json(
+            self.state_dir / "operator_progress.json",
+            {
+                "schema_version": 1,
+                "request_id": request_id,
+                "request_fingerprint": fingerprint,
+                "acknowledged_receipts": acknowledged,
+                "goal_state": continuation.get("goal_state", "in_progress"),
+                "goal_id": continuation.get("goal_id"),
+                "summary": continuation.get("summary"),
+                "recorded_at_utc": utc_now().isoformat(),
+            },
+        )
+
     @staticmethod
     def _request_matches_fingerprint(request: dict[str, Any], fingerprint: str) -> bool:
         if request_fingerprint(request) == fingerprint:
@@ -431,7 +476,7 @@ class Agent:
         error: str | None = None,
         traceback_text: str | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": 1,
             "request_id": request.get("request_id"),
             "request_fingerprint": request_fingerprint(request),
@@ -445,6 +490,10 @@ class Agent:
             "error": error,
             "traceback": traceback_text,
         }
+        continuation = request.get("continuation")
+        if isinstance(continuation, dict):
+            payload["operator_progress"] = continuation
+        return payload
 
     def result_succeeded(self, payload: dict[str, Any]) -> bool:
         result = payload.get("result")
@@ -594,6 +643,26 @@ class Agent:
                     self.notify_receipt(receipt)
                     return True
 
+            cancellation = self.cancellation_payload(request_id)
+            if cancellation is not None:
+                receipt = self.make_receipt(
+                    request=raw,
+                    state="cancelled",
+                    started_at=str(cancellation.get("cancelled_at_utc") or utc_now().isoformat()),
+                    error=str(cancellation.get("reason") or "cancelled before execution"),
+                )
+                self.write_ledger(
+                    request_id,
+                    {
+                        "state": "terminal",
+                        "request_fingerprint": fingerprint,
+                        "receipt": receipt,
+                    },
+                )
+                self.publish_receipt(receipt)
+                self.notify_receipt(receipt)
+                return True
+
             if not self.acquire_remote_claim(raw):
                 return False
 
@@ -607,6 +676,11 @@ class Agent:
                     max_future_skew_seconds=int(
                         self.policy.get("max_future_skew_seconds", 300)
                     ),
+                )
+                self.record_operator_progress(
+                    raw,
+                    request_id=request_id,
+                    fingerprint=fingerprint,
                 )
                 self.write_ledger(
                     request_id,
@@ -679,6 +753,7 @@ class Agent:
         self.invalid_dir.mkdir(parents=True, exist_ok=True)
         self.conflicts_dir.mkdir(parents=True, exist_ok=True)
         self.claims_dir.mkdir(parents=True, exist_ok=True)
+        self.cancellations_dir.mkdir(parents=True, exist_ok=True)
         values = []
         far_future = datetime.max.replace(tzinfo=timezone.utc)
         for path in self.requests_dir.glob("*.json"):
