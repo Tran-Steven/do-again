@@ -37,6 +37,8 @@ Do Again should be easy on the first run and still expose lower-level controls f
 
 ## P1 — diagnostics and recovery
 
+- [x] Measured local-agent soak benchmark covering exact-once duplicate/restart behavior; scope explicitly excludes Git/browser/network latency.
+
 - [x] Make `doctor` repository-aware and report browser/runtime repair information.
 - [x] Surface browser delivery failures and pending receipt count through `status`.
 - [ ] Surface recent core request/receipt failures without requiring users to inspect the control branch manually.
