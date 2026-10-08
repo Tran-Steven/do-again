@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:21:38.802839+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "951bc7c7969db2250a38e79100d9f0ef5a334511975161dd6866a90350f3bb3d",
+  "request_id": "selfdev-cross-project-installed-fault-smoke-20261008-121",
+  "schema_version": 1
+}
