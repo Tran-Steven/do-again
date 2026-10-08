@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T14:04:48.276069+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "58c27f057579e74ff7de256b9a81040e89ff6cfbc3c9bbb8eae1d9715ebca0e5",
+  "request_id": "selfdev-rollout-zombie-child-fix-complete-20261008-142",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "58c27f057579e74ff7de256b9a81040e89ff6cfbc3c9bbb8eae1d9715ebca0e5",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollout-zombie-child-fix-complete-20261008-142/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 6.547,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 3512,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollout-zombie-child-fix-complete-20261008-142/script.py",
+      "script_sha256": "53c062da840def05d6f43811345593ad8a99cc8068e1400393e8c1e241643fd8",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "$ python3 -m py_compile src/do_again/service/rollout.py tests/test_rollout.py\n\n\n$ python3 -m unittest tests.test_rollout\n\n....................F\n======================================================================\nFAIL: test_zombie_daemon_descendant_does_not_block_upgrade (tests.test_rollout.StagedRuntimeRolloutTests.test_zombie_daemon_descendant_does_not_block_upgrade)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/worktrees/rollout-zombie-fix/tests/test_rollout.py\", line 315, in test_zombie_daemon_descendant_does_not_block_upgrade\n    self.assertFalse(any(b[\"kind\"] == \"executor_children\" for b in result[\"blockers\"]))\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: True is not false\n\n----------------------------------------------------------------------\nRan 21 tests in 5.832s\n\nFAILED (failures=1)\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T14:04:41.414972+00:00",
+  "state": "failed",
+  "traceback": null
+}
