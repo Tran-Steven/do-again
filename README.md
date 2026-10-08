@@ -352,3 +352,5 @@ CI covers Python 3.11, 3.12, and 3.13 across Linux, macOS, and Windows, plus bro
 ## License
 
 MIT
+
+Rollout ignores only children positively identified as exited zombies. Live children and children with unavailable process state still block cutover. Process filtering does not override started-ledger or uncertain-delivery blockers.
