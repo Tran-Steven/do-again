@@ -21,7 +21,7 @@ from typing import Any
 
 from ..platforms.process import pid_alive
 from . import cdp
-from .errors import BrowserAuthRequired, BrowserError
+from .errors import BrowserAuthRequired, BrowserError, BrowserSubmissionUncertain
 
 
 CHATGPT_URL = "https://chatgpt.com/"
@@ -843,65 +843,71 @@ return 'ready';
 })()"""
     if cdp.evaluate(target, prep, timeout=15.0, user_gesture=True) != "ready":
         raise BrowserError("ChatGPT composer was not available")
-    cdp.insert_text(target, text)
+    try:
+        cdp.insert_text(target, text)
 
-    click = r"""(() => {
-const buttons = [
-  document.querySelector('[data-testid="send-button"]'),
-  document.querySelector('button[aria-label="Send prompt"]'),
-  document.querySelector('button[aria-label="Send"]')
-].filter(Boolean);
-const button = buttons.find(b => !b.disabled);
-if (!button) return 'no_button';
-button.click();
-return 'clicked';
-})()"""
-    time.sleep(0.15)
-    cdp.press_enter(target)
-    accepted = False
-    for _ in range(20):
-        time.sleep(0.1)
-        accepted = bool(cdp.evaluate(target, r"""(() => {
-const el = document.querySelector('#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]');
-return el && !(el.value || el.innerText || '').trim();
-})()""", timeout=10.0))
-        if accepted:
-            break
-    if not accepted:
-        if cdp.evaluate(target, click, timeout=10.0, user_gesture=True) != "clicked":
-            raise BrowserError("ChatGPT did not accept the submitted prompt")
+        click = r"""(() => {
+    const buttons = [
+      document.querySelector('[data-testid="send-button"]'),
+      document.querySelector('button[aria-label="Send prompt"]'),
+      document.querySelector('button[aria-label="Send"]')
+    ].filter(Boolean);
+    const button = buttons.find(b => !b.disabled);
+    if (!button) return 'no_button';
+    button.click();
+    return 'clicked';
+    })()"""
+        time.sleep(0.15)
+        cdp.press_enter(target)
+        accepted = False
+        for _ in range(20):
+            time.sleep(0.1)
+            accepted = bool(cdp.evaluate(target, r"""(() => {
+    const el = document.querySelector('#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]');
+    return el && !(el.value || el.innerText || '').trim();
+    })()""", timeout=10.0))
+            if accepted:
+                break
+        if not accepted:
+            if cdp.evaluate(target, click, timeout=10.0, user_gesture=True) != "clicked":
+                raise BrowserError("ChatGPT did not accept the submitted prompt")
 
-    if not wait_for_response:
-        return {
-            "response": "submitted",
-            "chat_url": target.url,
-        }
+        if not wait_for_response:
+            return {
+                "response": "submitted",
+                "chat_url": target.url,
+            }
 
-    deadline = time.monotonic() + timeout
-    last = baseline
-    stable = 0
-    while time.monotonic() < deadline:
-        time.sleep(1.0)
-        current = _assistant_snapshot(target)
-        if _context_limit_warning(target):
-            raise BrowserError("ChatGPT conversation reached its context limit")
-        if (
-            int(current.get("count") or 0) > int(baseline.get("count") or 0)
-            and not current.get("busy")
-            and str(current.get("latest") or "").strip()
-        ):
-            if current.get("latest") == last.get("latest"):
-                stable += 1
-            else:
-                stable = 0
-            if stable >= 1 and "/c/local-" not in str(current.get("url") or ""):
-                return {
-                    "response": str(current.get("latest") or ""),
-                    "chat_url": str(current.get("url") or ""),
-                }
-        last = current
-    raise BrowserError("timed out waiting for ChatGPT to finish the browser iteration")
+        deadline = time.monotonic() + timeout
+        last = baseline
+        stable = 0
+        while time.monotonic() < deadline:
+            time.sleep(1.0)
+            current = _assistant_snapshot(target)
+            if _context_limit_warning(target):
+                raise BrowserError("ChatGPT conversation reached its context limit")
+            if (
+                int(current.get("count") or 0) > int(baseline.get("count") or 0)
+                and not current.get("busy")
+                and str(current.get("latest") or "").strip()
+            ):
+                if current.get("latest") == last.get("latest"):
+                    stable += 1
+                else:
+                    stable = 0
+                if stable >= 1 and "/c/local-" not in str(current.get("url") or ""):
+                    return {
+                        "response": str(current.get("latest") or ""),
+                        "chat_url": str(current.get("url") or ""),
+                    }
+            last = current
+        raise BrowserError("timed out waiting for ChatGPT to finish the browser iteration")
 
+    except cdp.CdpTimeoutError as exc:
+        raise BrowserSubmissionUncertain(
+            "ChatGPT browser submission outcome is uncertain after a CDP timeout; "
+            "inspect the bound conversation before retrying to avoid duplicate actions"
+        ) from exc
 
 def browser_self_test(*, target: cdp.Target | None = None) -> dict[str, Any]:
     status = ensure_browser_running(verify_auth=True)
@@ -1963,6 +1969,9 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
             timeout=180.0,
             wait_for_response=False,
         )
+    except BrowserSubmissionUncertain:
+        # Never create a new chat or resend after an unverified CDP submit.
+        raise
     except BrowserError:
         warning = _context_limit_warning(target)
         if not warning or _assistant_snapshot(target).get("busy"):
@@ -2031,6 +2040,9 @@ def notify_receipt(repo: Path, receipt: dict[str, Any]) -> dict[str, Any]:
             timeout=180.0,
             wait_for_response=False,
         )
+    except BrowserSubmissionUncertain:
+        # Preserve the durable outbox for DOM/receipt reconciliation.
+        raise
     except BrowserError:
         # A conversation can cross the limit exactly when the continuation is
         # submitted. Detect that case, roll over once, and retry safely.

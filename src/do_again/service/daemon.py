@@ -21,6 +21,8 @@ from ..browser import (
 )
 from ..core.agent import Agent
 from ..core.schema import atomic_json, utc_now
+from ..browser import cdp
+from ..browser.errors import BrowserSubmissionUncertain
 from ..browser.runtime import _file_lock
 from .runtime import runtime_layout
 from .liveness import check_liveness
@@ -144,6 +146,12 @@ def _browser_monitor(
                 with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
                     check_liveness(repo, runtime_layout(repo).control_worktree, state_dir)
             delay = 3.0 if delivered else 30.0
+        except BrowserSubmissionUncertain as exc:
+            _record_browser_state(state_dir, "submission_uncertain", error=str(exc))
+            delay = 15.0
+        except cdp.CdpTimeoutError as exc:
+            _record_browser_state(state_dir, "browser_unresponsive", error=str(exc))
+            delay = 15.0
         except BrowserAuthRequired as exc:
             _record_browser_state(state_dir, "auth_required", error=str(exc))
             delay = 60.0
