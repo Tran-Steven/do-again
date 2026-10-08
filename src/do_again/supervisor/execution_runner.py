@@ -25,6 +25,25 @@ def kernel_groups() -> set[int]:
     return set(buffer[:count])
 
 
+def revoke_bootstrap_capabilities() -> None:
+    """Discard inherited launchd authority before executing untrusted code."""
+    if sys.platform != 'darwin':raise SystemExit('native IPC confinement unavailable')
+    library=ctypes.CDLL('/usr/lib/libSystem.B.dylib')
+    task=ctypes.c_uint.in_dll(library,'mach_task_self_').value
+    bootstrap=ctypes.c_uint.in_dll(library,'bootstrap_port')
+    old=bootstrap.value
+    special=library.task_set_special_port
+    special.argtypes=[ctypes.c_uint,ctypes.c_int,ctypes.c_uint];special.restype=ctypes.c_int
+    if special(task,4,0)!=0:raise SystemExit('bootstrap capability revocation failed')
+    registered=library.mach_ports_register
+    registered.argtypes=[ctypes.c_uint,ctypes.POINTER(ctypes.c_uint),ctypes.c_uint];registered.restype=ctypes.c_int
+    if registered(task,None,0)!=0:raise SystemExit('registered capability revocation failed')
+    bootstrap.value=0
+    destroy=library.mach_port_destroy
+    destroy.argtypes=[ctypes.c_uint,ctypes.c_uint];destroy.restype=ctypes.c_int
+    if old and destroy(task,old)!=0:raise SystemExit('inherited bootstrap right survived')
+
+
 def main(argv: list[str]) -> int:
     uid, cpu_seconds = int(argv[0]), int(argv[1])
     if uid <= 0 or os.getuid() != uid or os.geteuid() != uid or kernel_groups() - {os.getgid()}:
@@ -37,6 +56,7 @@ def main(argv: list[str]) -> int:
     command = argv[2:]
     if not command or not os.path.isabs(command[0]):
         raise SystemExit('resolved executable required')
+    revoke_bootstrap_capabilities()
     os.execve(command[0], command, os.environ)
     return 1
 

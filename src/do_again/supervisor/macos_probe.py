@@ -10,6 +10,12 @@ from pathlib import Path
 from .macos_execution import EXECUTION_ROOT, SOCKET_ROOT, ExecutionBlocked, capture, launch_spec
 
 
+class BoundaryProbeBlocked(ExecutionBlocked):
+    def __init__(self, reason: str, evidence: dict):
+        super().__init__(reason)
+        self.evidence=evidence
+
+
 def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
     nonce = uuid.uuid4().hex
     root = EXECUTION_ROOT / project.key / 'probes' / nonce
@@ -54,7 +60,18 @@ def denied(name, action):
     try: action()
     except OSError as e: result[name]=e.errno in (errno.EPERM,errno.EACCES)
     else: result[name]=False
-import runpy
+import runpy,ctypes
+lib=ctypes.CDLL('/usr/lib/libSystem.B.dylib')
+result['bootstrap_absent']=ctypes.c_uint.in_dll(lib,'bootstrap_port').value==0
+task=ctypes.c_uint.in_dll(lib,'mach_task_self_').value
+get_special=lib.task_get_special_port
+get_special.argtypes=[ctypes.c_uint,ctypes.c_int,ctypes.POINTER(ctypes.c_uint)];get_special.restype=ctypes.c_int
+port=ctypes.c_uint()
+result['kernel_bootstrap_absent']=get_special(task,4,ctypes.byref(port))==0 and port.value==0
+host=ctypes.c_uint();privileged=ctypes.c_uint()
+get_host=lib.host_get_special_port
+get_host.argtypes=[ctypes.c_uint,ctypes.c_int,ctypes.c_int,ctypes.POINTER(ctypes.c_uint)];get_host.restype=ctypes.c_int
+result['host_privilege_denied']=get_special(task,2,ctypes.byref(host))!=0 or get_host(host.value,-1,2,ctypes.byref(privileged))!=0 or privileged.value==0
 checked_groups=runpy.run_path(T['runner'])['kernel_groups']()
 result['identity']=os.getuid()==T['uid'] and os.geteuid()==T['uid'] and os.getgid()==T['gid'] and not (checked_groups-{T['gid']})
 Path(T['allowed']).write_text('allowed')
@@ -86,16 +103,19 @@ print(json.dumps(result),flush=True)
                   'argv': [config['python'], '-I', '-S', '-B', '-c', script], 'cwd': '.', 'timeout': 15}
         outcome = capture(launch_spec(project, packet, scratch, cache), 15, start_guard=start_guard)
         if outcome['returncode'] or outcome['timed_out']:
-            raise ExecutionBlocked('dedicated-identity proof failed to execute allowed work')
+            raise BoundaryProbeBlocked('dedicated-identity proof failed to execute allowed work', {'phase':'allowed_work','outcome':outcome})
         result = json.loads(outcome['stdout'])
         observed = launchctl('print', target)
+        evidence={'phase':'enforcement','checks':result,'observer_returncode':observed.returncode,
+                  'service_state':[line.strip() for line in observed.stdout.splitlines()
+                      if any(key in line for key in ('runs =','state =','active count =','last exit'))]}
         if observed.returncode or 'runs = 0' not in observed.stdout:
-            raise ExecutionBlocked('synthetic operator service changed during confinement proof')
+            raise BoundaryProbeBlocked('synthetic operator service changed during confinement proof',evidence)
         disabled = launchctl('print-disabled', domain)
         if f'"{label}" => disabled' in disabled.stdout:
-            raise ExecutionBlocked('synthetic operator service was disabled')
+            raise BoundaryProbeBlocked('synthetic operator service was disabled',evidence)
         if other_sentinel.read_text() != 'OTHER_SYNTHETIC_UNCHANGED' or sentinel.read_text() != 'SYNTHETIC_UNCHANGED' or not result or not all(value is True for value in result.values()):
-            raise ExecutionBlocked('native execution boundary proof rejected an escape or lost allowed work')
+            raise BoundaryProbeBlocked('native execution boundary proof rejected an escape or lost allowed work',evidence)
         from .macos_execution import MacOSProcesses
         if MacOSProcesses().owned(project.uid):
             raise ExecutionBlocked('detached execution descendants survived proof')
