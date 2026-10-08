@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-long-running-claim-nonstall-20261008-117",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:08:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:28:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, time, sys\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service import liveness\n\nconfig=liveness._settings(repo)\nnow=time.time()\nidle=float(config[\"idle_seconds\"])\nrecovery=float(config[\"recovery_seconds\"])\n\n# Model a legitimately long-running claimed request that has exceeded the idle\n# threshold but still has a live executor heartbeat/process. This must never be\n# resumed, reported stalled, or increment recovery attempts merely because time passed.\nseed={\n    \"receipt_id\":\"live-long-claim-proof\",\n    \"progress_at\":now-idle-recovery-120,\n    \"attempts\":0,\n    \"state\":\"working\",\n}\n\ndecided, action=liveness._decision(\n    seed,\n    receipt_id=\"live-long-claim-proof\",\n    receipt_time=seed[\"progress_at\"],\n    pending=True,\n    busy=True,\n    now=now,\n    idle_seconds=idle,\n    recovery_seconds=recovery,\n)\n\nprint(json.dumps({\n    \"idle_seconds\":idle,\n    \"recovery_seconds\":recovery,\n    \"input\":seed,\n    \"output\":decided,\n    \"action\":action,\n},indent=2,sort_keys=True))\n\nif action not in {\"none\",\"wait\"}:\n    raise SystemExit(f\"active long-running claim incorrectly triggered action={action}\")\nif decided.get(\"state\") in {\"recovering\",\"stalled\",\"stalled_ci_handoff\",\"ci_continuation_due\"}:\n    raise SystemExit(f\"active claim incorrectly entered recovery/stall state: {decided}\")\nif int(decided.get(\"attempts\",0)) != 0:\n    raise SystemExit(f\"active claim incorrectly incremented recovery attempts: {decided}\")\nprint(\"LONG_RUNNING_CLAIM_NONSTALL_ACCEPTANCE_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
