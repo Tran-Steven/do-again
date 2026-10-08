@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import subprocess
 import tempfile
 import unittest
@@ -8,7 +9,16 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from do_again.cli import list_projects, main, setup_project, verify_project
+from do_again.cli import (
+    list_projects,
+    main,
+    request_history,
+    setup_project,
+    show_logs,
+    trace_request,
+    verify_project,
+)
+from do_again.service.runtime import runtime_layout
 
 
 def git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -216,6 +226,84 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertIn("requires browser automation", error.getvalue())
             self.assertNotIn("SETUP_OK", error.getvalue())
 
+
+
+    def test_history_reads_request_and_receipt_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            requests = layout.control_worktree / "automation/do_again/requests"
+            receipts = layout.control_worktree / "automation/do_again/receipts"
+            requests.mkdir(parents=True, exist_ok=True)
+            receipts.mkdir(parents=True, exist_ok=True)
+            (requests / "req-a.json").write_text(
+                json.dumps({
+                    "request_id": "req-a",
+                    "operation": "status",
+                    "issued_at_utc": "2026-10-08T00:00:00+00:00",
+                }),
+                encoding="utf-8",
+            )
+            (receipts / "req-a.json").write_text(
+                json.dumps({
+                    "request_id": "req-a",
+                    "operation": "status",
+                    "state": "succeeded",
+                    "finished_at_utc": "2026-10-08T00:01:00+00:00",
+                }),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rc = request_history(str(repo), limit=20)
+            self.assertEqual(rc, 0)
+            value = json.loads(output.getvalue())
+            self.assertEqual(value["history"][0]["request_id"], "req-a")
+            self.assertEqual(value["history"][0]["state"], "succeeded")
+
+    def test_trace_combines_durable_request_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            base = layout.control_worktree / "automation/do_again"
+            for name in ("requests", "claims", "receipts"):
+                (base / name).mkdir(parents=True, exist_ok=True)
+            layout.state_dir.joinpath("ledger").mkdir(parents=True, exist_ok=True)
+            (base / "requests/req-x.json").write_text(
+                json.dumps({"request_id": "req-x", "operation": "status"}),
+                encoding="utf-8",
+            )
+            (base / "claims/req-x.json").write_text(
+                json.dumps({"request_id": "req-x", "agent_instance_id": "agent"}),
+                encoding="utf-8",
+            )
+            (layout.state_dir / "ledger/req-x.json").write_text(
+                json.dumps({"state": "started"}),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rc = trace_request("req-x", str(repo))
+            self.assertEqual(rc, 0)
+            value = json.loads(output.getvalue())
+            self.assertEqual(value["request"]["operation"], "status")
+            self.assertEqual(value["ledger"]["state"], "started")
+
+    def test_logs_tail_reads_runtime_logs_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            layout.stdout_log.parent.mkdir(parents=True, exist_ok=True)
+            layout.stdout_log.write_text("one\ntwo\nthree\n", encoding="utf-8")
+            layout.stderr_log.write_text("problem\n", encoding="utf-8")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rc = show_logs(str(repo), lines=2, stream="stdout")
+            self.assertEqual(rc, 0)
+            rendered = output.getvalue()
+            self.assertNotIn("\none\n", rendered)
+            self.assertIn("two", rendered)
+            self.assertIn("three", rendered)
 
     def test_chats_cleanup_is_dry_run_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

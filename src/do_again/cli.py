@@ -407,6 +407,154 @@ def _ensure_project_browser(repo: Path) -> None:
     except BrowserError as exc:
         print(f"do-again: browser unavailable; local execution will continue: {exc}", file=sys.stderr)
 
+def _read_json_if_file(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def request_history(path: str = ".", *, limit: int = 20) -> int:
+    try:
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        control = layout.control_worktree
+        requests_dir = control / "automation/do_again/requests"
+        receipts_dir = control / "automation/do_again/receipts"
+        rows: list[dict[str, object]] = []
+        ids: set[str] = set()
+        if requests_dir.is_dir():
+            ids.update(p.stem for p in requests_dir.glob("*.json"))
+        if receipts_dir.is_dir():
+            ids.update(p.stem for p in receipts_dir.glob("*.json"))
+        for request_id in ids:
+            request = _read_json_if_file(requests_dir / f"{request_id}.json") or {}
+            receipt = _read_json_if_file(receipts_dir / f"{request_id}.json") or {}
+            stamp = str(
+                receipt.get("finished_at_utc")
+                or receipt.get("started_at_utc")
+                or request.get("issued_at_utc")
+                or ""
+            )
+            rows.append(
+                {
+                    "request_id": request_id,
+                    "operation": receipt.get("operation") or request.get("operation"),
+                    "state": receipt.get("state") or "pending",
+                    "timestamp": stamp or None,
+                }
+            )
+        rows.sort(key=lambda row: str(row.get("timestamp") or ""), reverse=True)
+        if limit > 0:
+            rows = rows[:limit]
+        print(json.dumps({"repo": str(repo), "history": rows}, indent=2, sort_keys=True))
+        return 0
+    except ServiceError as exc:
+        print(f"do-again: history: {exc}", file=sys.stderr)
+        return 1
+
+
+def trace_request(request_id: str, path: str = ".") -> int:
+    try:
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        control = layout.control_worktree
+        base = control / "automation/do_again"
+        ledger_path = layout.state_dir / "ledger" / f"{request_id}.json"
+        conflicts_dir = base / "conflicts"
+        conflicts = []
+        if conflicts_dir.is_dir():
+            for p in sorted(conflicts_dir.glob(f"{request_id}-*.json")):
+                value = _read_json_if_file(p)
+                if value is not None:
+                    conflicts.append(value)
+        payload = {
+            "repo": str(repo),
+            "request_id": request_id,
+            "request": _read_json_if_file(base / "requests" / f"{request_id}.json"),
+            "claim": _read_json_if_file(base / "claims" / f"{request_id}.json"),
+            "ledger": _read_json_if_file(ledger_path),
+            "receipt": _read_json_if_file(base / "receipts" / f"{request_id}.json"),
+            "conflicts": conflicts,
+        }
+        if not any(
+            payload[key]
+            for key in ("request", "claim", "ledger", "receipt", "conflicts")
+        ):
+            print(f"do-again: trace: unknown request id: {request_id}", file=sys.stderr)
+            return 2
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    except ServiceError as exc:
+        print(f"do-again: trace: {exc}", file=sys.stderr)
+        return 1
+
+
+def _tail_text(path: Path, lines: int) -> str:
+    if not path.is_file():
+        return ""
+    try:
+        data = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    if lines <= 0:
+        return "\n".join(data)
+    return "\n".join(data[-lines:])
+
+
+def show_logs(
+    path: str = ".",
+    *,
+    follow: bool = False,
+    lines: int = 100,
+    stream: str = "both",
+) -> int:
+    try:
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        selected = []
+        if stream in {"stdout", "both"}:
+            selected.append(("stdout", layout.stdout_log))
+        if stream in {"stderr", "both"}:
+            selected.append(("stderr", layout.stderr_log))
+        for label, log_path in selected:
+            print(f"== {label}: {log_path} ==")
+            tail = _tail_text(log_path, lines)
+            if tail:
+                print(tail)
+        if not follow:
+            return 0
+
+        positions = {}
+        for _, log_path in selected:
+            try:
+                positions[log_path] = log_path.stat().st_size
+            except OSError:
+                positions[log_path] = 0
+        try:
+            while True:
+                for label, log_path in selected:
+                    try:
+                        with log_path.open("r", encoding="utf-8", errors="replace") as handle:
+                            handle.seek(positions[log_path])
+                            chunk = handle.read()
+                            positions[log_path] = handle.tell()
+                    except OSError:
+                        continue
+                    if chunk:
+                        for line in chunk.rstrip("\n").splitlines():
+                            print(f"[{label}] {line}", flush=True)
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            return 0
+    except ServiceError as exc:
+        print(f"do-again: logs: {exc}", file=sys.stderr)
+        return 1
+
+
 
 def _service_action(action: str, path: str) -> int:
     try:
@@ -583,7 +731,7 @@ def main() -> int:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{setup,verify,start,status,stop,restart,list,doctor,browser}",
+        metavar="{setup,verify,start,status,history,trace,logs,stop,restart,list,doctor,browser}",
     )
 
     sub.add_parser("doctor", help="Check runtime prerequisites")
@@ -622,6 +770,25 @@ def main() -> int:
     )
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
+    history_parser = sub.add_parser(
+        "history", help="Show recent durable Do Again request history"
+    )
+    history_parser.add_argument("path", nargs="?", default=".")
+    history_parser.add_argument("--limit", type=int, default=20)
+    trace_parser = sub.add_parser(
+        "trace", help="Show request, claim, ledger, receipt, and conflict state"
+    )
+    trace_parser.add_argument("request_id")
+    trace_parser.add_argument("path", nargs="?", default=".")
+    logs_parser = sub.add_parser(
+        "logs", help="Show agent logs; use --follow to stream new lines"
+    )
+    logs_parser.add_argument("path", nargs="?", default=".")
+    logs_parser.add_argument("--follow", action="store_true")
+    logs_parser.add_argument("--lines", type=int, default=100)
+    logs_parser.add_argument(
+        "--stream", choices=("stdout", "stderr", "both"), default="both"
+    )
 
     init_parser = sub.add_parser("init")
     init_parser.add_argument("path", nargs="?", default=".")
@@ -716,6 +883,17 @@ def main() -> int:
         return verify_project(args.path, timeout_seconds=args.timeout)
     if args.command == "status":
         return status(args.path)
+    if args.command == "history":
+        return request_history(args.path, limit=args.limit)
+    if args.command == "trace":
+        return trace_request(args.request_id, args.path)
+    if args.command == "logs":
+        return show_logs(
+            args.path,
+            follow=args.follow,
+            lines=args.lines,
+            stream=args.stream,
+        )
     if args.command == "list":
         return list_projects()
     if args.command == "init":
