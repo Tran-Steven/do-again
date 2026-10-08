@@ -99,6 +99,7 @@ class LivenessIntegrationTests(unittest.TestCase):
             patch.object(liveness.browser, "_find_chatgpt_target", return_value=self.target),
             patch.object(liveness.browser, "_assistant_snapshot", return_value={"busy": False}),
             patch.object(liveness.browser, "_context_limit_warning", return_value=""),
+            patch.object(liveness.browser, "_page_contains", return_value=False),
             patch.object(liveness.browser, "send_message"),
         ]
 
@@ -199,6 +200,116 @@ class LivenessIntegrationTests(unittest.TestCase):
         with patch.object(liveness.subprocess, "run") as run_again:
             liveness._report_stall(self.repo, config, value)
         run_again.assert_not_called()
+
+
+
+class CiGoalLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.repo = self.root / "repo"
+        self.control = self.root / "control"
+        self.state = self.root / "state"
+        self.repo.mkdir()
+        self.control.mkdir()
+        self.state.mkdir()
+        (self.repo / "do-again.toml").write_text(
+            "[do_again]\ncontinuous = true\nidle_seconds = 60\nrecovery_seconds = 60\n"
+        )
+        (self.control / "automation/do_again/requests").mkdir(parents=True)
+        (self.control / "automation/do_again/receipts").mkdir(parents=True)
+
+    def _request(self, state="waiting_for_ci"):
+        payload = {
+            "schema_version": 1,
+            "request_id": "ci-wait-1",
+            "operation": "status",
+            "args": {},
+            "expected": {},
+            "limits": {},
+            "continuation": {
+                "acknowledged_receipts": [],
+                "goal_state": state,
+                "goal_id": "rollout-pr11",
+                "ci": {
+                    "repository": "Tran-Steven/do-again",
+                    "run_id": 37716899421,
+                    "head_sha": "1d92d174d49e058e0dfe46d55b5fe7bceba70fe5",
+                },
+            },
+        }
+        path = self.control / "automation/do_again/requests/ci-wait-1.json"
+        path.write_text(json.dumps(payload))
+        (self.control / "automation/do_again/receipts/ci-wait-1.json").write_text(
+            json.dumps({"request_id":"ci-wait-1","state":"succeeded"})
+        )
+
+    def _browser(self):
+        patches = [
+            patch.object(liveness.browser, "ensure_browser_running", return_value={"port":9223}),
+            patch.object(liveness.browser, "project_record", return_value={"chat_url":"https://chatgpt.com/c/x"}),
+            patch.object(liveness.browser, "_find_chatgpt_target", return_value={"id":"target"}),
+            patch.object(liveness.browser, "send_message"),
+        ]
+        mocks=[p.start() for p in patches]
+        for p in patches: self.addCleanup(p.stop)
+        return mocks
+
+    def test_waiting_ci_stays_quiet_until_terminal(self):
+        self._request()
+        mocks=self._browser()
+        with patch.object(liveness, "_github_actions_run", return_value={
+            "state":"waiting","status":"in_progress","head_sha":"1d92d174d49e058e0dfe46d55b5fe7bceba70fe5"
+        }):
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"waiting_for_ci")
+        mocks[-1].assert_not_called()
+
+    def test_terminal_ci_resumes_exactly_once_across_restart(self):
+        self._request()
+        mocks=self._browser()
+        probe={"state":"terminal","status":"completed","conclusion":"success","head_sha":"1d92d174d49e058e0dfe46d55b5fe7bceba70fe5"}
+        with patch.object(liveness, "_github_actions_run", return_value=probe):
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
+        mocks[-1].assert_called_once()
+        state=json.loads((self.state/"liveness.json").read_text())
+        self.assertEqual(state["goal_state"],"waiting_for_ci")
+        self.assertEqual(state["ci_conclusion"],"success")
+        self.assertIn("ci_terminal_fingerprint",state)
+
+    def test_terminal_failed_ci_also_wakes_agent_for_diagnosis(self):
+        self._request()
+        mocks=self._browser()
+        with patch.object(liveness, "_github_actions_run", return_value={
+            "state":"terminal","status":"completed","conclusion":"failure","head_sha":"1d92d174d49e058e0dfe46d55b5fe7bceba70fe5"
+        }):
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
+        sent=mocks[-1].call_args.args[1]
+        self.assertIn("failure",sent)
+        self.assertIn("diagnose before mutation",sent)
+
+    def test_ci_head_mismatch_blocks_without_prompt(self):
+        self._request()
+        mocks=self._browser()
+        with patch.object(liveness, "_github_actions_run", return_value={
+            "state":"mismatch","status":"completed","conclusion":"success","head_sha":"0"*40
+        }):
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"blocked")
+        mocks[-1].assert_not_called()
+
+    def test_paused_and_validated_complete_never_prompt(self):
+        mocks=self._browser()
+        for goal_state in ("paused","validated_complete"):
+            payload={
+                "request_id":f"r-{goal_state}",
+                "continuation":{"acknowledged_receipts":[],"goal_state":goal_state},
+            }
+            path=self.control/f"automation/do_again/requests/r-{goal_state}.json"
+            path.write_text(json.dumps(payload))
+            os.utime(path,None)
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),goal_state)
+        mocks[-1].assert_not_called()
 
 
 if __name__ == "__main__":

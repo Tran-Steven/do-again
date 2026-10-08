@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -118,6 +119,7 @@ def _report_stall(repo: Path, config: dict[str, Any], state: dict[str, Any], rea
         "idle": "No-progress after bounded continuation",
         "busy": "Conversation generation stuck",
         "pending": "Unfinished request stuck",
+        "ci": "CI handoff unacknowledged after browser submission",
     }
     title = f"[do-again] {types[reason]} ({slug})"
     repository = config["issue_repo"]
@@ -172,6 +174,170 @@ def _report_stall(repo: Path, config: dict[str, Any], state: dict[str, Any], rea
     return state
 
 
+def _latest_goal(control: Path) -> dict[str, Any]:
+    requests = control / "automation/do_again/requests"
+    if not requests.is_dir():
+        return {}
+    candidates = sorted(
+        requests.glob("*.json"),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+        reverse=True,
+    )
+    for path in candidates:
+        try:
+            request = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(request, dict):
+            continue
+        continuation = request.get("continuation")
+        if not isinstance(continuation, dict):
+            continue
+        goal_state = str(continuation.get("goal_state") or "in_progress")
+        result = {
+            "request_id": str(request.get("request_id") or path.stem),
+            "goal_state": goal_state,
+            "goal_id": continuation.get("goal_id"),
+        }
+        if isinstance(continuation.get("ci"), dict):
+            result["ci"] = dict(continuation["ci"])
+        return result
+    return {}
+
+
+def _github_actions_run(ci: dict[str, Any]) -> dict[str, Any]:
+    repository = str(ci.get("repository") or "")
+    run_id = ci.get("run_id")
+    expected_head = str(ci.get("head_sha") or "").lower()
+    if not repository or not isinstance(run_id, int) or run_id <= 0 or not expected_head:
+        return {"state": "invalid", "error": "invalid durable CI wait metadata"}
+    try:
+        proc = subprocess.run(
+            [
+                "gh", "api",
+                f"repos/{repository}/actions/runs/{run_id}",
+                "--jq", "{status:.status,conclusion:.conclusion,head_sha:.head_sha}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"state": "unavailable", "error": type(exc).__name__}
+    if proc.returncode != 0:
+        return {"state": "unavailable", "error": "github_actions_query_failed"}
+    try:
+        value = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return {"state": "unavailable", "error": "github_actions_invalid_response"}
+    actual_head = str(value.get("head_sha") or "").lower()
+    if actual_head != expected_head:
+        return {
+            "state": "mismatch",
+            "status": value.get("status"),
+            "conclusion": value.get("conclusion"),
+            "head_sha": actual_head,
+        }
+    status = str(value.get("status") or "")
+    conclusion = value.get("conclusion")
+    if status != "completed":
+        return {"state": "waiting", "status": status, "head_sha": actual_head}
+    return {
+        "state": "terminal",
+        "status": status,
+        "conclusion": conclusion,
+        "head_sha": actual_head,
+    }
+
+
+def _handle_goal_lifecycle(
+    repo: Path,
+    control: Path,
+    state_dir: Path,
+    state: dict[str, Any],
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], str | None]:
+    goal = _latest_goal(control)
+    goal_state = str(goal.get("goal_state") or "in_progress")
+    state["goal_state"] = goal_state
+    if goal.get("goal_id") is not None:
+        state["goal_id"] = goal.get("goal_id")
+    else:
+        state.pop("goal_id", None)
+
+    if goal_state in {"completed", "validated_complete", "paused"}:
+        state["state"] = goal_state
+        return state, "stop"
+
+    if goal_state == "blocked":
+        state["state"] = "blocked"
+        return state, "stop"
+
+    if goal_state == "waiting_for_execution":
+        state["state"] = "waiting_for_execution"
+        return state, "wait"
+
+    if goal_state != "waiting_for_ci":
+        return state, None
+
+    ci = goal.get("ci")
+    if not isinstance(ci, dict):
+        state["state"] = "blocked"
+        state["ci_error"] = "waiting_for_ci has no durable CI metadata"
+        return state, "stop"
+
+    probe = _github_actions_run(ci)
+    state["ci"] = {
+        "repository": ci.get("repository"),
+        "run_id": ci.get("run_id"),
+        "head_sha": ci.get("head_sha"),
+        "probe_state": probe.get("state"),
+        "status": probe.get("status"),
+        "conclusion": probe.get("conclusion"),
+    }
+    state["ci_checked_at"] = time.time()
+
+    if probe["state"] == "waiting":
+        state["state"] = "waiting_for_ci"
+        return state, "wait"
+    if probe["state"] in {"unavailable", "mismatch", "invalid"}:
+        state["state"] = "blocked"
+        state["ci_error"] = probe.get("error") or probe["state"]
+        return state, "stop"
+
+    fingerprint = f"{ci.get('repository')}:{ci.get('run_id')}:{ci.get('head_sha')}:{probe.get('conclusion')}"
+    now = time.time()
+    if state.get("ci_terminal_fingerprint") == fingerprint:
+        # A terminal CI result is NOT evidence that the wake-up message was
+        # accepted, acknowledged, or acted on. Never blindly replay it.
+        # Persisted unknown delivery survives daemon restarts.
+        age = now - float(state.get("ci_terminal_at", now))
+        if age >= max(60, int(config["recovery_seconds"])):
+            state["state"] = "stalled_ci_handoff"
+            state["ci_error"] = "CI is terminal, but no subsequent goal transition was verified"
+            state = _report_stall(repo, config, state, reason="ci")
+            return state, "stop"
+        phase = str(state.get("ci_delivery_phase") or "unknown")
+        state["state"] = ("ci_delivery_uncertain" if phase == "uncertain"
+                          else "ci_handoff_observed" if phase == "observed"
+                          else "recovering")
+        return state, "reconcile_ci"
+
+    # Persist before attempting any side-effect. A crash or uncertain send
+    # can never trigger a second submission of the same terminal CI event.
+    state["ci_terminal_fingerprint"] = fingerprint
+    state["ci_terminal_at"] = now
+    state["ci_conclusion"] = probe.get("conclusion")
+    state["ci_delivery_phase"] = "uncertain"
+    state["ci_delivery_marker"] = "DO_AGAIN_CI_GATE_COMPLETE token=" + hashlib.sha256(
+        fingerprint.encode("utf-8")
+    ).hexdigest()[:20]
+    state["state"] = "ci_continuation_due"
+    atomic_json(state_dir / "liveness.json", state)
+    return state, "resume_ci"
+
+
 def _pending_stale(control: Path, now: float, timeout: float = 7200.0) -> bool:
     requests = control / "automation/do_again/requests"
     receipts = control / "automation/do_again/receipts"
@@ -191,6 +357,73 @@ def check_liveness(repo: Path, control: Path, state_dir: Path) -> str:
     path = state_dir / "liveness.json"
     value = _read_state(path)
     receipt_id, receipt_time, pending = _activity(control)
+    # In-flight local execution has priority over any external CI event.
+    # Never wake the agent to mutate the repo while a claimed request runs.
+    # A claimed execution must not be interrupted by a CI wake-up, but an
+    # explicit paused/completed/blocked goal still needs to be honored.
+    if pending and _latest_goal(control).get("goal_state") == "waiting_for_ci":
+        lifecycle_action = None
+    else:
+        value, lifecycle_action = _handle_goal_lifecycle(repo, control, state_dir, value, config)
+    if lifecycle_action in {"stop", "wait"}:
+        atomic_json(path, value)
+        return str(value["state"])
+    if lifecycle_action == "reconcile_ci":
+        # Read-only evidence check of the one registered project chat.
+        # A visible wake-up marker is not model acknowledgement; without a
+        # newer request or goal transition, bounded escalation still applies.
+        try:
+            session = browser.ensure_browser_running(verify_auth=True)
+            record = browser.project_record(repo)
+            url = str(record.get("chat_url") or "")
+            if url:
+                target = browser._find_chatgpt_target(int(session["port"]), url)
+                if target and browser._page_contains(target, str(value["ci_delivery_marker"])):
+                    value["ci_delivery_phase"] = "observed"
+                    value["state"] = "ci_handoff_observed"
+                    value.pop("ci_probe_error", None)
+        except (browser.BrowserError, TimeoutError, OSError) as exc:
+            value["ci_probe_error"] = type(exc).__name__
+        atomic_json(path, value)
+        return str(value["state"])
+    if lifecycle_action == "resume_ci":
+        session = browser.ensure_browser_running(verify_auth=True)
+        record = browser.project_record(repo)
+        url = str(record.get("chat_url") or "")
+        if not url:
+            raise browser.BrowserError("project has no bound automation chat")
+        target = browser._find_chatgpt_target(int(session["port"]), url)
+        if target is None:
+            target = cdp.create_target(int(session["port"]), url, background=True)
+            target, _ = browser.wait_for_authenticated(
+                int(session["port"]), target=target, chat_url=url, timeout=30.0
+            )
+        conclusion = str(value.get("ci_conclusion") or "unknown")
+        prompt = (
+            str(value["ci_delivery_marker"]) + ": The exact GitHub Actions run recorded in the durable "
+            f"waiting_for_ci goal reached terminal conclusion {conclusion!r}. Re-read the "
+            "existing goal and CI evidence, verify the expected head/PR state, and continue "
+            "exactly once. If CI failed, diagnose before mutation. If CI succeeded, perform "
+            "the already-approved next gated action. Do not create a parallel goal and do not "
+            "claim completion without receipts/live proof."
+        )
+        value["state"] = "ci_delivery_uncertain"
+        value["last_resume_at"] = time.time()
+        atomic_json(path, value)
+        try:
+            # This only proves the browser submit step, never consumption.
+            browser.send_message(target, prompt, wait_for_response=False)
+        except Exception as exc:
+            # The browser may have clicked before disconnecting. Reconcile
+            # the bound conversation; do NOT send again on restart.
+            value["ci_delivery_phase"] = "uncertain"
+            value["ci_delivery_error"] = type(exc).__name__
+            atomic_json(path, value)
+            raise
+        value["ci_delivery_phase"] = "submitted_unverified"
+        value["state"] = "recovering"
+        atomic_json(path, value)
+        return str(value["state"])
     if pending:
         new_state, _ = _decision(
             value, receipt_id=receipt_id, receipt_time=receipt_time, pending=True,

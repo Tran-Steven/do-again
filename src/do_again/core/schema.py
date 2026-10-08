@@ -116,8 +116,21 @@ def validate_request(
         if len(set(acknowledged)) != len(acknowledged):
             raise OperatorError("continuation.acknowledged_receipts must not contain duplicates")
         goal_state = continuation.get("goal_state", "in_progress")
-        if goal_state not in {"in_progress", "completed", "blocked"}:
-            raise OperatorError("continuation.goal_state must be in_progress, completed, or blocked")
+        allowed_goal_states = {
+            "in_progress",
+            "waiting_for_ci",
+            "waiting_for_execution",
+            "blocked",
+            "paused",
+            "validated_complete",
+            "completed",
+        }
+        if goal_state not in allowed_goal_states:
+            raise OperatorError(
+                "continuation.goal_state must be one of "
+                "in_progress, waiting_for_ci, waiting_for_execution, blocked, paused, "
+                "validated_complete, or completed"
+            )
         goal_id = continuation.get("goal_id")
         if goal_id is not None and (
             not isinstance(goal_id, str) or not REQUEST_ID_RE.fullmatch(goal_id)
@@ -132,6 +145,30 @@ def validate_request(
             "acknowledged_receipts": acknowledged,
             "goal_state": goal_state,
         }
+        ci = continuation.get("ci")
+        if ci is not None:
+            if goal_state != "waiting_for_ci":
+                raise OperatorError("continuation.ci is only valid for waiting_for_ci")
+            if not isinstance(ci, dict):
+                raise OperatorError("continuation.ci must be an object")
+            repository = ci.get("repository")
+            run_id = ci.get("run_id")
+            head_sha = ci.get("head_sha")
+            if not isinstance(repository, str) or not re.fullmatch(
+                r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}", repository
+            ):
+                raise OperatorError("continuation.ci.repository must identify an owner/repository")
+            if not isinstance(run_id, int) or isinstance(run_id, bool) or run_id <= 0:
+                raise OperatorError("continuation.ci.run_id must be a positive integer")
+            if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+                raise OperatorError("continuation.ci.head_sha must be a 40-character commit SHA")
+            normalized_continuation["ci"] = {
+                "repository": repository,
+                "run_id": run_id,
+                "head_sha": head_sha.lower(),
+            }
+        elif goal_state == "waiting_for_ci":
+            raise OperatorError("waiting_for_ci requires continuation.ci")
         if goal_id is not None:
             normalized_continuation["goal_id"] = goal_id
         if summary is not None:
