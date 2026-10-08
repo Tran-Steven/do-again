@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from do_again.service import rollout
+from do_again.core.agent import Agent
 
 
 class StagedRuntimeRolloutTests(unittest.TestCase):
@@ -34,6 +35,14 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
     def assess(self, rows=None):
         with patch.object(rollout, "service_status", return_value=self.status):
             return rollout.assess_upgrade(self.repo, process_rows=rows or [])
+
+    def write_agent_ledger(self, request_id="r1", state="started"):
+        policy = self.root / "policy.json"
+        policy.write_text('{"allowed_operations": []}')
+        agent = Agent(repo=self.repo, control_worktree=self.layout.control_worktree,
+                      branch="operator-control", policy_path=policy,
+                      state_dir=self.layout.state_dir)
+        agent.write_ledger(request_id, {"state": state})
 
     def test_offline_upgrade_stages_stopped_runtime_preserving_pending_request(self):
         self.status = {"installed": True, "running": False, "pid": None}
@@ -75,9 +84,7 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
         self.status={"installed":True,"running":False,"pid":None}
         q=self.layout.control_worktree/"automation/do_again/requests/r1.json"
         q.write_text('{}')
-        started=self.layout.state_dir/"requests/r1.json"
-        started.parent.mkdir(parents=True)
-        started.write_text('{"state":"started"}')
+        self.write_agent_ledger()
         with patch.object(rollout,"find_repo",return_value=self.repo),patch.object(
             rollout,"service_status",return_value=self.status
         ):
@@ -104,9 +111,7 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
         original=rollout._stage_source
         def stage_then_claim(layout,tx):
             result=original(layout,tx)
-            ledger=layout.state_dir/"requests/r1.json"
-            ledger.parent.mkdir(parents=True,exist_ok=True)
-            ledger.write_text('{"state":"started"}')
+            self.write_agent_ledger()
             return result
         stop,restart=Mock(),Mock()
         with patch.object(rollout,"find_repo",return_value=self.repo),patch.object(
@@ -131,13 +136,37 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
     def test_started_ledger_blocks_upgrade(self):
         req = self.layout.control_worktree / "automation/do_again/requests/r1.json"
         req.write_text("{}")
-        ledger = self.layout.state_dir / "requests/r1.json"
-        ledger.parent.mkdir(parents=True)
-        ledger.write_text(json.dumps({"state":"started"}))
+        self.write_agent_ledger()
         value = self.assess()
         kinds={b["kind"] for b in value["blockers"]}
         self.assertIn("pending_requests", kinds)
         self.assertIn("started_requests", kinds)
+
+    def test_orphan_started_ledger_blocks_without_request_file(self):
+        self.write_agent_ledger("orphan")
+        self.assertEqual(self.assess()["started_requests"], ["orphan"])
+
+    def test_started_ledger_blocks_even_if_receipt_exists(self):
+        self.write_agent_ledger()
+        receipt = self.layout.control_worktree / "automation/do_again/receipts/r1.json"
+        receipt.write_text('{"state":"succeeded"}')
+        self.assertFalse(self.assess()["safe"])
+
+    def test_corrupt_execution_record_blocks_offline_upgrade(self):
+        self.write_agent_ledger()
+        (self.layout.state_dir / "ledger/r1.json").write_text("{")
+        self.status = {"installed": True, "running": False, "pid": None}
+        value = self.assess()
+        kinds = {b["kind"] for b in rollout._effective_upgrade_blockers(value, offline=True)}
+        self.assertIn("invalid_execution_records", kinds)
+
+    def test_terminal_agent_ledger_does_not_block(self):
+        self.write_agent_ledger(state="terminal")
+        self.assertTrue(self.assess()["safe"])
+
+    def test_uncertain_intent_blocks_even_with_empty_outbox(self):
+        (self.layout.state_dir / "browser_submission_uncertain.json").write_text('{}')
+        self.assertIn("browser_submission_uncertain", {b["kind"] for b in self.assess()["blockers"]})
 
     def test_daemon_child_process_blocks_upgrade(self):
         rows=[
