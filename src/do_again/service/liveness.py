@@ -125,7 +125,7 @@ def _report_stall(repo: Path, config: dict[str, Any], state: dict[str, Any], rea
     repository = config["issue_repo"]
     try:
         lookup = subprocess.run(
-            ["gh", "issue", "list", "--repo", repository, "--state", "open", "--limit", "100", "--search", f"{title} in:title", "--json", "number,title"],
+            ["gh", "issue", "list", "--repo", repository, "--state", "open", "--limit", "1000", "--json", "number,title"],
             capture_output=True, text=True, timeout=30, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):

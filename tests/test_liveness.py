@@ -186,6 +186,22 @@ class LivenessIntegrationTests(unittest.TestCase):
         run.assert_called_once()
         self.assertNotIn(str(self.repo.parent), str(run.call_args))
 
+    def test_issue_reporting_restart_dedupes_without_search_index(self):
+        config = {"report_stalls": True, "issue_repo": "Tran-Steven/do-again"}
+        empty = Mock(returncode=0, stdout="[]")
+        created = Mock(returncode=0, stdout="https://github.com/Tran-Steven/do-again/issues/19\n")
+        visible = Mock(returncode=0, stdout=json.dumps([
+            {"number": 19, "title": "[do-again] No-progress after bounded continuation (repo)"}
+        ]))
+        with patch.object(liveness.subprocess, "run", side_effect=[empty, created, visible]) as run:
+            first = liveness._report_stall(self.repo, config, {})
+            second = liveness._report_stall(self.repo, config, {})
+        self.assertEqual(first["issue_report"], "created")
+        self.assertEqual(first["issue_number"], 19)
+        self.assertEqual(second["issue_report"], "existing")
+        self.assertEqual(second["issue_number"], 19)
+        self.assertNotIn("--search", run.call_args.args[0])
+
     def test_issue_reporting_creates_sanitized_issue_once(self):
         config = {"report_stalls": True, "issue_repo": "Tran-Steven/do-again"}
         listed = Mock(returncode=0, stdout="[]")
