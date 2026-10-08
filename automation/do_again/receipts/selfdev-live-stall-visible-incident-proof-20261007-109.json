@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:36:17.795163+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "d20e1692c10b015e1b45aacb3d738d839441ce47fbc66d4ad939b303185a5dfd",
+  "request_id": "selfdev-live-stall-visible-incident-proof-20261007-109",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "db7df56b569202c249f406c39df48b637ec8c8c8"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "db7df56b569202c249f406c39df48b637ec8c8c8"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "d20e1692c10b015e1b45aacb3d738d839441ce47fbc66d4ad939b303185a5dfd",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-stall-visible-incident-proof-20261007-109/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 7.406,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 2679,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-stall-visible-incident-proof-20261007-109/script.py",
+      "script_sha256": "7093ac8687c5876e7121cc802da75ccf2cd91dd1a49bb61052d4206ea842fb76",
+      "stderr": "restart-style stall report was not deduplicated\n",
+      "stderr_truncated": false,
+      "stdout": "decision_action=report\ndecision_state=stalled\nfirst_report={\"attempts\": 2, \"issue_number\": 19, \"issue_report\": \"created\", \"last_resume_at\": 1791433810.534364, \"next_report_at\": 1791437770.53438, \"progress_at\": 1791433510.534364, \"receipt_id\": \"live-stall-proof\", \"state\": \"stalled\"}\nsecond_report={\"attempts\": 2, \"issue_number\": 20, \"issue_report\": \"created\", \"last_resume_at\": 1791433810.534364, \"next_report_at\": 1791437773.4403, \"progress_at\": 1791433510.534364, \"receipt_id\": \"live-stall-proof\", \"state\": \"stalled\"}\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:36:09.601623+00:00",
+  "state": "failed",
+  "traceback": null
+}
