@@ -1,0 +1,44 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:42105:1791437684:f7477c11374f",
+  "error": null,
+  "finished_at_utc": "2026-10-08T05:40:24.811545+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "status",
+  "request_fingerprint": "8543be2629630b3b05beb16169d485b7acedd0c64ae6882177561b8c260ba2c6",
+  "request_id": "verify-7b3a7be3e50d4a24",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "161c1bb25e57eab6ab8eab3e2e240f92483c6abd"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "161c1bb25e57eab6ab8eab3e2e240f92483c6abd"
+    },
+    "operation": "status",
+    "request_fingerprint": "8543be2629630b3b05beb16169d485b7acedd0c64ae6882177561b8c260ba2c6",
+    "result": {
+      "authority": {
+        "repo_branch": "main",
+        "repo_dirty": true,
+        "repo_head": "161c1bb25e57eab6ab8eab3e2e240f92483c6abd"
+      },
+      "disk": {
+        "available_bytes": 22312427520,
+        "total_bytes": 245107195904,
+        "used_bytes": 222794768384
+      },
+      "runtime": {
+        "platform": "darwin",
+        "python_executable": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "python_version": "3.13.15"
+      }
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T05:40:24.123674+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
