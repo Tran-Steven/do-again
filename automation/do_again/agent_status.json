@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
-  "last_request_id": "selfdev-live-ci-uncertain-recovery-audit-20261007-103",
+  "last_request_id": "selfdev-live-ci-handoff-final-acceptance-20261007-104",
   "last_request_state": "succeeded",
   "pid": 98664,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-08T04:04:33.123444+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T04:28:03.424392+00:00"
+  "updated_at_utc": "2026-10-08T04:29:28.218104+00:00"
 }
