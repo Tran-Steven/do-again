@@ -3,11 +3,13 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:58649:1791438167:1983e93cf2fc",
+  "last_request_id": "selfdev-self-upgrade-current-main-20261007-114",
+  "last_request_state": "failed",
   "pid": 58649,
   "remote": "origin",
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-08T05:42:47.511735+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T05:42:47.799814+00:00"
+  "updated_at_utc": "2026-10-08T05:43:28.990371+00:00"
 }
