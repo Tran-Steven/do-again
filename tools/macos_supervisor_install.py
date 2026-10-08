@@ -104,20 +104,34 @@ def provision_worktree(config, project, current):
     secure_directory(EXEC)
     secure_directory(target.parent)
     for name in ('requests','probes'):secure_directory(target.parent/name,0o711)
-    if target.exists():
-        # Never replace an existing engineering writer or dirty tree on upgrade.
-        if target.is_symlink() or target.stat().st_uid!=project['uid']:
-            raise RuntimeError('existing engineering worktree has unknown ownership')
-        return
-    target.mkdir(mode=0o700)
-    os.chown(target,config['operator_uid'],config['operator_gid'])
+    partial = target.exists()
+    if partial:
+        if target.is_symlink():raise RuntimeError('existing worktree is aliased')
+        if target.stat().st_uid==project['uid']:
+            metadata=target/'.git';head=metadata/'HEAD'
+            if (metadata.is_symlink() or metadata.stat().st_uid!=config['operator_uid'] or
+                    head.is_symlink() or head.stat().st_nlink!=1 or
+                    head.read_text().strip()!=project['source_sha']):
+                raise RuntimeError('existing workspace snapshot drift; reconciliation required')
+            return  # Preserve an already provisioned engineering tree.
+        if (target.stat().st_uid!=config['operator_uid'] or
+                {p.name for p in target.iterdir()}!={'.git'} or
+                (target/'.git').is_symlink() or (target/'.git').stat().st_uid!=config['operator_uid']):
+            raise RuntimeError('partial workspace has edits or unknown ownership; reconciliation required')
+    else:
+        target.mkdir(mode=0o700)
+        os.chown(target,config['operator_uid'],config['operator_gid'])
     env={'PATH':'/usr/bin:/bin','HOME':config['operator_home'],
          'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null','GIT_TERMINAL_PROMPT':'0'}
     options={'user':config['operator_uid'],'group':config['operator_gid'],'extra_groups':[], 'env':env}
     git=['/usr/bin/git','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
          '-c','protocol.file.allow=always','-c','submodule.recurse=false']
     bundle=current/project['bundle']
-    run([*git,'clone','--no-hardlinks','--no-checkout',str(bundle),str(target)],**options)
+    if not partial:
+        run([*git,'clone','--no-hardlinks','--no-checkout',str(bundle),str(target)],**options)
+    # Bundles may advertise remote-tracking refs outside clone's heads refspec.
+    # Import the exact approved object before materializing the snapshot.
+    run([*git,'-C',str(target),'fetch','--no-tags',str(bundle),project['source_sha']],**options)
     run([*git,'-C',str(target),'checkout','--detach',project['source_sha']],**options)
     observed=run([*git,'-C',str(target),'rev-parse','HEAD'],**options).stdout.strip()
     if observed!=project['source_sha']:raise RuntimeError('workspace source identity mismatch')

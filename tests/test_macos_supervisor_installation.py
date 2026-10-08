@@ -55,6 +55,32 @@ class InstallationTests(unittest.TestCase):
                 module.prepare(self.root,self.root,self.root,self.root/'output')
             runtime.assert_not_called();self.assertFalse((self.root/'output').exists())
 
+    def test_remote_tracking_bundle_materializes_exact_commit(self):
+        import subprocess
+        git='/usr/bin/git' if Path('/usr/bin/git').exists() else 'git'
+        repo=self.root/'source';repo.mkdir()
+        def command(*args):
+            return subprocess.check_output([git,*args],text=True,stderr=subprocess.DEVNULL).strip()
+        command('init',str(repo));(repo/'tracked.txt').write_text('approved snapshot')
+        command('-C',str(repo),'add','tracked.txt')
+        command('-C',str(repo),'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','snapshot')
+        sha=command('-C',str(repo),'rev-parse','HEAD')
+        command('-C',str(repo),'update-ref','refs/remotes/origin/main',sha)
+        bundle=self.root/'snapshot.bundle';command('-C',str(repo),'bundle','create',str(bundle),'refs/remotes/origin/main')
+        key='fixture';target=self.root/'execution'/key/'worktree'
+        project={'worktree':str(target),'key':key,'uid':os.getuid(),'gid':os.getgid(),'source_sha':sha,'bundle':'snapshot.bundle'}
+        config={'operator_uid':os.getuid(),'operator_gid':os.getgid(),'operator_home':str(self.root)}
+        def allowed_directory(path,mode=0o755):path.mkdir(parents=True,exist_ok=True);path.chmod(mode)
+        def run(args,**kwargs):
+            # Drop only root-required credential setters for an unprivileged fixture.
+            kwargs={k:v for k,v in kwargs.items() if k not in {'user','group','extra_groups'}}
+            result=subprocess.run(args,capture_output=True,text=True,check=True,**kwargs)
+            return result
+        with patch.object(self.module,'EXEC',self.root/'execution'),patch.object(self.module,'secure_directory',side_effect=allowed_directory),patch.object(self.module.os,'chown'),patch.object(self.module,'run',side_effect=run):
+            self.module.provision_worktree(config,project,self.root)
+        self.assertEqual((target/'tracked.txt').read_text(),'approved snapshot')
+        self.assertEqual(command('-C',str(target),'rev-parse','HEAD'),sha)
+
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')

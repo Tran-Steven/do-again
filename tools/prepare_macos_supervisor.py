@@ -68,6 +68,16 @@ def seal_runtime(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/python/bin/python3'
 
 
+def snapshot_bundle(repo: Path, sha: str, destination: Path) -> None:
+    # Advertise an ordinary, exact snapshot head without mutating source refs.
+    with tempfile.TemporaryDirectory() as directory:
+        staging=Path(directory)/'snapshot.git'
+        git(repo,'init','--bare',str(staging))
+        git(staging,'-c','protocol.file.allow=always','fetch','--no-tags',str(repo),sha)
+        git(staging,'update-ref','refs/heads/snapshot',sha)
+        git(staging,'bundle','create',str(destination),'refs/heads/snapshot')
+
+
 def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None):
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
@@ -75,7 +85,24 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     source_sha=git(source,'rev-parse','HEAD')
     uid=os.getuid();gid=os.getgid();identity=pwd.getpwuid(uid)
     if uid==0:raise ValueError('prepare the bundle as the operator, not root')
-    if ids is None:ids=available_ids()
+    installed=None
+    installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')
+    if installed_path.exists():
+        sys.path.insert(0,str(source/'src'))
+        from do_again.supervisor.macos_execution import private_root_file
+        private_root_file(installed_path)
+        installed=json.loads(installed_path.read_text())
+        if installed.get('production_ready') is not False or installed['operator_uid']!=uid:
+            raise ValueError('existing supervisor requires guarded upgrade reconciliation')
+        expected={str(do_again_repo):'_doagain_da',str(jobpipe):'_doagain_jp'}
+        if {p['repo']:p['account'] for p in installed['projects']}!=expected:
+            raise ValueError('existing installation project scope differs')
+        for project in installed['projects']:
+            account=pwd.getpwnam(project['account'])
+            if (account.pw_uid,account.pw_gid,account.pw_dir,account.pw_shell)!=(project['uid'],project['gid'],'/var/empty','/usr/bin/false'):
+                raise ValueError('existing execution identity changed')
+        ids=[next(p['uid'] for p in installed['projects'] if p['repo']==str(repo)) for repo in (do_again_repo,jobpipe)]
+    elif ids is None:ids=available_ids()
     if len(ids)!=2 or len(set(ids))!=2 or any(not 400<=value<500 or value==uid for value in ids):raise ValueError('invalid execution IDs')
     for repo,name in ((source,'do-again'),(jobpipe,'jobpipe')):
         remote=git(repo,'remote','get-url','origin')
@@ -100,9 +127,11 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     for index,(repo,canonical,name,account,ref) in enumerate((
         (source,do_again_repo,'do-again','_doagain_da','HEAD'),
         (jobpipe,jobpipe,'jobpipe','_doagain_jp','origin/main'))):
+        if installed:
+            ref=next(p['source_sha'] for p in installed['projects'] if p['repo']==str(canonical))
         sha=git(repo,'rev-parse',ref)
         bundle=f'snapshots/{name}.bundle'
-        subprocess.run(['git','-C',str(repo),'bundle','create',str(payload/bundle),ref],check=True,capture_output=True)
+        snapshot_bundle(repo,sha,payload/bundle)
         key=project_key(canonical)
         projects.append({'repo':str(canonical),'key':key,'uid':ids[index],'gid':ids[index],
                          'account':account,'worktree':f'/private/var/do-again-execution/{key}/worktree',
