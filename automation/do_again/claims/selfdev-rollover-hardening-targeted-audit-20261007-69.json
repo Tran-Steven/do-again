@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:42:19.835292+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "66d2c3b06e771f648cc124ac6e92a7048513fb0c86dd0fa613f81accec2b0c25",
+  "request_id": "selfdev-rollover-hardening-targeted-audit-20261007-69",
+  "schema_version": 1
+}
