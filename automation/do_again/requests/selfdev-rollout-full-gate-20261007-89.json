@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-full-gate-20261007-89",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T02:10:10.000000+00:00",
+  "expires_at_utc": "2026-10-08T02:40:10.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport os, subprocess, json\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/rollout-20261007\")\nexpected=\"1d92d174d49e058e0dfe46d55b5fe7bceba70fe5\"\n\ndef run(args, cwd=wt, check=True, env=None):\n    return subprocess.run(args,cwd=cwd,text=True,capture_output=True,check=check,env=env)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip()\nif head!=expected or branch!=\"feat/staged-runtime-rollout-20261007\" or status:\n    raise SystemExit(f\"unexpected state head={head} branch={branch} status={status!r}\")\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\n\nfull=run([\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests\",\"-v\"],check=False,env=env)\nprint(\"=== full stdout ===\"); print(full.stdout)\nprint(\"=== full stderr ===\"); print(full.stderr)\nprint(\"full_rc=\"+str(full.returncode))\nif full.returncode:\n    raise SystemExit(full.returncode)\n\nprint(\"=== dry-run real project upgrade preflights ===\")\nfor project in [\"/Users/steventran/do-again\",\"/Users/steventran/jobpipe\",\"/Users/steventran/Sonary\"]:\n    p=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",project],check=False,env=env)\n    print(\"PROJECT\",project,\"RC\",p.returncode)\n    print(p.stdout)\n    print(p.stderr)\n    if p.returncode!=0:\n        raise SystemExit(f\"dry-run upgrade failed for {project}\")\n\nprint(\"head_after=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/rollout-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 1200
+  }
+}
