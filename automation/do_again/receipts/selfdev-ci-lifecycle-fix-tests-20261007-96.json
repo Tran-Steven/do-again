@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T03:18:36.068813+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "957c2af7d3ca8effb634b47693308bf41baac1d51f1b3b50af3c8f00807bccf7",
+  "request_id": "selfdev-ci-lifecycle-fix-tests-20261007-96",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a02b9979c083bb223a017bdb75e58e8223d43705"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "a02b9979c083bb223a017bdb75e58e8223d43705"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "957c2af7d3ca8effb634b47693308bf41baac1d51f1b3b50af3c8f00807bccf7",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ci-lifecycle-fix-tests-20261007-96/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/lifecycle-ci-20261007",
+      "duration_seconds": 6.509,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 2907,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-ci-lifecycle-fix-tests-20261007-96/script.py",
+      "script_sha256": "0a04e0c86d5725aba189ccfd521c4e3122a7d4f5a2af3ed76565aa1f4b360058",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "=== focused stdout ===\n\n=== focused stderr ===\n................................\n----------------------------------------------------------------------\nRan 32 tests in 2.010s\n\nOK\n\nfocused_rc=0\ncompile_rc=0\n\n[feat/ci-wait-lifecycle-20261007 65f9a3e] Resume durable CI wait lifecycle\n 4 files changed, 357 insertions(+), 3 deletions(-)\n\n\ncommit_rc=0\nhead=65f9a3e792c3cf3fa951df21fe9114a180d85d40\nstatus_after=''\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T03:18:28.585315+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
