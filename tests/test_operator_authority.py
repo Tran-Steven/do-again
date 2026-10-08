@@ -79,7 +79,8 @@ class OperatorAuthorityTests(unittest.TestCase):
     def test_unknown_schema_fails_closed_and_is_preserved(self):
         import sqlite3
         self.registry.initialize()
-        with sqlite3.connect(self.registry.path) as db:
+        from contextlib import closing
+        with closing(sqlite3.connect(self.registry.path)) as db, db:
             db.execute("PRAGMA user_version=99")
         with self.assertRaises(AuthorityDenied):
             self.registry.status(self.repo)
