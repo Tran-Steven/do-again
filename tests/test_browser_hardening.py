@@ -300,5 +300,95 @@ class BrowserHardeningTests(unittest.TestCase):
         self.assertEqual(send.call_args.args[0], new)
 
 
+    def test_rollover_failed_ack_preserves_binding_and_persists_failed_transaction(self):
+        record = self.bind()
+        new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
+        with patch.object(browser, "_build_rollover_checkpoint", return_value={
+            "handoff_token": "fixedtoken", "project": "repo", "completed_request_ids": [],
+            "pending_request_ids": [], "receipts": {}, "next_action": "continue"
+        }), patch.object(browser.secrets, "token_hex", return_value="fixedtoken"), patch.object(
+            cdp, "create_target", return_value=new
+        ), patch.object(
+            browser, "wait_for_authenticated", return_value=(new, {})
+        ), patch.object(
+            browser, "send_message",
+            return_value={"response": "wrong marker", "chat_url": "https://chatgpt.com/c/new"}
+        ), patch.object(cdp, "close_target") as close:
+            with self.assertRaisesRegex(browser.BrowserError, "handoff token"):
+                browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
+        self.assertEqual(browser.project_record(self.repo)["chat_url"], self.target.url)
+        tx = browser._read_json(browser._rollover_transaction_path(self.repo))
+        self.assertEqual(tx["state"], "failed")
+        self.assertEqual(tx["predecessor_chat_url"], self.target.url)
+        close.assert_called_once_with(9223, "new")
+
+    def test_successful_rollover_records_owned_successor_before_binding(self):
+        record = self.bind()
+        new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
+        checkpoint = {
+            "handoff_token": "fixedtoken", "project": "repo", "completed_request_ids": [],
+            "pending_request_ids": [], "receipts": {}, "next_action": "continue"
+        }
+        with patch.object(browser, "_build_rollover_checkpoint", return_value=checkpoint), patch.object(
+            browser.secrets, "token_hex", return_value="fixedtoken"
+        ), patch.object(cdp, "create_target", return_value=new), patch.object(
+            browser, "wait_for_authenticated", return_value=(new, {})
+        ), patch.object(
+            browser, "send_message",
+            return_value={
+                "response": "DO_AGAIN_HANDOFF_READY fixedtoken",
+                "chat_url": "https://chatgpt.com/c/new"
+            }
+        ), patch.object(cdp, "close_target"):
+            _, updated = browser._rollover_project_chat(
+                self.repo, record, port=9223, old_target=self.target
+            )
+        self.assertEqual(updated["chat_url"], "https://chatgpt.com/c/new")
+        tx = browser._read_json(browser._rollover_transaction_path(self.repo))
+        self.assertEqual(tx["state"], "bound")
+        self.assertEqual(tx["archive_state"], "pending")
+        registry = browser._read_json(browser._owned_chat_registry_path(self.repo))
+        self.assertEqual(registry["chats"][0]["chat_id"], "new")
+        self.assertEqual(registry["chats"][0]["handoff_token"], "fixedtoken")
+
+    def test_rollover_pressure_uses_configured_character_threshold(self):
+        with patch.object(browser, "_context_limit_warning", return_value=""), patch.object(
+            browser, "load_config", return_value={"rollover_char_threshold": 50000}
+        ), patch.object(browser, "_conversation_pressure_chars", return_value=50000):
+            self.assertTrue(browser._rollover_needed(self.target))
+        with patch.object(browser, "_context_limit_warning", return_value=""), patch.object(
+            browser, "load_config", return_value={"rollover_char_threshold": 50000}
+        ), patch.object(browser, "_conversation_pressure_chars", return_value=49999):
+            self.assertFalse(browser._rollover_needed(self.target))
+
+    def test_checkpoint_is_grounded_in_control_requests_and_receipt_hashes(self):
+        home = self.root / "home"
+        with patch.dict(os.environ, {"DO_AGAIN_HOME": str(home)}):
+            control = home / "projects" / browser._project_key(self.repo) / "control"
+            requests = control / "automation/do_again/requests"
+            receipts = control / "automation/do_again/receipts"
+            requests.mkdir(parents=True)
+            receipts.mkdir(parents=True)
+            (requests / "request-one.json").write_text("{}")
+            (requests / "request-two.json").write_text("{}")
+            (receipts / "request-one.json").write_text(
+                json.dumps({"request_id": "request-one", "state": "succeeded"})
+            )
+            record = browser.register_project(
+                self.repo,
+                remote_url="https://github.com/example/repo.git",
+                control_branch="operator-control",
+                chat_url=self.target.url,
+            )
+            cp = browser._build_rollover_checkpoint(
+                self.repo, record, token="checkpoint-token"
+            )
+        self.assertEqual(cp["completed_request_ids"], ["request-one"])
+        self.assertEqual(cp["pending_request_ids"], ["request-two"])
+        self.assertEqual(cp["receipts"]["request-one"]["state"], "succeeded")
+        self.assertEqual(len(cp["receipts"]["request-one"]["sha256"]), 64)
+
+
+
 if __name__ == "__main__":
     unittest.main()

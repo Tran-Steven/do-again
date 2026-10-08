@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -94,6 +95,7 @@ def _default_config() -> dict[str, Any]:
         "authenticated": False,
         "last_authenticated_utc": None,
         "last_headless_verified_utc": None,
+        "rollover_char_threshold": 180000,
     }
 
 
@@ -978,6 +980,162 @@ return hits[0] || '';
     return str(value or "").strip()
 
 
+
+def _chat_id(chat_url: str) -> str:
+    if "/c/" not in chat_url:
+        return ""
+    return chat_url.split("/c/", 1)[1].split("?", 1)[0].split("#", 1)[0]
+
+
+def _project_browser_dir(repo: Path) -> Path:
+    path = browser_paths().root / "project_state" / _project_key(repo)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _owned_chat_registry_path(repo: Path) -> Path:
+    return _project_browser_dir(repo) / "owned_chats.json"
+
+
+def _rollover_transaction_path(repo: Path) -> Path:
+    return _project_browser_dir(repo) / "rollover_transaction.json"
+
+
+def _checkpoint_path(repo: Path, token: str) -> Path:
+    return _project_browser_dir(repo) / "checkpoints" / f"{token}.json"
+
+
+def _record_owned_chat(
+    repo: Path,
+    chat_url: str,
+    *,
+    created_reason: str,
+    handoff_token: str | None = None,
+) -> dict[str, Any]:
+    registry = _read_json(_owned_chat_registry_path(repo))
+    chats = registry.get("chats")
+    if not isinstance(chats, list):
+        chats = []
+    chat_id = _chat_id(chat_url)
+    if not chat_id:
+        raise BrowserError("cannot register owned chat without a conversation id")
+    existing = next((row for row in chats if row.get("chat_id") == chat_id), None)
+    if existing is None:
+        existing = {
+            "chat_id": chat_id,
+            "chat_url": chat_url,
+            "repo": str(repo.resolve()),
+            "project_key": _project_key(repo),
+            "created_reason": created_reason,
+            "created_utc": _utc_now(),
+            "archive_state": "active",
+        }
+        if handoff_token:
+            existing["handoff_token"] = handoff_token
+        chats.append(existing)
+    registry = {"schema_version": 1, "chats": chats, "updated_utc": _utc_now()}
+    _atomic_json(_owned_chat_registry_path(repo), registry)
+    return existing
+
+
+def _control_worktree_for_repo(repo: Path) -> Path:
+    home = Path(
+        os.environ.get("DO_AGAIN_HOME", str(Path.home() / ".do_again"))
+    ).expanduser().resolve()
+    return home / "projects" / _project_key(repo) / "control"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _build_rollover_checkpoint(
+    repo: Path,
+    record: dict[str, Any],
+    *,
+    token: str,
+    objective: str = "Continue the existing Do Again automation goal from Git and receipts.",
+) -> dict[str, Any]:
+    repo = repo.resolve()
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"],
+        text=True, capture_output=True,
+    )
+    branch = subprocess.run(
+        ["git", "-C", str(repo), "branch", "--show-current"],
+        text=True, capture_output=True,
+    )
+    control = _control_worktree_for_repo(repo)
+    requests_dir = control / "automation/do_again/requests"
+    receipts_dir = control / "automation/do_again/receipts"
+    receipts: dict[str, dict[str, Any]] = {}
+    if receipts_dir.is_dir():
+        for path in sorted(receipts_dir.glob("*.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            request_id = str(payload.get("request_id") or path.stem)
+            receipts[request_id] = {
+                "state": payload.get("state"),
+                "sha256": _sha256_file(path),
+            }
+    request_ids = sorted(path.stem for path in requests_dir.glob("*.json")) if requests_dir.is_dir() else []
+    completed = sorted(request_id for request_id in request_ids if request_id in receipts)
+    pending = sorted(request_id for request_id in request_ids if request_id not in receipts)
+    checkpoint = {
+        "schema_version": 1,
+        "handoff_token": token,
+        "project": repo.name,
+        "repo": str(repo),
+        "objective": objective,
+        "branch": branch.stdout.strip() if branch.returncode == 0 else None,
+        "head": head.stdout.strip() if head.returncode == 0 else None,
+        "control_branch": record.get("control_branch"),
+        "active_chat_url": record.get("chat_url"),
+        "completed_request_ids": completed,
+        "pending_request_ids": pending,
+        "receipts": {key: receipts[key] for key in completed},
+        "unresolved_issues": [],
+        "next_action": "Inspect pending work and latest receipts, then continue the existing goal once.",
+        "created_utc": _utc_now(),
+    }
+    _atomic_json(_checkpoint_path(repo, token), checkpoint)
+    return checkpoint
+
+
+def _conversation_pressure_chars(target: cdp.Target) -> int:
+    expression = "(() => {" + _MESSAGE_NODES_JS + r"""
+const nodes = messageNodes();
+return nodes.reduce((sum, el) => sum + String(el.innerText || el.textContent || '').length, 0);
+})()"""
+    try:
+        value = cdp.evaluate(target, expression, timeout=10.0)
+    except Exception:
+        # Proactive rollover is best-effort. A transient metrics read must not
+        # block receipt delivery; the context-limit warning remains the hard fallback.
+        return 0
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _rollover_needed(target: cdp.Target) -> bool:
+    warning = _context_limit_warning(target)
+    if warning:
+        return True
+    config = load_config()
+    threshold = int(config.get("rollover_char_threshold") or 180000)
+    if threshold < 20000:
+        threshold = 20000
+    return _conversation_pressure_chars(target) >= threshold
+
+
 def _rollover_project_chat(
     repo: Path,
     record: dict[str, Any],
@@ -991,42 +1149,83 @@ def _rollover_project_chat(
     if not remote_url:
         raise BrowserError("project browser record is missing remote_url")
 
-    handoff = []
-    if old_target is not None:
-        try:
-            handoff = cdp.evaluate(old_target, "(() => {" + _MESSAGE_NODES_JS + r"""
-return messageNodes().slice(-8).map(el => ({role: el.getAttribute('data-message-author-role') || (el.querySelector('[data-conversation-role]') || {}).getAttribute?.('data-conversation-role'), text: (el.innerText || '').slice(-4000)}));
-})()""", timeout=10.0)
-        except BrowserError:
-            pass
+    token = secrets.token_hex(16)
+    checkpoint = _build_rollover_checkpoint(repo, record, token=token)
+    transaction = {
+        "schema_version": 1,
+        "handoff_token": token,
+        "state": "prepared",
+        "predecessor_chat_url": previous_url or None,
+        "successor_chat_url": None,
+        "checkpoint_path": str(_checkpoint_path(repo, token)),
+        "created_utc": _utc_now(),
+        "updated_utc": _utc_now(),
+        "archive_state": "not_started",
+    }
+    _atomic_json(_rollover_transaction_path(repo), transaction)
+
     prompt = _bootstrap_prompt(repo, remote_url, control_branch) + (
-        "\n\nThis is a rollover from a previous automation conversation that reached "
-        "its context limit. Treat the Git control branch and receipts as the "
-        "source of truth. Do not invent missing work or state."
+        "\n\nThis is a transactional Do Again rollover. Git, requests, receipts, and the "
+        "structured checkpoint below are the source of truth. Do not invent missing state."
+        "\nHandoff token: " + token
+        + "\nCheckpoint JSON:\n" + json.dumps(checkpoint, ensure_ascii=False, sort_keys=True)
+        + "\n\nAfter verifying the checkpoint, reply exactly: DO_AGAIN_HANDOFF_READY " + token
     )
-    if previous_url:
-        prompt += f"\nPrevious automation conversation: {previous_url}"
-    if isinstance(handoff, list) and handoff:
-        prompt += "\nRecent conversation excerpts for continuity; verify work against Git and receipts:\n" + json.dumps(handoff, ensure_ascii=False)
 
-    target, result = _bootstrap_new_chat(port, prompt)
-    new_url = result["chat_url"]
+    target = cdp.create_target(port, CHATGPT_URL, background=True)
+    try:
+        target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
+        result = send_message(target, prompt, timeout=180.0)
+        new_url = str(result.get("chat_url") or "")
+        transaction["successor_chat_url"] = new_url or None
+        transaction["state"] = "successor_created"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
 
-    updated = register_project(
-        repo,
-        remote_url=remote_url,
-        control_branch=control_branch,
-        chat_url=new_url,
-    )
-    updated["previous_chat_url"] = previous_url or None
-    updated["rollover_count"] = int(record.get("rollover_count") or 0) + 1
-    updated["last_rollover_utc"] = _utc_now()
-    updated["rollover_handoff"] = handoff
-    _atomic_json(_project_record_path(repo), updated)
+        expected = "DO_AGAIN_HANDOFF_READY " + token
+        if expected not in str(result.get("response") or ""):
+            raise BrowserError("successor chat did not acknowledge the exact rollover handoff token")
+        if "/c/" not in new_url:
+            raise BrowserError("successor chat did not bind a conversation URL")
 
-    if old_target is not None and old_target.id != target.id:
-        cdp.close_target(port, old_target.id)
-    return target, updated
+        transaction["state"] = "acknowledged"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
+        _record_owned_chat(
+            repo,
+            new_url,
+            created_reason="rollover",
+            handoff_token=token,
+        )
+
+        updated = register_project(
+            repo,
+            remote_url=remote_url,
+            control_branch=control_branch,
+            chat_url=new_url,
+        )
+        updated["previous_chat_url"] = previous_url or None
+        updated["rollover_count"] = int(record.get("rollover_count") or 0) + 1
+        updated["last_rollover_utc"] = _utc_now()
+        updated["last_handoff_token"] = token
+        updated["last_checkpoint_path"] = str(_checkpoint_path(repo, token))
+        _atomic_json(_project_record_path(repo), updated)
+
+        transaction["state"] = "bound"
+        transaction["archive_state"] = "pending"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
+
+        if old_target is not None and old_target.id != target.id:
+            cdp.close_target(port, old_target.id)
+        return target, updated
+    except Exception as exc:
+        transaction["state"] = "failed"
+        transaction["error"] = f"{type(exc).__name__}: {exc}"
+        transaction["updated_utc"] = _utc_now()
+        _atomic_json(_rollover_transaction_path(repo), transaction)
+        cdp.close_target(port, target.id)
+        raise
 
 
 def _project_key(repo: Path) -> str:
@@ -1120,6 +1319,7 @@ def ensure_project_chat(
 
     _, result = _bootstrap_new_chat(port, _bootstrap_prompt(repo, remote_url, control_branch))
     chat_url = result["chat_url"]
+    _record_owned_chat(repo, chat_url, created_reason="bootstrap")
     return register_project(
         repo,
         remote_url=remote_url,
@@ -1220,11 +1420,10 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
     if target is None:
         target = cdp.create_target(port, chat_url, background=True)
 
-    warning = _context_limit_warning(target)
-    if warning:
+    if _rollover_needed(target):
         if _assistant_snapshot(target).get("busy"):
             raise BrowserError(
-                "context limit detected while ChatGPT is still busy; retrying later"
+                "rollover needed while ChatGPT is still busy; retrying later"
             )
         target, record = _rollover_project_chat(
             repo,
