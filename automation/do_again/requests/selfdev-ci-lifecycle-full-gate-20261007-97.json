@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ci-lifecycle-full-gate-20261007-97",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T03:20:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T03:50:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport os, subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/lifecycle-ci-20261007\")\nexpected=\"65f9a3e792c3cf3fa951df21fe9114a180d85d40\"\n\ndef run(args,check=True,env=None):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check,env=env)\n\nif run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()!=expected:\n    raise SystemExit(\"unexpected head\")\nif run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()!=\"feat/ci-wait-lifecycle-20261007\":\n    raise SystemExit(\"unexpected branch\")\nif run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip():\n    raise SystemExit(\"worktree not clean\")\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\nfull=run([\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests\",\"-v\"],check=False,env=env)\nprint(\"=== full stdout ===\")\nprint(full.stdout)\nprint(\"=== full stderr ===\")\nprint(full.stderr)\nprint(\"full_rc=\"+str(full.returncode))\nif full.returncode:\n    raise SystemExit(full.returncode)\n\nprint(\"head_after=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/lifecycle-ci-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 1200
+  }
+}
