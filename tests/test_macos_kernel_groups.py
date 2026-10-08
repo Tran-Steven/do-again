@@ -25,8 +25,44 @@ class KernelGroupTests(unittest.TestCase):
             with self.assertRaises(SystemExit):self.runner.main(['401','5','/usr/bin/true'])
             execute.assert_not_called()
 
+    def test_bootstrap_and_registered_authority_are_removed_before_exec(self):
+        bootstrap=Mock(value=2059);task=Mock(value=515)
+        library=Mock();library.task_set_special_port.return_value=0
+        library.mach_ports_register.return_value=0;library.mach_port_destroy.return_value=0
+        with patch.object(self.runner.sys,'platform','darwin'),patch.object(self.runner.ctypes,'CDLL',return_value=library),patch.object(self.runner.ctypes.c_uint,'in_dll',side_effect=[task,bootstrap]):
+            self.runner.revoke_bootstrap_capabilities()
+        self.assertEqual(bootstrap.value,0)
+        library.task_set_special_port.assert_called_once_with(515,4,0)
+        library.mach_ports_register.assert_called_once_with(515,None,0)
+        library.mach_port_destroy.assert_called_once_with(515,2059)
+
+    def test_failed_bootstrap_revocation_blocks_exec_without_fallback(self):
+        library=Mock();library.task_set_special_port.return_value=5
+        with patch.object(self.runner.sys,'platform','darwin'),patch.object(self.runner.ctypes,'CDLL',return_value=library),patch.object(self.runner.ctypes.c_uint,'in_dll',side_effect=[Mock(value=515),Mock(value=2059)]),self.assertRaises(SystemExit):
+            self.runner.revoke_bootstrap_capabilities()
+        library.mach_ports_register.assert_not_called()
+
     @unittest.skipUnless(sys.platform=='darwin','Darwin native symbol required')
     def test_actual_native_symbol_returns_bounded_kernel_groups(self):
         groups=self.runner.kernel_groups()
         self.assertIsInstance(groups,set)
         self.assertLessEqual(len(groups),128)
+
+class ProbeFailureEvidenceTests(unittest.TestCase):
+    def test_failure_invalidates_old_proof_and_survives_restart(self):
+        import tempfile,json,threading
+        from pathlib import Path
+        from do_again.supervisor.macos_server import ProjectBroker
+        from do_again.supervisor.macos_probe import BoundaryProbeBlocked
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);identity={'source_sha':'synthetic'}
+            (root/'enforcement.json').write_text(json.dumps({'identity':identity,'result':{'verified':True}}))
+            broker=object.__new__(ProjectBroker);broker.config={'operator_uid':501};broker.state=root
+            broker.project=Mock(repo=root/'repo');broker.registry=Mock();broker.lock=threading.Lock()
+            broker.registry.status.return_value={'intent':'maintenance'}
+            evidence={'checks':{'service_kickstart_denied':False},'service_state':['runs = 1']}
+            with patch('do_again.supervisor.macos_server.verify_installation'),patch('do_again.supervisor.macos_server.machine_identity',return_value=identity),patch('do_again.supervisor.macos_probe.verify_dedicated_boundary',side_effect=BoundaryProbeBlocked('service changed',evidence)):
+                with self.assertRaises(BoundaryProbeBlocked):broker.dispatch({'operation':'probe'},501)
+                self.assertFalse(broker._verified())
+                restored=object.__new__(ProjectBroker);restored.state=root;restored.config=broker.config
+                self.assertEqual(restored._probe_blocker()['evidence'],evidence)

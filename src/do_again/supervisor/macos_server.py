@@ -61,7 +61,8 @@ class ProjectBroker:
             return {'operator_intent': status['intent'], 'epoch': status['epoch'],
                     'source_sha': self.config['source_sha'], 'uid': self.project.uid,
                     'worktree': str(self.project.worktree),
-                    'enforcement_verified': self._verified()}
+                    'enforcement_verified': self._verified(),
+                    'enforcement_blocker': self._probe_blocker()}
         if packet == {'operation': 'probe'}:
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('installation probes require maintenance intent')
@@ -69,8 +70,15 @@ class ProjectBroker:
                 verify_installation(self.config)
                 (self.state / 'enforcement.json').unlink(missing_ok=True)
                 from .macos_probe import verify_dedicated_boundary
-                result = verify_dedicated_boundary(self.config, self.project, start_guard=self.probe_admission)
                 from ..core.schema import atomic_json
+                try:
+                    result = verify_dedicated_boundary(self.config, self.project, start_guard=self.probe_admission)
+                except Exception as exc:
+                    atomic_json(self.state / 'enforcement-blocker.json',
+                                {'reason':str(exc),'evidence':getattr(exc,'evidence',{}),
+                                 'identity':machine_identity(self.config)})
+                    raise
+                (self.state / 'enforcement-blocker.json').unlink(missing_ok=True)
                 atomic_json(self.state / 'enforcement.json', {'identity': machine_identity(self.config), 'result': result})
                 return result
         if packet.get('operation') != 'execute':
@@ -144,6 +152,13 @@ class ProjectBroker:
             status = self.registry.status(self.project.repo)
             epoch = self.registry.set_intent(self.project.repo, intent, goal_revision=status['goal_revision'])
             return {'intent':intent,'epoch':epoch}
+
+    def _probe_blocker(self) -> dict | None:
+        try:
+            value=json.loads((self.state / 'enforcement-blocker.json').read_text())
+            if value['identity']==machine_identity(self.config):return value
+        except (OSError,ValueError,KeyError):pass
+        return None
 
     def _verified(self) -> bool:
         try:
