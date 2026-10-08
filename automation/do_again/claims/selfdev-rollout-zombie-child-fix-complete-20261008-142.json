@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T14:04:39.586716+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "58c27f057579e74ff7de256b9a81040e89ff6cfbc3c9bbb8eae1d9715ebca0e5",
+  "request_id": "selfdev-rollout-zombie-child-fix-complete-20261008-142",
+  "schema_version": 1
+}
