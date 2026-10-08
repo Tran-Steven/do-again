@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T13:54:58.837728+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "4f1ca446fd7252105196c518e242ff5fb712772f08ea34a4f71ca6b8781a2c6f",
+  "request_id": "selfdev-self-138-delivery-diagnostic-20261008-139",
+  "schema_version": 1
+}
