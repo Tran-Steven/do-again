@@ -55,16 +55,30 @@ def _request_state(layout: RuntimeLayout) -> dict[str, Any]:
     requests = control / "automation/do_again/requests"
     receipts = control / "automation/do_again/receipts"
     pending: list[str] = []
-    started: list[str] = []
+    started: set[str] = set()
+    invalid: list[str] = []
     if requests.is_dir():
         for request in sorted(requests.glob("*.json")):
             rid = request.stem
             if not (receipts / request.name).is_file():
                 pending.append(rid)
-                ledger = _json(layout.state_dir / "requests" / f"{rid}.json")
-                if ledger.get("state") == "started":
-                    started.append(rid)
-    return {"pending_requests": pending, "started_requests": started}
+    # Agent.write_ledger is authoritative. Inspect independently of requests
+    # and receipts: a crash or partial publication can leave an orphan record.
+    # Retain conservative compatibility with the former preflight directory.
+    for directory in (layout.state_dir / "ledger", layout.state_dir / "requests"):
+        for path in sorted(directory.glob("*.json")):
+            try:
+                if path.is_symlink():
+                    raise ValueError("execution record is a symlink")
+                record = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(record, dict) or record.get("state") not in {"started", "terminal"}:
+                    raise ValueError("invalid execution record")
+                if record["state"] == "started":
+                    started.add(path.stem)
+            except (OSError, ValueError):
+                invalid.append(f"{directory.name}/{path.name}")
+    return {"pending_requests": pending, "started_requests": sorted(started),
+            "invalid_execution_records": invalid}
 
 
 def _process_rows() -> list[dict[str, Any]]:
@@ -187,6 +201,8 @@ def assess_upgrade(repo: Path, *, process_rows: list[dict[str, Any]] | None = No
         blockers.append({"kind": "pending_requests", "request_ids": request_state["pending_requests"]})
     if request_state["started_requests"]:
         blockers.append({"kind": "started_requests", "request_ids": request_state["started_requests"]})
+    if request_state["invalid_execution_records"]:
+        blockers.append({"kind": "invalid_execution_records", "records": request_state["invalid_execution_records"]})
     if descendants:
         blockers.append({
             "kind": "executor_children",
@@ -201,7 +217,11 @@ def assess_upgrade(repo: Path, *, process_rows: list[dict[str, Any]] | None = No
             "request_ids": pending_outbox,
             "state": browser.get("state"),
         })
-    if browser.get("state") in {"queued", "recovering"} and browser.get("error"):
+    if (layout.state_dir / "browser_submission_uncertain.json").exists():
+        blockers.append({"kind": "browser_submission_uncertain"})
+    if browser.get("state") in {"submission_uncertain", "browser_unresponsive"} or (
+        browser.get("state") in {"queued", "recovering"} and browser.get("error")
+    ):
         blockers.append({"kind": "browser_delivery_unsettled", "state": browser.get("state")})
 
     live_package = layout.runtime_source / "do_again"
