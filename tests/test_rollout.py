@@ -330,6 +330,38 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
         tx=json.loads((self.layout.state_dir/"runtime_upgrade.json").read_text())
         self.assertEqual(tx["state"],"rollback_failed")
 
+    def test_zombie_daemon_descendant_does_not_block_upgrade(self):
+        rows = [
+            {"pid": 100, "ppid": 1, "state": "S", "command": "do-again daemon"},
+            {"pid": 101, "ppid": 100, "state": "Z", "command": "(git)"},
+        ]
+        with patch.object(rollout, "service_status", return_value={
+            "installed": True, "running": True, "pid": 100,
+        }), patch.object(rollout, "_shared_browser_child_pids", return_value=set()):
+            result = rollout.assess_upgrade(self.repo, process_rows=rows)
+        self.assertFalse(any(b["kind"] == "executor_children" for b in result["blockers"]))
+
+    def test_live_daemon_descendant_still_blocks_upgrade(self):
+        rows = [
+            {"pid": 100, "ppid": 1, "state": "S", "command": "do-again daemon"},
+            {"pid": 101, "ppid": 100, "state": "S", "command": "git fetch origin operator-control"},
+        ]
+        with patch.object(rollout, "service_status", return_value={
+            "installed": True, "running": True, "pid": 100,
+        }), patch.object(rollout, "_shared_browser_child_pids", return_value=set()):
+            result = rollout.assess_upgrade(self.repo, process_rows=rows)
+        blockers = [b for b in result["blockers"] if b["kind"] == "executor_children"]
+        self.assertEqual(len(blockers), 1)
+        self.assertEqual(blockers[0]["processes"][0]["pid"], 101)
+
+    def test_child_with_unclassified_state_still_blocks(self):
+        result = self.assess([
+            {"pid": 100, "ppid": 1, "command": "daemon"},
+            {"pid": 101, "ppid": 100, "command": "unknown child"},
+        ])
+        self.assertTrue(any(b["kind"] == "executor_children" for b in result["blockers"]))
+
+
 
 if __name__=="__main__":
     unittest.main()
