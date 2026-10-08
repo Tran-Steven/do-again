@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-self-new-main-upgrade-preflight-20261008-136",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:46:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T14:06:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess, sys, hashlib\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nexpected_head=\"b5c09ec117b4cc9a3cb752ad248631a32a0b08eb\"\nhead=subprocess.run([\"git\",\"rev-parse\",\"HEAD\"],cwd=repo,text=True,capture_output=True).stdout.strip()\nif head!=expected_head:\n    raise SystemExit(f\"main moved before preflight: {head}\")\n\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\nkey=hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(repo/\"src\")\np=subprocess.run(\n    [\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(repo)],\n    cwd=repo,text=True,capture_output=True,check=False,env=env\n)\n\nprint(json.dumps({\n  \"repo_head\":head,\n  \"source_hash\":_tree_hash(repo/\"src/do_again\"),\n  \"runtime_hash\":_tree_hash(root/\"runtime/do_again\"),\n  \"dry_run\":{\"rc\":p.returncode,\"stdout\":p.stdout,\"stderr\":p.stderr},\n},indent=2,sort_keys=True))\nprint(\"SELF_NEW_MAIN_UPGRADE_PREFLIGHT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
