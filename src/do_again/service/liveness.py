@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -118,6 +119,7 @@ def _report_stall(repo: Path, config: dict[str, Any], state: dict[str, Any], rea
         "idle": "No-progress after bounded continuation",
         "busy": "Conversation generation stuck",
         "pending": "Unfinished request stuck",
+        "ci": "CI handoff unacknowledged after browser submission",
     }
     title = f"[do-again] {types[reason]} ({slug})"
     repository = config["issue_repo"]
@@ -254,6 +256,7 @@ def _handle_goal_lifecycle(
     control: Path,
     state_dir: Path,
     state: dict[str, Any],
+    config: dict[str, Any],
 ) -> tuple[dict[str, Any], str | None]:
     goal = _latest_goal(control)
     goal_state = str(goal.get("goal_state") or "in_progress")
@@ -304,14 +307,32 @@ def _handle_goal_lifecycle(
         return state, "stop"
 
     fingerprint = f"{ci.get('repository')}:{ci.get('run_id')}:{ci.get('head_sha')}:{probe.get('conclusion')}"
+    now = time.time()
     if state.get("ci_terminal_fingerprint") == fingerprint:
-        state["state"] = "recovering"
-        return state, "wait"
+        # A terminal CI result is NOT evidence that the wake-up message was
+        # accepted, acknowledged, or acted on. Never blindly replay it.
+        # Persisted unknown delivery survives daemon restarts.
+        age = now - float(state.get("ci_terminal_at", now))
+        if age >= max(60, int(config["recovery_seconds"])):
+            state["state"] = "stalled_ci_handoff"
+            state["ci_error"] = "CI is terminal, but no subsequent goal transition was verified"
+            state = _report_stall(repo, config, state, reason="ci")
+            return state, "stop"
+        phase = str(state.get("ci_delivery_phase") or "unknown")
+        state["state"] = ("ci_delivery_uncertain" if phase == "uncertain"
+                          else "ci_handoff_observed" if phase == "observed"
+                          else "recovering")
+        return state, "reconcile_ci"
 
-    # Persist the terminal transition before browser delivery so daemon restart cannot duplicate it.
+    # Persist before attempting any side-effect. A crash or uncertain send
+    # can never trigger a second submission of the same terminal CI event.
     state["ci_terminal_fingerprint"] = fingerprint
-    state["ci_terminal_at"] = time.time()
+    state["ci_terminal_at"] = now
     state["ci_conclusion"] = probe.get("conclusion")
+    state["ci_delivery_phase"] = "uncertain"
+    state["ci_delivery_marker"] = "DO_AGAIN_CI_GATE_COMPLETE token=" + hashlib.sha256(
+        fingerprint.encode("utf-8")
+    ).hexdigest()[:20]
     state["state"] = "ci_continuation_due"
     atomic_json(state_dir / "liveness.json", state)
     return state, "resume_ci"
@@ -336,8 +357,33 @@ def check_liveness(repo: Path, control: Path, state_dir: Path) -> str:
     path = state_dir / "liveness.json"
     value = _read_state(path)
     receipt_id, receipt_time, pending = _activity(control)
-    value, lifecycle_action = _handle_goal_lifecycle(repo, control, state_dir, value)
+    # In-flight local execution has priority over any external CI event.
+    # Never wake the agent to mutate the repo while a claimed request runs.
+    # A claimed execution must not be interrupted by a CI wake-up, but an
+    # explicit paused/completed/blocked goal still needs to be honored.
+    if pending and _latest_goal(control).get("goal_state") == "waiting_for_ci":
+        lifecycle_action = None
+    else:
+        value, lifecycle_action = _handle_goal_lifecycle(repo, control, state_dir, value, config)
     if lifecycle_action in {"stop", "wait"}:
+        atomic_json(path, value)
+        return str(value["state"])
+    if lifecycle_action == "reconcile_ci":
+        # Read-only evidence check of the one registered project chat.
+        # A visible wake-up marker is not model acknowledgement; without a
+        # newer request or goal transition, bounded escalation still applies.
+        try:
+            session = browser.ensure_browser_running(verify_auth=True)
+            record = browser.project_record(repo)
+            url = str(record.get("chat_url") or "")
+            if url:
+                target = browser._find_chatgpt_target(int(session["port"]), url)
+                if target and browser._page_contains(target, str(value["ci_delivery_marker"])):
+                    value["ci_delivery_phase"] = "observed"
+                    value["state"] = "ci_handoff_observed"
+                    value.pop("ci_probe_error", None)
+        except (browser.BrowserError, TimeoutError, OSError) as exc:
+            value["ci_probe_error"] = type(exc).__name__
         atomic_json(path, value)
         return str(value["state"])
     if lifecycle_action == "resume_ci":
@@ -354,17 +400,29 @@ def check_liveness(repo: Path, control: Path, state_dir: Path) -> str:
             )
         conclusion = str(value.get("ci_conclusion") or "unknown")
         prompt = (
-            "DO_AGAIN_CI_GATE_COMPLETE: The exact GitHub Actions run recorded in the durable "
+            str(value["ci_delivery_marker"]) + ": The exact GitHub Actions run recorded in the durable "
             f"waiting_for_ci goal reached terminal conclusion {conclusion!r}. Re-read the "
             "existing goal and CI evidence, verify the expected head/PR state, and continue "
             "exactly once. If CI failed, diagnose before mutation. If CI succeeded, perform "
             "the already-approved next gated action. Do not create a parallel goal and do not "
             "claim completion without receipts/live proof."
         )
-        value["state"] = "recovering"
+        value["state"] = "ci_delivery_uncertain"
         value["last_resume_at"] = time.time()
         atomic_json(path, value)
-        browser.send_message(target, prompt, wait_for_response=False)
+        try:
+            # This only proves the browser submit step, never consumption.
+            browser.send_message(target, prompt, wait_for_response=False)
+        except Exception as exc:
+            # The browser may have clicked before disconnecting. Reconcile
+            # the bound conversation; do NOT send again on restart.
+            value["ci_delivery_phase"] = "uncertain"
+            value["ci_delivery_error"] = type(exc).__name__
+            atomic_json(path, value)
+            raise
+        value["ci_delivery_phase"] = "submitted_unverified"
+        value["state"] = "recovering"
+        atomic_json(path, value)
         return str(value["state"])
     if pending:
         new_state, _ = _decision(

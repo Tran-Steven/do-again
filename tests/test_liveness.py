@@ -99,6 +99,7 @@ class LivenessIntegrationTests(unittest.TestCase):
             patch.object(liveness.browser, "_find_chatgpt_target", return_value=self.target),
             patch.object(liveness.browser, "_assistant_snapshot", return_value={"busy": False}),
             patch.object(liveness.browser, "_context_limit_warning", return_value=""),
+            patch.object(liveness.browser, "_page_contains", return_value=False),
             patch.object(liveness.browser, "send_message"),
         ]
 
