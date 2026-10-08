@@ -44,10 +44,9 @@ class ControllerTimeoutTests(unittest.TestCase):
         enter.assert_called_once()
         self.assertEqual(evaluate.call_count, 2)  # No duplicate click after an uncertain submit.
 
-    def test_fallback_click_timeout_is_uncertain_and_not_repeated(self):
-        # This is the exact observed production failure: Enter was attempted,
-        # twenty composer checks found content, then Runtime.evaluate(click)
-        # timed out without proving whether the click executed.
+    def test_former_fallback_click_is_never_attempted(self):
+        # The former click fallback is unreachable even when the composer
+        # never clears; only the original Enter may have caused an effect.
         outcomes = ["ready"] + [False] * 20 + [cdp.CdpTimeoutError("CDP Runtime.evaluate response timed out")]
         with (
             patch.object(browser, "_assistant_snapshot", return_value={"busy": False}),
@@ -61,7 +60,7 @@ class ControllerTimeoutTests(unittest.TestCase):
                 browser.send_message(self.target, "DO_AGAIN_TEST id=clicked", wait_for_response=False)
         insert.assert_called_once()
         enter.assert_called_once()
-        self.assertEqual(evaluate.call_count, 22)
+        self.assertEqual(evaluate.call_count, 21)
 
     def test_enter_then_no_send_button_is_uncertain(self):
         with (
@@ -72,9 +71,9 @@ class ControllerTimeoutTests(unittest.TestCase):
             patch.object(cdp,"press_enter") as enter,
             patch.object(browser.time,"sleep"),
         ):
-            with self.assertRaisesRegex(BrowserSubmissionUncertain,"delivery outcome is unknown"):
+            with self.assertRaisesRegex(BrowserSubmissionUncertain,"delivery outcome must be reconciled"):
                 browser.send_message(self.target,"DO_AGAIN_RECEIPT_NOT_CONFIRMED",wait_for_response=False)
-        self.assertEqual(evaluate.call_count,22)
+        self.assertEqual(evaluate.call_count,21)
         insert.assert_called_once()
         enter.assert_called_once()
 

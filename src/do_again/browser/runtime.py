@@ -844,21 +844,13 @@ return 'ready';
 })()"""
     if cdp.evaluate(target, prep, timeout=15.0, user_gesture=True) != "ready":
         raise BrowserError("ChatGPT composer was not available")
+    dispatch_started = False
     try:
         cdp.insert_text(target, text)
-
-        click = r"""(() => {
-    const buttons = [
-      document.querySelector('[data-testid="send-button"]'),
-      document.querySelector('button[aria-label="Send prompt"]'),
-      document.querySelector('button[aria-label="Send"]')
-    ].filter(Boolean);
-    const button = buttons.find(b => !b.disabled);
-    if (!button) return 'no_button';
-    button.click();
-    return 'clicked';
-    })()"""
         time.sleep(0.15)
+        # Exactly one gesture. From this point every exception is uncertain;
+        # absence of composer clearing never permits a fallback submission.
+        dispatch_started = True
         cdp.press_enter(target)
         accepted = False
         for _ in range(20):
@@ -870,13 +862,10 @@ return 'ready';
             if accepted:
                 break
         if not accepted:
-            if cdp.evaluate(target, click, timeout=10.0, user_gesture=True) != "clicked":
-                # Enter was already dispatched and may have caused a send;
-                # a missing/disabled button cannot establish non-delivery.
-                raise BrowserSubmissionUncertain(
-                    "ChatGPT did not confirm submission after Enter; "
-                    "delivery outcome is unknown and must be reconciled"
-                )
+            raise BrowserSubmissionUncertain(
+                "ChatGPT did not confirm submission after the single Enter gesture; "
+                "delivery outcome must be reconciled before another submission"
+            )
 
         if not wait_for_response:
             return {
@@ -909,11 +898,17 @@ return 'ready';
             last = current
         raise BrowserError("timed out waiting for ChatGPT to finish the browser iteration")
 
-    except cdp.CdpTimeoutError as exc:
-        raise BrowserSubmissionUncertain(
-            "ChatGPT browser submission outcome is uncertain after a CDP timeout; "
-            "inspect the bound conversation before retrying to avoid duplicate actions"
-        ) from exc
+    except Exception as exc:
+        if isinstance(exc, BrowserSubmissionUncertain):
+            raise
+        if dispatch_started:
+            raise BrowserSubmissionUncertain(
+                "ChatGPT submission outcome is uncertain after dispatch; "
+                "inspect the exact bound conversation before retrying"
+            ) from exc
+        if isinstance(exc, cdp.CdpTimeoutError):
+            raise BrowserError("ChatGPT composer preparation failed before submission") from exc
+        raise
 
 def browser_self_test(*, target: cdp.Target | None = None) -> dict[str, Any]:
     status = ensure_browser_running(verify_auth=True)
