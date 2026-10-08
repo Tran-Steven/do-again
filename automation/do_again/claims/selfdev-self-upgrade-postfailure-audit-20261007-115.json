@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:58649:1791438167:1983e93cf2fc",
+  "claimed_at_utc": "2026-10-08T05:44:05.225315+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 58649,
+  "request_fingerprint": "b941e8e4105b952cd3194b1ae9719e44e46431f383cd9762500962d4aebdd1e8",
+  "request_id": "selfdev-self-upgrade-postfailure-audit-20261007-115",
+  "schema_version": 1
+}
