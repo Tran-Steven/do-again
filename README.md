@@ -26,6 +26,8 @@ durable receipt + local ledger
 
 The Git control branch is the source of truth for requests and receipts. Local ledgers and Git-backed claims provide exact-once and replay protection. The browser layer is optional and does not replace Git transport.
 
+The [dedicated macOS execution-user preview](docs/macos-execution.md) provides a separately installed supervisor and synthetic enforcement probes. It remains in maintenance until production entrypoints are migrated; it does not retrofit confinement into the current runner.
+
 ## Install
 
 ~~~bash
