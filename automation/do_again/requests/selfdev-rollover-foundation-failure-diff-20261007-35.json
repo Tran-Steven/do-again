@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-foundation-failure-diff-20261007-35",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:08:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:38:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\n\ndef run(*args):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=True).stdout\n\nprint(\"branch=\" + run(\"git\",\"branch\",\"--show-current\").strip())\nprint(\"head=\" + run(\"git\",\"rev-parse\",\"HEAD\").strip())\nprint(\"status:\")\nprint(run(\"git\",\"status\",\"--porcelain=v1\"))\nprint(\"imports:\")\nfor i,line in enumerate((wt/\"src/do_again/browser/runtime.py\").read_text().splitlines()[:35],1):\n    print(f\"{i:02d}: {line}\")\nprint(\"rollover_needed:\")\nlines=(wt/\"src/do_again/browser/runtime.py\").read_text().splitlines()\nfor i,line in enumerate(lines,1):\n    if \"def _rollover_needed\" in line:\n        for n in range(i, min(i+18,len(lines))+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\nprint(\"notify rollover gate:\")\nfor i,line in enumerate(lines,1):\n    if \"warning = _context_limit_warning(target)\" in line and i > 1180:\n        for n in range(i, min(i+12,len(lines))+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n        break\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
