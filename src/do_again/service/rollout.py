@@ -266,10 +266,23 @@ def _incident(layout: RuntimeLayout, value: dict[str, Any]) -> None:
     atomic_json(ledger / f"runtime-upgrade-{fingerprint}.json", payload)
 
 
+def _effective_upgrade_blockers(preflight: dict[str, Any], *, offline: bool) -> list[dict[str, Any]]:
+    blockers = list(preflight.get("blockers", []))
+    if not offline:
+        return blockers
+    if preflight["service"].get("running"):
+        return [{"kind": "offline_requires_stopped_service"}]
+    # Queued requests without a started local ledger do not execute while
+    # the service remains stopped. Every other in-flight/uncertain signal
+    # remains a hard block, including started requests and browser outbox.
+    return [b for b in blockers if b.get("kind") != "pending_requests"]
+
+
 def staged_upgrade(
     path: str | Path = ".",
     *,
     apply: bool = False,
+    offline: bool = False,
     process_rows: list[dict[str, Any]] | None = None,
     stop: Callable[[str | Path], dict[str, Any]] = stop_service,
     restart: Callable[[str | Path], dict[str, Any]] = restart_service,
@@ -277,8 +290,13 @@ def staged_upgrade(
     repo = find_repo(path)
     layout = runtime_layout(repo)
     preflight = assess_upgrade(repo, process_rows=process_rows)
-    result: dict[str, Any] = {"preflight": preflight, "applied": False, "deferred": not preflight["safe"]}
-    if not apply or not preflight["safe"]:
+    effective_blockers = _effective_upgrade_blockers(preflight, offline=offline)
+    result: dict[str, Any] = {
+        "preflight": preflight, "applied": False,
+        "deferred": bool(effective_blockers), "offline": offline,
+        "effective_blockers": effective_blockers,
+    }
+    if not apply or effective_blockers:
         return result
 
     transaction_id = f"upgrade-{uuid.uuid4().hex[:16]}"
@@ -296,6 +314,8 @@ def staged_upgrade(
         "created_at_utc": utc_now().isoformat(),
         "expected_runtime_hash": expected_hash,
         "previous_runtime_hash": _tree_hash(live_package),
+        "offline": offline,
+        "queued_requests_preserved": list(preflight["pending_requests"]) if offline else [],
         "stage_package": str(stage_package),
         "backup_package": str(backup_package),
     }
@@ -303,8 +323,9 @@ def staged_upgrade(
 
     # Re-evaluate immediately before the disruptive step; a new claim can appear after staging.
     second = assess_upgrade(repo)
-    if not second["safe"]:
-        transaction.update(state="deferred", blockers=second["blockers"], deferred_at_utc=utc_now().isoformat())
+    second_blockers = _effective_upgrade_blockers(second, offline=offline)
+    if second_blockers:
+        transaction.update(state="deferred", blockers=second_blockers, deferred_at_utc=utc_now().isoformat())
         atomic_json(tx_path, transaction)
         return {"preflight": second, "applied": False, "deferred": True, "transaction_id": transaction_id}
 
@@ -318,7 +339,7 @@ def staged_upgrade(
         # Refuse cutover if activity appeared after stop but before swap.
         post_stop = assess_upgrade(repo)
         unsafe_after_stop = [
-            b for b in post_stop["blockers"]
+            b for b in _effective_upgrade_blockers(post_stop, offline=offline)
             if b.get("kind") not in {"service_not_installed"}
         ]
         if unsafe_after_stop:
@@ -348,6 +369,8 @@ def staged_upgrade(
             raise ServiceError("post-upgrade runtime feature/hash verification failed")
         if was_running and not verification["service"].get("running"):
             raise ServiceError("service did not return to running state after staged upgrade")
+        if offline and verification["service"].get("running"):
+            raise ServiceError("offline upgrade unexpectedly started the stopped service")
 
         transaction.update(
             state="verified",
