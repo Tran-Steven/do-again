@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "claimed_at_utc": "2026-10-08T04:32:02.628937+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 98664,
+  "request_fingerprint": "96b6d9fa0a880903628a3a1617ff7ae25061f77435388ee4c4c08118d5c161fb",
+  "request_id": "selfdev-jobpipe-sonary-runtime-acceptance-20261007-106",
+  "schema_version": 1
+}
