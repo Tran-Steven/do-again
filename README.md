@@ -98,6 +98,12 @@ and active executor children. Queued *unstarted* requests are preserved and
 only the backed-up copied runtime is replaced. The service remains stopped
 until explicitly started later.
 
+Upgrade preflight reads the same `state/ledger` records written by the agent,
+including orphaned started records and records whose receipts were published
+incompletely. Corrupt execution records and durable uncertain browser intents
+block upgrades even when the request queue or outbox appears empty. Legacy
+`state/requests` records remain conservative blockers until reconciled.
+
 The reports are also saved as `session_reports/latest.md` and
 `session_reports/latest.json` after a `do-again stop`. Stopping one
 project does not stop other projects; closing a ChatGPT tab does not stop
