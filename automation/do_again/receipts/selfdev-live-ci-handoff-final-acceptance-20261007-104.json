@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:29:26.118831+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "6624ead9dc2923b7c1c8c3949a15a2441400e03e156b2a19ab965315eea8bbee",
+  "request_id": "selfdev-live-ci-handoff-final-acceptance-20261007-104",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "6624ead9dc2923b7c1c8c3949a15a2441400e03e156b2a19ab965315eea8bbee",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-ci-handoff-final-acceptance-20261007-104/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.204,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 2110,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-live-ci-handoff-final-acceptance-20261007-104/script.py",
+      "script_sha256": "59dc20b094b9b1f6618517b72b2dedd8512276fb479a17a13ce64f7ba7027910",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T04:29:14.121094+00:00\",\n    \"state\": \"ready\"\n  },\n  \"incidents\": [],\n  \"liveness\": {\n    \"attempts\": 1,\n    \"ci\": {\n      \"conclusion\": \"success\",\n      \"head_sha\": \"65f9a3e792c3cf3fa951df21fe9114a180d85d40\",\n      \"probe_state\": \"terminal\",\n      \"repository\": \"Tran-Steven/do-again\",\n      \"run_id\": 37723478310,\n      \"status\": \"completed\"\n    },\n    \"ci_checked_at\": 1791433579.413773,\n    \"ci_conclusion\": \"success\",\n    \"ci_delivery_error\": \"BrowserError\",\n    \"ci_delivery_marker\": \"DO_AGAIN_CI_GATE_COMPLETE token=07463eeac953d5dfe9af\",\n    \"ci_delivery_phase\": \"uncertain\",\n    \"ci_terminal_at\": 1791433562.7205682,\n    \"ci_terminal_fingerprint\": \"Tran-Steven/do-again:37723478310:65f9a3e792c3cf3fa951df21fe9114a180d85d40:success\",\n    \"goal_id\": \"issue-10-live-ci-handoff-proof\",\n    \"goal_state\": \"waiting_for_execution\",\n    \"last_resume_at\": 1791433563.1000478,\n    \"progress_at\": 1791430202.7234247,\n    \"receipt_id\": \"selfdev-ci-lifecycle-push-20261007-98\",\n    \"state\": \"waiting_for_execution\"\n  },\n  \"outbox_ids\": [],\n  \"pending_requests\": [\n    \"selfdev-live-ci-handoff-final-acceptance-20261007-104\"\n  ],\n  \"recovery_seconds\": 300\n}\nLIVE_CI_HANDOFF_ACCEPTANCE_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:29:25.506160+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
