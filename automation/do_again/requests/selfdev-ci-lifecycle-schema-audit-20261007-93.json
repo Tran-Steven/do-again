@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ci-lifecycle-schema-audit-20261007-93",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T03:03:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T03:23:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nwt=Path(\"/Users/steventran/.do_again/lifecycle-ci-20261007\")\nfor rel in [\n  \"src/do_again/core/schema.py\",\n  \"src/do_again/service/liveness.py\",\n  \"tests/test_liveness.py\",\n]:\n    p=wt/rel\n    print(f\"===== {rel} =====\")\n    lines=p.read_text().splitlines()\n    if rel.endswith(\"schema.py\"):\n        for i,l in enumerate(lines):\n            if \"continuation\" in l.lower() or \"goal_state\" in l.lower() or \"acknowledged_receipts\" in l.lower():\n                a=max(0,i-8); b=min(len(lines),i+18)\n                print(f\"--- {a+1}-{b} ---\")\n                for j in range(a,b): print(f\"{j+1}: {lines[j]}\")\n    elif rel.endswith(\"liveness.py\"):\n        for a,b in [(160,280)]:\n            for j in range(a-1,min(b,len(lines))): print(f\"{j+1}: {lines[j]}\")\n    else:\n        for j in range(1,min(240,len(lines))+1): print(f\"{j}: {lines[j-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/lifecycle-ci-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
