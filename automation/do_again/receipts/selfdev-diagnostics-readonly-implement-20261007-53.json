@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:25:12.228823+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "13289cb6811721df1ec27c7e74042fcd87ce9c28ef0d39b96efc677a1f6e9bc0",
+  "request_id": "selfdev-diagnostics-readonly-implement-20261007-53",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "13289cb6811721df1ec27c7e74042fcd87ce9c28ef0d39b96efc677a1f6e9bc0",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-readonly-implement-20261007-53/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 11.853,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 13326,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-diagnostics-readonly-implement-20261007-53/script.py",
+      "script_sha256": "53dc0802573d47eb3c33fac70747e54c769862f2d712217eb5d9c1b7805695de",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpzj1tplqu/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmppou7ppw3/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmppou7ppw3/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmppou7ppw3/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmppou7ppw3/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmppou7ppw3/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n...E.E.........E.........\n======================================================================\nERROR: test_history_reads_request_and_receipt_state (tests.test_cli.CliOnboardingTests.test_history_reads_request_and_receipt_state)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_cli.py\", line 224, in test_history_reads_request_and_receipt_state\n    layout = runtime_layout(repo)\n             ^^^^^^^^^^^^^^\nNameError: name 'runtime_layout' is not defined\n\n======================================================================\nERROR: test_logs_tail_reads_runtime_logs_without_mutation (tests.test_cli.CliOnboardingTests.test_logs_tail_reads_runtime_logs_without_mutation)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_cli.py\", line 285, in test_logs_tail_reads_runtime_logs_without_mutation\n    layout = runtime_layout(repo)\n             ^^^^^^^^^^^^^^\nNameError: name 'runtime_layout' is not defined\n\n======================================================================\nERROR: test_trace_combines_durable_request_state (tests.test_cli.CliOnboardingTests.test_trace_combines_durable_request_state)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_cli.py\", line 257, in test_trace_combines_durable_request_state\n    layout = runtime_layout(repo)\n             ^^^^^^^^^^^^^^\nNameError: name 'runtime_layout' is not defined\n\n----------------------------------------------------------------------\nRan 25 tests in 11.217s\n\nFAILED (errors=3)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:25:00.179210+00:00",
+  "state": "failed",
+  "traceback": null
+}
