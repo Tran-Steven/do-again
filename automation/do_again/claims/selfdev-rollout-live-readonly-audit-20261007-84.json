@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T01:58:36.556792+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "40fa4a6fe3bd56ae3ebb58c305d7099793b4da571ecbd4b78b3dcfb4f6833311",
+  "request_id": "selfdev-rollout-live-readonly-audit-20261007-84",
+  "schema_version": 1
+}
