@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:37:42.771483+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "50700e1d5c85b22b074c3bdd6d9329f88c1f4c30aaa37aea53bd29ebb9b80dc5",
+  "request_id": "selfdev-sonary-recovered-receipt-delivery-20261008-131",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "50700e1d5c85b22b074c3bdd6d9329f88c1f4c30aaa37aea53bd29ebb9b80dc5",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-recovered-receipt-delivery-20261008-131/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.374,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1615,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-recovered-receipt-delivery-20261008-131/script.py",
+      "script_sha256": "7b329d3330f045342152abbd71933a270b94ad33960f6080015dbcc45711f833",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T13:37:42.483657+00:00\",\n    \"state\": \"ready\"\n  },\n  \"delivered\": 1,\n  \"remaining_outbox\": [],\n  \"uncertain_exists\": false\n}\nSONARY_RECOVERED_RECEIPT_DELIVERY_ACCEPTANCE_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:37:41.015011+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
