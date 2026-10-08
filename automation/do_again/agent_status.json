@@ -3,13 +3,13 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
-  "last_request_id": "selfdev-issue10-final-closure-audit-20261008-122",
-  "last_request_state": "failed",
+  "last_request_id": "selfdev-sonary-current-runtime-preflight-20261008-123",
+  "last_request_state": "succeeded",
   "pid": 49258,
   "remote": "origin",
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-08T13:06:56.457699+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T13:23:57.485963+00:00"
+  "updated_at_utc": "2026-10-08T13:25:28.202605+00:00"
 }
