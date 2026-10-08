@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:27:34.403566+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "96fc4b273569e841b3cbc37bf3df0bd4af39b04756b5dc7ce202fe377a795520",
+  "request_id": "selfdev-sonary-pending-request-activity-diagnostic-20261008-125",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "96fc4b273569e841b3cbc37bf3df0bd4af39b04756b5dc7ce202fe377a795520",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-pending-request-activity-diagnostic-20261008-125/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.238,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1433,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-pending-request-activity-diagnostic-20261008-125/script.py",
+      "script_sha256": "01bbb6ff39f25932585fe9582e787a1dfb8555356c26de931ba48667e0ca8f88",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T05:15:59.440215+00:00\",\n    \"state\": \"ready\"\n  },\n  \"liveness\": {\n    \"attempts\": 0,\n    \"busy_since\": 1791436528.566805,\n    \"goal_state\": \"in_progress\",\n    \"progress_at\": 1791436502.1097744,\n    \"receipt_id\": \"sonary-daw-typecheck-regression-gate-20261008-142\",\n    \"state\": \"working\"\n  },\n  \"matching_processes\": [],\n  \"receipt\": null,\n  \"receipt_exists\": false,\n  \"request\": {\n    \"args\": {\n      \"content\": \"from pathlib import Path\\nimport subprocess,time\\nroot=Path.cwd()\\nassert subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()=='5fba58de01c2608d70a3517fcb34f3b03a6c88f7'\\nassert subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip()=='M do-again.toml'\\nstages=[\\n ('packages',['bun','run','check:packages'],85),\\n ('app',['bun','x','tsc','--noEmit','-p','tsconfig.json'],85),\\n ('api',['bun','x','tsc','--noEmit','-p','api/tsconfig.json'],65)\\n]\\nresults=[]\\nfor name,cmd,limit in stages:\\n started=time.monotonic()\\n try:\\n  r=subprocess.run(cmd,cwd=root,text=True,capture_output=True,timeout=limit)\\n  outcome={'stage':name,'rc':r.returncode,'elapsed':round(time.monotonic()-started,1),'tail':(r.stdout+r.stderr)[-6000:]}\\n except subprocess.TimeoutExpired as e:\\n  outcome={'stage':name,'timeout':limit,'elapsed':round(time.monotonic()-started,1),'stdout_tail':(e.stdout or b'')[-1500:].decode(errors='replace'),'stderr_tail':(e.stderr or b'')[-1500:].decode(errors='replace')}\\n results.append(outcome)\\n print('TYPECHECK_STAGE',outcome,flush=True)\\nprint('TYPECHECK_STAGE_SUMMARY',results,flush=True)\\nassert subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip()=='M do-again.toml'\\nprint('TYPECHECK_STAGE_ISOLATION_COMPLETE',flush=True)\\n\",\n      \"cwd\": \"$REPO\",\n      \"language\": \"python\"\n    },\n    \"expected\": {\n      \"repo_branch\": \"main\",\n      \"repo_dirty\": true,\n      \"repo_head\": \"5fba58de01c2608d70a3517fcb34f3b03a6c88f7\"\n    },\n    \"expires_at_utc\": \"2026-10-08T06:00:29.608Z\",\n    \"issued_at_utc\": \"2026-10-08T05:15:29.604Z\",\n    \"limits\": {\n      \"timeout_seconds\": 290\n    },\n    \"operation\": \"scratch_script\",\n    \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n    \"schema_version\": 1\n  },\n  \"request_age_seconds\": 29517.61249923706,\n  \"request_exists\": true,\n  \"request_id\": \"sonary-daw-typecheck-stage-isolation-20261008-143\",\n  \"request_mtime\": 1791436536.5902097\n}\nSONARY_PENDING_REQUEST_ACTIVITY_DIAGNOSTIC_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:27:33.746925+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
