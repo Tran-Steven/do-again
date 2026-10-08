@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-foundation-inspect-20261007-33",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:06:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:36:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import json\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"585fbf9340de57a9bc6fcd662e5979bb37a9c7c9\"\n\ndef run(args):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=True).stdout\n\nhead = run([\"git\",\"rev-parse\",\"HEAD\"]).strip()\nstatus = run([\"git\",\"status\",\"--porcelain=v1\"]).strip()\nif head != expected or status:\n    raise SystemExit(f\"unexpected isolated state head={head} status={status!r}\")\n\nfor rel in [\"src/do_again/browser/runtime.py\",\"src/do_again/browser/paths.py\",\"tests/test_browser_hardening.py\"]:\n    p=wt/rel\n    if not p.exists(): continue\n    print(f\"=== {rel} ===\")\n    lines=p.read_text().splitlines()\n    for n,line in enumerate(lines,1):\n        if any(k in line for k in [\n            \"class BrowserPaths\", \"def browser_paths\", \"def load_config\", \"def save_config\",\n            \"def _atomic_json\", \"def _read_json\", \"def notify_receipts\", \"def _rollover_project_chat\",\n            \"def register_project\", \"def _project_record_path\"\n        ]):\n            start=max(1,n-8); end=min(len(lines),n+35)\n            print(f\"--- {start}-{end} ---\")\n            for i in range(start,end+1):\n                print(f\"{i:04d}: {lines[i-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
