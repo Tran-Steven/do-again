@@ -33,7 +33,7 @@ from .browser import (
 )
 from .browser import cdp
 from .platforms.detect import detect_platform
-from .browser.runtime import send_message, use_background_fallback
+from .browser.runtime import send_message, use_background_fallback, _find_chatgpt_target, _assistant_snapshot
 from .core.schema import REQUEST_ID_RE, request_fingerprint
 from .service.rollout import staged_upgrade
 from .service.session_summary import build_summary, render_summary, save_summary, session_start
@@ -448,7 +448,44 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
             + json.dumps(request, sort_keys=True)
         )
 
-        target = cdp.create_target(port, chat_url, background=True)
+        # Prefer the existing bound project tab. Creating a fresh target
+        # navigates asynchronously; sending before it has a JS context fails
+        # with 'Cannot find default execution context' even when authenticated.
+        target = _find_chatgpt_target(port, chat_url)
+        if target is None:
+            target = cdp.create_target(port, chat_url, background=True)
+        context_deadline = time.monotonic() + 20
+        while True:
+            try:
+                ready = cdp.evaluate(target, "document.readyState", timeout=5.0)
+                if ready in {"interactive", "complete"}:
+                    break
+            except BrowserError as exc:
+                # Retry only the read-only readiness probe; never resend a
+                # potentially dispatched ChatGPT prompt.
+                message = str(exc)
+                if not any(part in message for part in (
+                    "Cannot find default execution context",
+                    "Execution context was destroyed",
+                )):
+                    raise
+            if time.monotonic() >= context_deadline:
+                raise BrowserError(
+                    "ChatGPT tab did not expose a ready execution context; "
+                    "no verification prompt was sent"
+                )
+            time.sleep(0.4)
+        # Do not interrupt an existing coding response. Poll only the
+        # conversation state until its composer is available for a new turn.
+        idle_deadline = time.monotonic() + min(max(timeout_seconds, 0.0), 45.0)
+        while True:
+            if not _assistant_snapshot(target).get("busy", False):
+                break
+            if time.monotonic() >= idle_deadline:
+                raise BrowserError(
+                    "ChatGPT is still generating; no verification request was sent"
+                )
+            time.sleep(1.0)
         send_message(target, prompt, timeout=180.0, wait_for_response=False)
 
         control = layout.control_worktree
@@ -462,32 +499,46 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
                 capture_output=True,
             )
             if sync.returncode == 0:
-                reset = subprocess.run(
-                    ["git", "-C", str(control), "reset", "--hard", "FETCH_HEAD"],
-                    text=True,
-                    capture_output=True,
+                # Never reset or switch the live agent's checkout during a
+                # verification. Inspect immutable fetched Git objects only.
+                fetched = subprocess.run(
+                    ["git", "-C", str(control), "rev-parse", "FETCH_HEAD"],
+                    text=True, capture_output=True, timeout=10,
                 )
-                if reset.returncode != 0:
-                    last_sync_error = (reset.stderr or reset.stdout).strip()
-                else:
-                    request_seen = request_seen or (control / request_path).is_file()
-                    receipt_file = control / receipt_path
-                    if receipt_file.is_file():
-                        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
-                        if receipt.get("request_id") != request_id:
-                            raise ServiceError("verification receipt request_id mismatch")
-                        if receipt.get("state") != "succeeded":
-                            raise ServiceError(
-                                "verification request completed with state "
-                                + str(receipt.get("state"))
-                                + ": "
-                                + str(receipt.get("error") or "no error detail")
-                            )
-                        print("SETUP_OK")
-                        print("verification=end_to_end")
-                        print(f"verification_request_id={request_id}")
-                        print(f"automation_chat={chat_url}")
-                        return 0
+                if fetched.returncode != 0:
+                    last_sync_error = (fetched.stderr or fetched.stdout).strip()
+                    time.sleep(1.0)
+                    continue
+                head_sha = fetched.stdout.strip()
+                if not re.fullmatch(r"[0-9a-fA-F]{40,64}", head_sha):
+                    last_sync_error = "Git fetch returned an invalid control commit"
+                    time.sleep(1.0)
+                    continue
+                read_request = subprocess.run(
+                    ["git", "-C", str(control), "show", f"{head_sha}:{request_path}"],
+                    text=True, capture_output=True, timeout=10,
+                )
+                request_seen = request_seen or read_request.returncode == 0
+                read_receipt = subprocess.run(
+                    ["git", "-C", str(control), "show", f"{head_sha}:{receipt_path}"],
+                    text=True, capture_output=True, timeout=10,
+                )
+                if read_receipt.returncode == 0:
+                    receipt = json.loads(read_receipt.stdout)
+                    if receipt.get("request_id") != request_id:
+                        raise ServiceError("verification receipt request_id mismatch")
+                    if receipt.get("state") != "succeeded":
+                        raise ServiceError(
+                            "verification request completed with state "
+                            + str(receipt.get("state"))
+                            + ": "
+                            + str(receipt.get("error") or "no error detail")
+                        )
+                    print("SETUP_OK")
+                    print("verification=end_to_end")
+                    print(f"verification_request_id={request_id}")
+                    print(f"automation_chat={chat_url}")
+                    return 0
             else:
                 last_sync_error = (sync.stderr or sync.stdout).strip()
             time.sleep(1.0)
