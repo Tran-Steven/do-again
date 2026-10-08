@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "claimed_at_utc": "2026-10-08T04:36:06.567122+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 98664,
+  "request_fingerprint": "d20e1692c10b015e1b45aacb3d738d839441ce47fbc66d4ad939b303185a5dfd",
+  "request_id": "selfdev-live-stall-visible-incident-proof-20261007-109",
+  "schema_version": 1
+}
