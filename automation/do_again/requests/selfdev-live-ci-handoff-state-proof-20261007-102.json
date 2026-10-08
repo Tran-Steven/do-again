@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-live-ci-handoff-state-proof-20261007-102",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T04:24:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T04:44:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, hashlib, subprocess\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nkey=hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nstate=root/\"state\"\ncontrol=root/\"control\"\n\ndef read_json(p):\n    try:\n        v=json.loads(p.read_text())\n        return v if isinstance(v,dict) else {}\n    except Exception:\n        return {}\n\ndef names(d):\n    return sorted(p.stem for p in d.glob(\"*.json\")) if d.is_dir() else []\n\nliveness=read_json(state/\"liveness.json\")\nbrowser=read_json(state/\"browser_status.json\")\noutbox=names(state/\"browser_outbox\")\nrequests=names(control/\"automation/do_again/requests\")\nreceipts=set(names(control/\"automation/do_again/receipts\"))\npending=[r for r in requests if r not in receipts]\n\nprint(json.dumps({\n  \"repo\":str(repo),\n  \"liveness\":liveness,\n  \"browser_status\":browser,\n  \"outbox_ids\":outbox,\n  \"pending_requests\":pending,\n  \"ci_proof_request_present\":\"selfdev-live-ci-handoff-proof-20261007-101\" in requests,\n  \"ci_proof_receipt_present\":\"selfdev-live-ci-handoff-proof-20261007-101\" in receipts,\n},indent=2,sort_keys=True))\n\n# Acceptance assertions: terminal CI event persisted, no duplicate pending work/outbox for proof request.\nif liveness.get(\"goal_state\")!=\"waiting_for_ci\":\n    raise SystemExit(\"expected durable waiting_for_ci goal state\")\nif not liveness.get(\"ci_terminal_fingerprint\"):\n    raise SystemExit(\"missing terminal CI fingerprint\")\nif liveness.get(\"ci\",{}).get(\"run_id\") != 37723478310:\n    raise SystemExit(\"unexpected CI run id\")\nif \"selfdev-live-ci-handoff-proof-20261007-101\" in pending:\n    raise SystemExit(\"proof request still pending\")\nif any(\"selfdev-live-ci-handoff-proof-20261007-101\" in x for x in outbox):\n    raise SystemExit(\"proof request unexpectedly queued in browser outbox\")\nprint(\"LIVE_CI_HANDOFF_STATE_PROOF_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "selfdev-live-ci-handoff-proof-20261007-101"
+    ],
+    "goal_state": "waiting_for_execution",
+    "goal_id": "issue-10-live-ci-handoff-proof",
+    "summary": "Read-only acceptance check of installed liveness state after terminal CI wake-up."
+  }
+}
