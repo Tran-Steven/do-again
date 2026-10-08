@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "claimed_at_utc": "2026-10-08T04:26:29.989974+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 98664,
+  "request_fingerprint": "eebf3df488adcb73248ef0d313dd42637d587a5bbc4f537a564ff4735a35b037",
+  "request_id": "selfdev-live-ci-handoff-state-proof-20261007-102",
+  "schema_version": 1
+}
