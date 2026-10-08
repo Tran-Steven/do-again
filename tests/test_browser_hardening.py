@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sqlite3
 import tempfile
 import threading
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -517,6 +519,51 @@ class BrowserHardeningTests(unittest.TestCase):
                 remote_url=record["remote_url"],
                 control_branch="operator-control",
             ))
+
+    def test_dedicated_browser_history_candidates_require_live_content_verification(self):
+        self.bind()
+        history = browser.browser_paths().profile / "Default" / "History"
+        history.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(history)) as connection:
+            connection.execute("CREATE TABLE urls (url TEXT, last_visit_time INTEGER)")
+            connection.executemany(
+                "INSERT INTO urls VALUES (?, ?)",
+                [
+                    ("https://chatgpt.com/c/project", 3),
+                    ("https://chatgpt.com/c/unbound", 2),
+                    ("https://example.com/c/unrelated", 1),
+                ],
+            )
+            connection.commit()
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]):
+            inventory = browser.chat_cleanup_inventory(self.repo)
+            dry_run = browser.queue_verified_archives(self.repo, apply=True)
+        candidates = {row["chat_id"]: row for row in inventory["candidates"]}
+        self.assertEqual(set(candidates), {"project", "unbound"})
+        self.assertTrue(candidates["project"]["active_bound"])
+        self.assertFalse(candidates["project"]["eligible"])
+        self.assertFalse(candidates["unbound"]["eligible"])
+        self.assertEqual(candidates["unbound"]["historical_evidence"], ["dedicated_browser_history"])
+        self.assertEqual(dry_run["queued_chat_ids"], [])
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]), patch.object(
+            browser, "ensure_browser_running", return_value={"port": 9223}
+        ), patch.object(
+            browser, "_verify_historical_chat_ownership", return_value={"owned": True}
+        ):
+            verified = browser.verify_candidate_chat(self.repo, "unbound")
+        self.assertTrue(verified["verified"])
+        self.assertEqual(verified["reason"], "bootstrap_markers_and_history")
+        queued = browser.queue_verified_archives(self.repo, apply=True)
+        self.assertEqual(queued["queued_chat_ids"], ["unbound"])
+
+    def test_invalid_browser_history_fails_closed_without_blocking_inventory(self):
+        self.bind()
+        history = browser.browser_paths().profile / "Default" / "History"
+        history.parent.mkdir(parents=True, exist_ok=True)
+        history.write_bytes(b"not-sqlite")
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]):
+            inventory = browser.chat_cleanup_inventory(self.repo)
+        self.assertEqual(inventory["candidates"], [])
 
     def test_historical_chat_candidates_are_discovered_but_not_automatically_archived(self):
         record = self.bind()

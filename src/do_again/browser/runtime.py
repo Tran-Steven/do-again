@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import shutil
+import sqlite3
 import socket
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import tempfile
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from functools import wraps
 from datetime import datetime, timezone
@@ -1098,6 +1099,23 @@ def _candidate_receipt_evidence(repo: Path, chat_id: str) -> list[dict[str, Any]
     return evidence
 
 
+def _dedicated_browser_history_chat_ids() -> list[str]:
+    history = browser_paths().profile / "Default" / "History"
+    if not history.is_file():
+        return []
+    try:
+        with closing(sqlite3.connect(f"{history.as_uri()}?immutable=1", uri=True)) as connection:
+            urls = connection.execute(
+                "SELECT url FROM urls WHERE url LIKE ? ORDER BY last_visit_time DESC LIMIT 5000",
+                ("https://chatgpt.com/c/%",),
+            ).fetchall()
+    except (sqlite3.Error, OSError, ValueError):
+        return []
+    return list(dict.fromkeys(
+        chat_id for (url,) in urls if (chat_id := _chat_id(str(url)))
+    ))
+
+
 def _historical_chat_evidence(repo: Path) -> dict[str, list[str]]:
     repo = repo.resolve()
     evidence: dict[str, list[str]] = {}
@@ -1119,6 +1137,8 @@ def _historical_chat_evidence(repo: Path) -> dict[str, list[str]]:
             continue
         if checkpoint.get("repo") == str(repo):
             record(checkpoint.get("active_chat_url"), f"checkpoint:{path.name}")
+    for chat_id in _dedicated_browser_history_chat_ids():
+        record(f"https://chatgpt.com/c/{chat_id}", "dedicated_browser_history")
     return evidence
 
 
