@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-current-runtime-preflight-20261008-123",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:25:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:45:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess, sys, hashlib\nfrom pathlib import Path\n\nsource=Path(\"/Users/steventran/do-again\")\ntarget=Path(\"/Users/steventran/Sonary\")\nsys.path.insert(0,str(source/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\ndef run(args):\n    env=os.environ.copy()\n    env[\"PYTHONPATH\"]=str(source/\"src\")\n    return subprocess.run(args,cwd=source,text=True,capture_output=True,check=False,env=env)\n\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nruntime=root/\"runtime/do_again\"\nstate=root/\"state\"\n\ndry=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(target)])\n\ndef read_json(p):\n    try:\n        v=json.loads(p.read_text())\n        return v if isinstance(v,dict) else {}\n    except Exception:\n        return {}\n\nprint(json.dumps({\n  \"target\":str(target),\n  \"source_head\":subprocess.run([\"git\",\"-C\",str(source),\"rev-parse\",\"HEAD\"],text=True,capture_output=True).stdout.strip(),\n  \"source_hash\":_tree_hash(source/\"src/do_again\"),\n  \"runtime_hash\":_tree_hash(runtime),\n  \"service_state\":run([\"python3\",\"-m\",\"do_again.cli\",\"status\",str(target)]).stdout,\n  \"liveness\":read_json(state/\"liveness.json\"),\n  \"browser_status\":read_json(state/\"browser_status.json\"),\n  \"dry_run\":{\"rc\":dry.returncode,\"stdout\":dry.stdout,\"stderr\":dry.stderr},\n},indent=2,sort_keys=True))\n\nprint(\"SONARY_CURRENT_RUNTIME_PREFLIGHT_AUDIT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
