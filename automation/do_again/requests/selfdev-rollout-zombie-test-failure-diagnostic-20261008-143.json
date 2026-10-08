@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-zombie-test-failure-diagnostic-20261008-143",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T14:07:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T14:27:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nimport subprocess, json, os\n\nwt=Path(\"/Users/steventran/.do_again/worktrees/rollout-zombie-fix\")\n\ndef run(args, env=None):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=False,env=env)\n\nprobe=run([\"python3\",\"-c\",\"import do_again.service.rollout as r; print(r.__file__)\"])\ntest_head=(wt/\"tests/test_rollout.py\").read_text().splitlines()[:40]\n\nsnippet=r'''\nfrom pathlib import Path\nfrom unittest.mock import patch\nimport do_again.service.rollout as rollout\nrepo=Path(\"/tmp/do-again-rollout-zombie-probe\")\nrows=[\n {\"pid\":100,\"ppid\":1,\"state\":\"S\",\"command\":\"do-again daemon\"},\n {\"pid\":101,\"ppid\":100,\"state\":\"Z\",\"command\":\"(git)\"},\n]\nwith patch.object(rollout,\"runtime_layout\") as rl,      patch.object(rollout,\"service_status\",return_value={\"installed\":True,\"running\":True,\"pid\":100}),      patch.object(rollout,\"_request_state\",return_value={\"pending_requests\":[],\"started_requests\":[]}),      patch.object(rollout,\"_shared_browser_child_pids\",return_value=set()):\n    layout=rl.return_value\n    from unittest.mock import MagicMock\n    layout.state_dir=Path(\"/tmp/nonexistent-state\")\n    layout.runtime_source=Path(\"/tmp/nonexistent-runtime\")\n    layout.control_worktree=Path(\"/tmp/nonexistent-control\")\n    result=rollout.assess_upgrade(repo,process_rows=rows)\n    print(result)\n'''\nprobe2=run([\"python3\",\"-c\",snippet])\n\nprint(json.dumps({\n \"module_probe\":{\"stdout\":probe.stdout,\"stderr\":probe.stderr,\"rc\":probe.returncode},\n \"test_head\":test_head,\n \"behavior_probe\":{\"stdout\":probe2.stdout,\"stderr\":probe2.stderr,\"rc\":probe2.returncode},\n \"diff\":run([\"git\",\"diff\",\"--\",\"src/do_again/service/rollout.py\",\"tests/test_rollout.py\"]).stdout,\n},indent=2))\nprint(\"ROLLOUT_ZOMBIE_TEST_FAILURE_DIAGNOSTIC_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
