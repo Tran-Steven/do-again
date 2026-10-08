@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:00:52.297875+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "84ea1caa1cf90f7b8632048d6c7d8819056c2f053d705d2e938096a5371bf9a8",
+  "request_id": "selfdev-verify-cdp-import-fix-20261007-27",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "84ea1caa1cf90f7b8632048d6c7d8819056c2f053d705d2e938096a5371bf9a8",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-verify-cdp-import-fix-20261007-27/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 7.699,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 1849,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-verify-cdp-import-fix-20261007-27/script.py",
+      "script_sha256": "497497e358ba5e44b3d8bd70720b74be5c10481bf019c554ded19bf8d88199fd",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpqrlwoje6/repo/do-again.toml\n/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpdvw1qm4t/repo with spaces/do-again.toml\nSETUP_CONFIGURED\nverification=not_run\nrepo=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpdvw1qm4t/repo with spaces\nremote=origin\nremote_url=/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpdvw1qm4t/origin.git\ncontrol_branch=operator-control\nconfig=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpdvw1qm4t/repo with spaces/do-again.toml\npolicy=/private/var/folders/hz/0lpwv9355wl9kvss20pbt19c0000gn/T/tmpdvw1qm4t/repo with spaces/do-again-policy.json\nbrowser_enabled=False\nbackground_installed=false\nnext=do-again run\n\n=== focused stderr ===\n.............E\n======================================================================\nERROR: test_verify_reports_setup_ok_only_after_matching_success_receipt (tests.test_cli.CliOnboardingTests.test_verify_reports_setup_ok_only_after_matching_success_receipt)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_cli.py\", line 199, in test_verify_reports_setup_ok_only_after_matching_success_receipt\n    rc = verify_project(str(repo), timeout_seconds=1.0)\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/cli.py\", line 299, in verify_project\n    request_id = \"verify-\" + uuid.uuid4().hex[:16]\n                             ^^^^\nNameError: name 'uuid' is not defined. Did you forget to import 'uuid'?\n\n----------------------------------------------------------------------\nRan 14 tests in 7.206s\n\nFAILED (errors=1)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:00:44.388694+00:00",
+  "state": "failed",
+  "traceback": null
+}
