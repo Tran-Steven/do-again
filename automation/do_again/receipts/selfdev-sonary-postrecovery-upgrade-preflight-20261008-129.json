@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:34:21.304957+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "e3c32dd56d1db5c7328fd9d3c637f1e14db6b6004211087bb48dc491f5e9ce08",
+  "request_id": "selfdev-sonary-postrecovery-upgrade-preflight-20261008-129",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "e3c32dd56d1db5c7328fd9d3c637f1e14db6b6004211087bb48dc491f5e9ce08",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-postrecovery-upgrade-preflight-20261008-129/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.092,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 939,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-sonary-postrecovery-upgrade-preflight-20261008-129/script.py",
+      "script_sha256": "7db363f9c2198a6ca8908020cb9656b26f0d4e8fa7265da891542b68f118179a",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"dry_run\": {\n    \"rc\": 0,\n    \"stderr\": \"\",\n    \"stdout\": \"{\\n  \\\"applied\\\": false,\\n  \\\"deferred\\\": true,\\n  \\\"effective_blockers\\\": [\\n    {\\n      \\\"kind\\\": \\\"browser_delivery_pending\\\",\\n      \\\"request_ids\\\": [\\n        \\\"sonary-daw-typecheck-stage-isolation-20261008-143\\\"\\n      ],\\n      \\\"state\\\": \\\"queued\\\"\\n    }\\n  ],\\n  \\\"offline\\\": false,\\n  \\\"preflight\\\": {\\n    \\\"blockers\\\": [\\n      {\\n        \\\"kind\\\": \\\"browser_delivery_pending\\\",\\n        \\\"request_ids\\\": [\\n          \\\"sonary-daw-typecheck-stage-isolation-20261008-143\\\"\\n        ],\\n        \\\"state\\\": \\\"queued\\\"\\n      }\\n    ],\\n    \\\"features\\\": {\\n      \\\"liveness\\\": true,\\n      \\\"rollout\\\": true\\n    },\\n    \\\"ignored_shared_browser_children\\\": [],\\n    \\\"outbox_pending\\\": [\\n      \\\"sonary-daw-typecheck-stage-isolation-20261008-143\\\"\\n    ],\\n    \\\"pending_requests\\\": [],\\n    \\\"repo\\\": \\\"/Users/steventran/Sonary\\\",\\n    \\\"runtime_hash\\\": \\\"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\\\",\\n    \\\"safe\\\": false,\\n    \\\"service\\\": {\\n      \\\"control_worktree\\\": \\\"/Users/steventran/.do_again/projects/d05c35935833/control\\\",\\n      \\\"installed\\\": true,\\n      \\\"label\\\": \\\"io.github.tran-steven.do-again.d05c35935833\\\",\\n      \\\"pid\\\": null,\\n      \\\"platform\\\": \\\"macos\\\",\\n      \\\"repo\\\": \\\"/Users/steventran/Sonary\\\",\\n      \\\"running\\\": false,\\n      \\\"runtime_dir\\\": \\\"/Users/steventran/.do_again/projects/d05c35935833\\\",\\n      \\\"service_manager\\\": \\\"launchd\\\"\\n    },\\n    \\\"started_requests\\\": []\\n  }\\n}\\n\"\n  },\n  \"runtime_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"source_hash\": \"70e28a0c60720b27f80f468fd5426d63cc3166aeea088252b6a960febf610757\",\n  \"source_head\": \"f5179f78ec60017a786743a548313f60f3d01a41\"\n}\nSONARY_POST_RECOVERY_UPGRADE_PREFLIGHT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:34:19.957919+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
