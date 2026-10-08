@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:42105:1791437684:f7477c11374f",
+  "error": null,
+  "finished_at_utc": "2026-10-08T05:41:41.190965+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "28aea41b45eecbdf1bac0f9994b0471a007b59ba12eda35377780c3597fb7f95",
+  "request_id": "selfdev-self-runtime-parity-after-pr22-20261007-113",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "7bee017a4893ce2ad6f05113bcec9d4f5817c5b7"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "7bee017a4893ce2ad6f05113bcec9d4f5817c5b7"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "28aea41b45eecbdf1bac0f9994b0471a007b59ba12eda35377780c3597fb7f95",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-runtime-parity-after-pr22-20261007-113/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.321,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1339,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-runtime-parity-after-pr22-20261007-113/script.py",
+      "script_sha256": "18a4b7c86320acbf342d48fc4c1afccf0a8db6a7f2d3ef3e4957b58614bc0a1d",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T05:41:28.583498+00:00\",\n    \"state\": \"ready\"\n  },\n  \"liveness\": {\n    \"attempts\": 1,\n    \"ci\": {\n      \"conclusion\": \"success\",\n      \"head_sha\": \"65f9a3e792c3cf3fa951df21fe9114a180d85d40\",\n      \"probe_state\": \"terminal\",\n      \"repository\": \"Tran-Steven/do-again\",\n      \"run_id\": 37723478310,\n      \"status\": \"completed\"\n    },\n    \"ci_checked_at\": 1791433579.413773,\n    \"ci_conclusion\": \"success\",\n    \"ci_delivery_error\": \"BrowserError\",\n    \"ci_delivery_marker\": \"DO_AGAIN_CI_GATE_COMPLETE token=07463eeac953d5dfe9af\",\n    \"ci_delivery_phase\": \"uncertain\",\n    \"ci_terminal_at\": 1791433562.7205682,\n    \"ci_terminal_fingerprint\": \"Tran-Steven/do-again:37723478310:65f9a3e792c3cf3fa951df21fe9114a180d85d40:success\",\n    \"goal_id\": \"issue-10-live-ci-handoff-proof\",\n    \"goal_state\": \"waiting_for_execution\",\n    \"last_resume_at\": 1791433563.1000478,\n    \"progress_at\": 1791430202.7234247,\n    \"receipt_id\": \"selfdev-ci-lifecycle-push-20261007-98\",\n    \"state\": \"waiting_for_execution\"\n  },\n  \"repo_head\": \"7bee017a4893ce2ad6f05113bcec9d4f5817c5b7\",\n  \"runtime_matches_source\": false,\n  \"runtime_tree_hash\": \"ea154adfb387ade5255d6d4105c38c3fda8990668367c4790847c561f8b6fb76\",\n  \"source_tree_hash\": \"aa89bbeebc4527c1e1e493674c31cd15ee0b68212a8de7e8e5b5b94b84d1d6af\",\n  \"upgrade_dry_run\": {\n    \"rc\": 0,\n    \"stderr\": \"\",\n    \"stdout\": \"{\\n  \\\"applied\\\": false,\\n  \\\"deferred\\\": true,\\n  \\\"effective_blockers\\\": [\\n    {\\n      \\\"kind\\\": \\\"pending_requests\\\",\\n      \\\"request_ids\\\": [\\n        \\\"selfdev-self-runtime-parity-after-pr22-20261007-113\\\"\\n      ]\\n    },\\n    {\\n      \\\"kind\\\": \\\"executor_children\\\",\\n      \\\"processes\\\": [\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-runtime-parity-after-pr22-20261007-113/script.py\\\",\\n          \\\"pid\\\": 55837,\\n          \\\"ppid\\\": 42105\\n        },\\n        {\\n          \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n          \\\"pid\\\": 55855,\\n          \\\"ppid\\\": 55837\\n        },\\n        {\\n          \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n          \\\"pid\\\": 55896,\\n          \\\"ppid\\\": 55855\\n        }\\n      ]\\n    }\\n  ],\\n  \\\"offline\\\": false,\\n  \\\"preflight\\\": {\\n    \\\"blockers\\\": [\\n      {\\n        \\\"kind\\\": \\\"pending_requests\\\",\\n        \\\"request_ids\\\": [\\n          \\\"selfdev-self-runtime-parity-after-pr22-20261007-113\\\"\\n        ]\\n      },\\n      {\\n        \\\"kind\\\": \\\"executor_children\\\",\\n        \\\"processes\\\": [\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python /Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-runtime-parity-after-pr22-20261007-113/script.py\\\",\\n            \\\"pid\\\": 55837,\\n            \\\"ppid\\\": 42105\\n          },\\n          {\\n            \\\"command\\\": \\\"/Library/Frameworks/Python.framework/Versions/3.13/Resources/Python.app/Contents/MacOS/Python -m do_again.cli upgrade /Users/steventran/do-again\\\",\\n            \\\"pid\\\": 55855,\\n            \\\"ppid\\\": 55837\\n          },\\n          {\\n            \\\"command\\\": \\\"ps -axo pid=,ppid=,command=\\\",\\n            \\\"pid\\\": 55896,\\n            \\\"ppid\\\": 55855\\n          }\\n        ]\\n      }\\n    ],\\n    \\\"features\\\": {\\n      \\\"liveness\\\": true,\\n      \\\"rollout\\\": true\\n    },\\n    \\\"ignored_shared_browser_children\\\": [],\\n    \\\"outbox_pending\\\": [],\\n    \\\"pending_requests\\\": [\\n      \\\"selfdev-self-runtime-parity-after-pr22-20261007-113\\\"\\n    ],\\n    \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n    \\\"runtime_hash\\\": \\\"ea154adfb387ade5255d6d4105c38c3fda8990668367c4790847c561f8b6fb76\\\",\\n    \\\"safe\\\": false,\\n    \\\"service\\\": {\\n      \\\"control_worktree\\\": \\\"/Users/steventran/.do_again/projects/41857a676462/control\\\",\\n      \\\"installed\\\": true,\\n      \\\"label\\\": \\\"io.github.tran-steven.do-again.41857a676462\\\",\\n      \\\"pid\\\": 42105,\\n      \\\"platform\\\": \\\"macos\\\",\\n      \\\"repo\\\": \\\"/Users/steventran/do-again\\\",\\n      \\\"running\\\": true,\\n      \\\"runtime_dir\\\": \\\"/Users/steventran/.do_again/projects/41857a676462\\\",\\n      \\\"service_manager\\\": \\\"launchd\\\"\\n    },\\n    \\\"started_requests\\\": []\\n  }\\n}\\n\"\n  },\n  \"upgrade_journal\": {\n    \"backup_package\": \"/Users/steventran/.do_again/projects/41857a676462/runtime-backups/upgrade-1ee257346e1e47ea/do_again\",\n    \"created_at_utc\": \"2026-10-08T05:34:40.990429+00:00\",\n    \"expected_runtime_hash\": \"ea154adfb387ade5255d6d4105c38c3fda8990668367c4790847c561f8b6fb76\",\n    \"previous_runtime_hash\": \"54f41cd8b49ff21dc1ee5366ec591d63cb760064b52d2617c6956908bb3e9b35\",\n    \"repo\": \"/Users/steventran/do-again\",\n    \"schema_version\": 1,\n    \"service_was_running\": true,\n    \"stage_package\": \"/Users/steventran/.do_again/projects/41857a676462/runtime-staging/upgrade-1ee257346e1e47ea/do_again\",\n    \"state\": \"verified\",\n    \"swapped_at_utc\": \"2026-10-08T05:34:44.116373+00:00\",\n    \"transaction_id\": \"upgrade-1ee257346e1e47ea\",\n    \"verification\": {\n      \"hash_matches\": true,\n      \"liveness\": true,\n      \"rollout\": true,\n      \"runtime_hash\": \"ea154adfb387ade5255d6d4105c38c3fda8990668367c4790847c561f8b6fb76\",\n      \"service\": {\n        \"control_worktree\": \"/Users/steventran/.do_again/projects/41857a676462/control\",\n        \"installed\": true,\n        \"label\": \"io.github.tran-steven.do-again.41857a676462\",\n        \"pid\": 42105,\n        \"platform\": \"macos\",\n        \"repo\": \"/Users/steventran/do-again\",\n        \"running\": true,\n        \"runtime_dir\": \"/Users/steventran/.do_again/projects/41857a676462\",\n        \"service_manager\": \"launchd\"\n      }\n    },\n    \"verified_at_utc\": \"2026-10-08T05:34:44.467902+00:00\"\n  }\n}\nSELF_RUNTIME_PARITY_AUDIT_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T05:41:39.508884+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
