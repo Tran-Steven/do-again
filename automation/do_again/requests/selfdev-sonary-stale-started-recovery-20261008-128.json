@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-stale-started-recovery-20261008-128",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:33:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:53:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess, hashlib\nfrom pathlib import Path\n\nsource=Path(\"/Users/steventran/do-again\")\ntarget=Path(\"/Users/steventran/Sonary\")\nreq_id=\"sonary-daw-typecheck-stage-isolation-20261008-143\"\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(source/\"src\")\n\ndef run(args, timeout=240):\n    return subprocess.run(args,cwd=source,text=True,capture_output=True,check=False,env=env,timeout=timeout)\n\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\nreceipt=root/\"control/automation/do_again/receipts\"/f\"{req_id}.json\"\nledger=root/\"state/ledger\"/f\"{req_id}.json\"\n\nbefore_ledger=json.loads(ledger.read_text()) if ledger.is_file() else None\nif not isinstance(before_ledger,dict) or before_ledger.get(\"state\")!=\"started\":\n    raise SystemExit(f\"precondition failed: expected started ledger, got {before_ledger}\")\nif receipt.exists():\n    raise SystemExit(\"precondition failed: receipt already exists\")\n\np=run([\"python3\",\"-m\",\"do_again.cli\",\"run\",str(target),\"--once\"])\nprint(\"=== recovery stdout ===\")\nprint(p.stdout)\nprint(\"=== recovery stderr ===\")\nprint(p.stderr)\nprint(\"recovery_rc=\"+str(p.returncode))\nif p.returncode!=0:\n    raise SystemExit(\"supported once recovery failed\")\n\nif not receipt.is_file():\n    raise SystemExit(\"recovery did not publish terminal receipt\")\n\nr=json.loads(receipt.read_text())\nafter_ledger=json.loads(ledger.read_text()) if ledger.is_file() else {}\n\nprint(json.dumps({\n  \"receipt\":r,\n  \"ledger\":after_ledger,\n},indent=2,sort_keys=True))\n\nif r.get(\"state\")!=\"blocked_ambiguous_replay\":\n    raise SystemExit(f\"unexpected recovered receipt state: {r.get('state')}\")\nif \"prior agent instance began this request\" not in str(r.get(\"error\",\"\")).lower():\n    raise SystemExit(f\"missing ambiguous replay safety reason: {r.get('error')}\")\nif after_ledger.get(\"state\")!=\"terminal\":\n    raise SystemExit(f\"ledger not terminal after recovery: {after_ledger}\")\nstored=after_ledger.get(\"receipt\") or {}\nif stored.get(\"state\")!=\"blocked_ambiguous_replay\":\n    raise SystemExit(\"terminal ledger does not preserve ambiguous-replay receipt\")\n\nprint(\"SONARY_STALE_STARTED_RECOVERY_ACCEPTANCE_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
