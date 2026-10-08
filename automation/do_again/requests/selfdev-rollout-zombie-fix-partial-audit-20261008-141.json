@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-zombie-fix-partial-audit-20261008-141",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T14:04:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T14:24:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nimport subprocess, json\n\nwt=Path(\"/Users/steventran/.do_again/worktrees/rollout-zombie-fix\")\n\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=False)\n\nif not wt.exists():\n    raise SystemExit(\"expected partial worktree missing\")\n\nstatus=run([\"git\",\"status\",\"--short\"])\ndiff=run([\"git\",\"diff\",\"--\",\"src/do_again/service/rollout.py\"])\nhits=sorted(str(p.relative_to(wt)) for p in wt.rglob(\"test*rollout*.py\"))\n\nprint(json.dumps({\n  \"head\":run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip(),\n  \"branch\":run([\"git\",\"branch\",\"--show-current\"]).stdout.strip(),\n  \"status\":status.stdout,\n  \"rollout_diff\":diff.stdout,\n  \"rollout_test_candidates\":hits,\n},indent=2))\nprint(\"ROLLOUT_ZOMBIE_FIX_PARTIAL_AUDIT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
