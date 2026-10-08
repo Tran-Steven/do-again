@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-sonary-pending-request-drain-audit-20261008-124",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T13:27:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T13:47:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, os, subprocess, sys, hashlib\nfrom pathlib import Path\n\nsource=Path(\"/Users/steventran/do-again\")\ntarget=Path(\"/Users/steventran/Sonary\")\nreq_id=\"sonary-daw-typecheck-stage-isolation-20261008-143\"\nsys.path.insert(0,str(source/\"src\"))\nfrom do_again.service.rollout import _tree_hash\n\ndef run(args):\n    env=os.environ.copy()\n    env[\"PYTHONPATH\"]=str(source/\"src\")\n    return subprocess.run(args,cwd=source,text=True,capture_output=True,check=False,env=env)\n\nkey=hashlib.sha256(str(target.resolve()).encode()).hexdigest()[:12]\nroot=Path.home()/\".do_again/projects\"/key\ncontrol=root/\"control\"\nreceipt=control/\"automation/do_again/receipts\"/f\"{req_id}.json\"\n\nreceipt_state=None\nreceipt_obj=None\nif receipt.is_file():\n    try:\n        receipt_obj=json.loads(receipt.read_text())\n        receipt_state=receipt_obj.get(\"state\")\n    except Exception:\n        receipt_state=\"unreadable\"\n\nterminal=receipt_state in {\"succeeded\",\"failed\",\"cancelled\",\"canceled\"}\n\nout={\n  \"request_id\":req_id,\n  \"receipt_exists\":receipt.is_file(),\n  \"receipt_state\":receipt_state,\n  \"terminal\":terminal,\n  \"runtime_hash\":_tree_hash(root/\"runtime/do_again\"),\n  \"source_hash\":_tree_hash(source/\"src/do_again\"),\n}\n\nif terminal:\n    dry=run([\"python3\",\"-m\",\"do_again.cli\",\"upgrade\",str(target)])\n    out[\"dry_run\"]={\"rc\":dry.returncode,\"stdout\":dry.stdout,\"stderr\":dry.stderr}\n\nprint(json.dumps(out,indent=2,sort_keys=True))\nprint(\"SONARY_PENDING_REQUEST_DRAIN_AUDIT_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
