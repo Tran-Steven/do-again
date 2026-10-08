@@ -3,13 +3,13 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
-  "last_request_id": "selfdev-jobpipe-sonary-runtime-acceptance-20261007-106",
-  "last_request_state": "failed",
+  "last_request_id": "selfdev-jobpipe-sonary-runtime-hash-diagnostic-20261007-107",
+  "last_request_state": "succeeded",
   "pid": 98664,
   "remote": "origin",
   "repo": "/Users/steventran/do-again",
   "schema_version": 1,
   "started_at_utc": "2026-10-08T04:04:33.123444+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T04:32:08.637524+00:00"
+  "updated_at_utc": "2026-10-08T04:32:52.534484+00:00"
 }
