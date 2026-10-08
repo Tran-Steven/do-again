@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:21:42.393114+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "951bc7c7969db2250a38e79100d9f0ef5a334511975161dd6866a90350f3bb3d",
+  "request_id": "selfdev-cross-project-installed-fault-smoke-20261008-121",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "f5179f78ec60017a786743a548313f60f3d01a41"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "951bc7c7969db2250a38e79100d9f0ef5a334511975161dd6866a90350f3bb3d",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-cross-project-installed-fault-smoke-20261008-121/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.279,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 4389,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-cross-project-installed-fault-smoke-20261008-121/script.py",
+      "script_sha256": "a135a68db0acc68561bfa67c20d84fc08fde5ccd95e0dd2500eb3d502ce6be1d",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "[\n  {\n    \"project\": \"/Users/steventran/jobpipe\",\n    \"result\": {\n      \"first_state\": \"idle_delivery_uncertain\",\n      \"marker\": \"DO_AGAIN_LIVENESS_CONTINUE token=fb18abf92d9d44ca697e\",\n      \"second_state\": \"idle_delivery_uncertain\",\n      \"send_calls\": [\n        1,\n        1,\n        1\n      ],\n      \"third_state\": \"stalled_idle_handoff\"\n    },\n    \"runtime_root\": \"/Users/steventran/.do_again/projects/42ba1b7dcb92/runtime\"\n  },\n  {\n    \"project\": \"/Users/steventran/Sonary\",\n    \"result\": {\n      \"first_state\": \"idle_delivery_uncertain\",\n      \"marker\": \"DO_AGAIN_LIVENESS_CONTINUE token=21670250d2a1dc5c56ab\",\n      \"second_state\": \"idle_delivery_uncertain\",\n      \"send_calls\": [\n        1,\n        1,\n        1\n      ],\n      \"third_state\": \"stalled_idle_handoff\"\n    },\n    \"runtime_root\": \"/Users/steventran/.do_again/projects/d05c35935833/runtime\"\n  }\n]\nCROSS_PROJECT_INSTALLED_RUNTIME_FAULT_ACCEPTANCE_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:21:40.671629+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
