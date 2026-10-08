@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-zombie-child-fix-worktree-tests-20261008-144",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T14:09:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T14:39:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nimport subprocess, os, json\n\nwt=Path(\"/Users/steventran/.do_again/worktrees/rollout-zombie-fix\")\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\n\ndef run(args,check=True):\n    p=subprocess.run(args,cwd=wt,text=True,capture_output=True,env=env)\n    print(\"$\",\" \".join(args))\n    print(p.stdout)\n    print(p.stderr)\n    if check and p.returncode!=0:\n        raise SystemExit(p.returncode)\n    return p\n\nprobe=run([\"python3\",\"-c\",\"import do_again.service.rollout as r; print(r.__file__)\"])\nif str(wt/\"src/do_again/service/rollout.py\") not in probe.stdout.strip():\n    raise SystemExit(\"worktree module still not selected\")\n\nrun([\"python3\",\"-m\",\"py_compile\",\"src/do_again/service/rollout.py\",\"tests/test_rollout.py\"])\nrun([\"python3\",\"-m\",\"unittest\",\"tests.test_rollout\"])\nrun([\"python3\",\"-m\",\"unittest\",\"discover\",\"-s\",\"tests\"])\nrun([\"git\",\"diff\",\"--check\"])\n\nstatus=run([\"git\",\"status\",\"--short\"]).stdout\nprint(status)\nif not status.strip():\n    raise SystemExit(\"expected rollout/test changes missing\")\n\nrun([\"git\",\"add\",\"src/do_again/service/rollout.py\",\"tests/test_rollout.py\"])\nrun([\"git\",\"commit\",\"-m\",\"Ignore zombie daemon children during rollout preflight\"])\nrun([\"git\",\"push\",\"-u\",\"origin\",\"fix/rollout-ignore-zombie-children\"])\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nprint(json.dumps({\"branch\":\"fix/rollout-ignore-zombie-children\",\"head\":head},indent=2))\nprint(\"ROLLOUT_ZOMBIE_CHILD_FIX_WORKTREE_TESTS_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 1200
+  }
+}
