@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:46:55.115456+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "90b79a64be4046f553016129820ab7eccd556524330232621dd61d2d90750860",
+  "request_id": "selfdev-rollover-success-fixture-audit-20261007-73",
+  "schema_version": 1
+}
