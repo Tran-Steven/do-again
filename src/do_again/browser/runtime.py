@@ -1098,6 +1098,30 @@ def _candidate_receipt_evidence(repo: Path, chat_id: str) -> list[dict[str, Any]
     return evidence
 
 
+def _historical_chat_evidence(repo: Path) -> dict[str, list[str]]:
+    repo = repo.resolve()
+    evidence: dict[str, list[str]] = {}
+
+    def record(url: object, source: str) -> None:
+        chat_id = _chat_id(str(url or ""))
+        if chat_id and source not in evidence.setdefault(chat_id, []):
+            evidence[chat_id].append(source)
+
+    record(project_record(repo).get("previous_chat_url"), "project_previous_chat")
+    record(
+        _read_json(_rollover_transaction_path(repo)).get("predecessor_chat_url"),
+        "rollover_predecessor",
+    )
+    for path in sorted((_project_browser_dir(repo) / "checkpoints").glob("*.json")):
+        try:
+            checkpoint = _read_json(path)
+        except BrowserError:
+            continue
+        if checkpoint.get("repo") == str(repo):
+            record(checkpoint.get("active_chat_url"), f"checkpoint:{path.name}")
+    return evidence
+
+
 def chat_cleanup_inventory(
     repo: Path,
     *,
@@ -1108,6 +1132,7 @@ def chat_cleanup_inventory(
     rows: list[dict[str, Any]] = []
     bound = _all_bound_chat_ids()
     seen: set[str] = set()
+    historical = _historical_chat_evidence(repo)
 
     chats = registry.get("chats")
     if isinstance(chats, list):
@@ -1137,11 +1162,12 @@ def chat_cleanup_inventory(
                 }
             )
 
-    for chat_id in candidate_ids or []:
+    for chat_id in dict.fromkeys([*historical, *(candidate_ids or [])]):
         chat_id = str(chat_id).strip()
         if not chat_id or chat_id in seen:
             continue
         evidence = _candidate_receipt_evidence(repo, chat_id)
+        history = historical.get(chat_id, [])
         active = chat_id in bound
         rows.append(
             {
@@ -1156,10 +1182,11 @@ def chat_cleanup_inventory(
                     "currently_bound"
                     if active
                     else "needs_content_verification"
-                    if evidence
+                    if evidence or history
                     else "no_corroborating_receipts"
                 ),
                 "evidence": evidence,
+                "historical_evidence": history,
             }
         )
     return {
@@ -1243,9 +1270,12 @@ def _chat_has_bootstrap_markers(
         f"Project: {repo.name}",
         f"Repository: {remote_url}",
         f"Control branch: {control_branch}",
-        "DO_AGAIN_PROJECT_READY",
     ]
-    return all(_page_contains(target, marker) for marker in required)
+    if not all(_page_contains(target, marker) for marker in required):
+        return False
+    return _page_contains(target, "DO_AGAIN_PROJECT_READY") or _page_contains(
+        target, "DO_AGAIN_HANDOFF_READY"
+    )
 
 
 def _verify_historical_chat_ownership(
@@ -1299,11 +1329,12 @@ def verify_candidate_chat(
             "reason": "currently_bound",
         }
     evidence = _candidate_receipt_evidence(repo, chat_id)
-    if not evidence:
+    history = _historical_chat_evidence(repo).get(chat_id, [])
+    if not evidence and not history:
         return {
             "chat_id": chat_id,
             "verified": False,
-            "reason": "no_corroborating_receipts",
+            "reason": "no_corroborating_receipts_or_history",
         }
     status = ensure_browser_running(verify_auth=True)
     result = _verify_historical_chat_ownership(
@@ -1317,6 +1348,7 @@ def verify_candidate_chat(
             "verified": False,
             "reason": "bootstrap_markers_missing",
             "receipt_evidence": evidence,
+            "historical_evidence": history,
         }
     _record_owned_chat(
         repo,
@@ -1327,7 +1359,11 @@ def verify_candidate_chat(
     chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
     for row in chats:
         if str(row.get("chat_id") or "") == chat_id:
-            row["verified_from"] = "bootstrap_markers_and_receipts"
+            row["verified_from"] = (
+                "bootstrap_markers_and_receipts" if evidence
+                else "bootstrap_markers_and_history"
+            )
+            row["historical_evidence"] = history
             row["verified_utc"] = _utc_now()
             break
     registry["updated_utc"] = _utc_now()
@@ -1335,8 +1371,12 @@ def verify_candidate_chat(
     return {
         "chat_id": chat_id,
         "verified": True,
-        "reason": "bootstrap_markers_and_receipts",
+        "reason": (
+            "bootstrap_markers_and_receipts" if evidence
+            else "bootstrap_markers_and_history"
+        ),
         "receipt_evidence": evidence,
+        "historical_evidence": history,
     }
 
 

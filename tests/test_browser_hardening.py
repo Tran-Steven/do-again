@@ -493,6 +493,102 @@ class BrowserHardeningTests(unittest.TestCase):
         self.assertEqual(row["verified_from"], "bootstrap_markers_and_receipts")
         self.assertTrue(row["verified_utc"])
 
+    def test_historical_rollover_bootstrap_markers_count_as_project_ownership(self):
+        record = self.bind()
+        fragments = [
+            "Do Again automation workspace bootstrap.",
+            f"Project: {self.repo.name}",
+            f"Repository: {record['remote_url']}",
+            "Control branch: operator-control",
+            "DO_AGAIN_HANDOFF_READY abcdef",
+        ]
+        with patch.object(browser, "_page_contains", side_effect=lambda target, marker: any(marker in fragment for fragment in fragments)):
+            self.assertTrue(browser._chat_has_bootstrap_markers(
+                self.target,
+                repo=self.repo,
+                remote_url=record["remote_url"],
+                control_branch="operator-control",
+            ))
+        fragments[2] = "Repository: https://github.com/another/repo.git"
+        with patch.object(browser, "_page_contains", side_effect=lambda target, marker: any(marker in fragment for fragment in fragments)):
+            self.assertFalse(browser._chat_has_bootstrap_markers(
+                self.target,
+                repo=self.repo,
+                remote_url=record["remote_url"],
+                control_branch="operator-control",
+            ))
+
+    def test_historical_chat_candidates_are_discovered_but_not_automatically_archived(self):
+        record = self.bind()
+        record["previous_chat_url"] = "https://chatgpt.com/c/previous"
+        browser._atomic_json(browser._project_record_path(self.repo), record)
+        browser._atomic_json(
+            browser._rollover_transaction_path(self.repo),
+            {"predecessor_chat_url": "https://chatgpt.com/c/rollover"},
+        )
+        browser._atomic_json(
+            browser._checkpoint_path(self.repo, "old"),
+            {"repo": str(self.repo.resolve()), "active_chat_url": "https://chatgpt.com/c/checkpoint"},
+        )
+        browser._atomic_json(
+            browser._checkpoint_path(self.repo, "unrelated"),
+            {"repo": "/other/repo", "active_chat_url": "https://chatgpt.com/c/stranger"},
+        )
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]):
+            inventory = browser.chat_cleanup_inventory(self.repo)
+            cleanup = browser.queue_verified_archives(self.repo, apply=True)
+        candidates = {row["chat_id"]: row for row in inventory["candidates"]}
+        self.assertEqual(set(candidates), {"previous", "rollover", "checkpoint"})
+        self.assertTrue(all(not row["eligible"] for row in candidates.values()))
+        self.assertTrue(all(row["reason"] == "needs_content_verification" for row in candidates.values()))
+        self.assertEqual(cleanup["queued_chat_ids"], [])
+        self.assertEqual(cleanup["queue"]["items"], [])
+
+    def test_invalid_historical_checkpoint_does_not_block_cleanup_inventory(self):
+        record = self.bind()
+        record["previous_chat_url"] = "https://chatgpt.com/c/prior"
+        browser._atomic_json(browser._project_record_path(self.repo), record)
+        damaged = browser._checkpoint_path(self.repo, "damaged")
+        damaged.parent.mkdir(parents=True, exist_ok=True)
+        damaged.write_text("invalid-json", encoding="utf-8")
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]):
+            inventory = browser.chat_cleanup_inventory(self.repo)
+        self.assertEqual([row["chat_id"] for row in inventory["candidates"]], ["prior"])
+
+    def test_historical_checkpoint_can_be_verified_without_receipt_ids(self):
+        self.bind()
+        browser._atomic_json(
+            browser._checkpoint_path(self.repo, "verified"),
+            {"repo": str(self.repo.resolve()), "active_chat_url": "https://chatgpt.com/c/historical"},
+        )
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]), patch.object(
+            browser, "ensure_browser_running", return_value={"port": 9223}
+        ), patch.object(
+            browser, "_verify_historical_chat_ownership", return_value={"owned": True}
+        ):
+            result = browser.verify_candidate_chat(self.repo, "historical")
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["reason"], "bootstrap_markers_and_history")
+        self.assertEqual(result["historical_evidence"], ["checkpoint:verified.json"])
+        registry = browser._read_json(browser._owned_chat_registry_path(self.repo))
+        self.assertEqual(registry["chats"][0]["verified_from"], "bootstrap_markers_and_history")
+
+    def test_historical_reference_is_not_enough_without_bootstrap_markers(self):
+        self.bind()
+        browser._atomic_json(
+            browser._rollover_transaction_path(self.repo),
+            {"predecessor_chat_url": "https://chatgpt.com/c/unverified"},
+        )
+        with patch.object(browser, "_candidate_receipt_evidence", return_value=[]), patch.object(
+            browser, "ensure_browser_running", return_value={"port": 9223}
+        ), patch.object(
+            browser, "_verify_historical_chat_ownership", return_value={"owned": False}
+        ):
+            result = browser.verify_candidate_chat(self.repo, "unverified")
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["reason"], "bootstrap_markers_missing")
+        self.assertEqual(browser._read_json(browser._owned_chat_registry_path(self.repo)), {})
+
     def test_cleanup_inventory_excludes_active_bound_and_unverified_candidates(self):
         record = self.bind()
         browser._record_owned_chat(
@@ -550,7 +646,7 @@ class BrowserHardeningTests(unittest.TestCase):
         ) as ensure:
             result = browser.verify_candidate_chat(self.repo, "historical")
         self.assertFalse(result["verified"])
-        self.assertEqual(result["reason"], "no_corroborating_receipts")
+        self.assertEqual(result["reason"], "no_corroborating_receipts_or_history")
         ensure.assert_not_called()
 
     def test_archive_queue_blocks_unowned_and_active_without_ui_mutation(self):
