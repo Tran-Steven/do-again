@@ -1,6 +1,8 @@
 """Root-stage installer. Called only after a sealed bundle is authenticated."""
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager, ExitStack
+import sqlite3
 import grp
 import hashlib
 import json
@@ -144,6 +146,45 @@ def provision_worktree(config, project, current):
     target.chmod(0o750)
 
 
+@contextmanager
+def preview_cutover(config, registry, live):
+    """Upgrade only this sealed, maintenance-only helper under admission fences.
+
+    Legacy project daemons, browsers, and service definitions are outside this
+    cutover. Production helpers require the later guarded rollout procedure.
+    """
+    with ExitStack() as fences:
+        if live:
+            import fcntl
+            old=json.loads((ROOT/'current/config.json').read_text())
+            verify_stage(ROOT/'current')
+            fields=('repo','key','uid','gid','account','worktree','source_sha')
+            scoped=lambda c:sorted(tuple(p[k] for k in fields) for p in c['projects'])
+            if old.get('production_ready') is not False or config.get('production_ready') is not False or scoped(old)!=scoped(config):
+                raise RuntimeError('production or changed-scope helper upgrade requires guarded rollout')
+            for project in sorted(config['projects'],key=lambda p:p['key']):
+                path=ROOT/'state'/project['key']/'admission.lock'
+                if path.is_symlink() or path.parent.is_symlink():raise RuntimeError('aliased admission fence')
+                file=fences.enter_context(path.open('a'))
+                fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            # Recheck immediately before the service effect, while spawn and
+            # operator-intent transitions are excluded by the same fences.
+            for project in config['projects']:
+                if registry.status(Path(project['repo']))['intent']=='active':
+                    raise RuntimeError('authority admits execution; cutover deferred')
+            with sqlite3.connect(registry.path) as db:
+                if db.execute("SELECT 1 FROM execution WHERE state='started' LIMIT 1").fetchone():
+                    raise RuntimeError('ambiguous execution blocks cutover')
+            from do_again.supervisor.macos_execution import MacOSProcesses
+            inventory=MacOSProcesses()
+            if any(inventory.owned(p['uid']) for p in config['projects']):
+                raise RuntimeError('dedicated execution still active; cutover deferred')
+            run(['/bin/launchctl','bootout','system/'+LABEL])
+            stopped=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
+            if stopped.returncode!=113:raise RuntimeError('helper stop is uncertain; cutover deferred')
+        yield
+
+
 def install(stage):
     if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
     os.umask(0o077)
@@ -166,8 +207,7 @@ def install(stage):
         raise RuntimeError('operator authority journal is not privately owned')
     current=ROOT/'current'
     live=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
-    if live.returncode==0:raise RuntimeError('live supervisor upgrade requires guarded quiescence; installation deferred')
-    if live.returncode!=113:raise RuntimeError('cannot establish supervisor service quiescence')
+    if live.returncode not in (0,113):raise RuntimeError('cannot establish supervisor service quiescence')
     if current.exists() and not existing_installation:
         raise RuntimeError('existing package has unknown installation provenance')
     sys.path.insert(0,str(stage/'package'))
@@ -193,35 +233,36 @@ def install(stage):
     if PLIST.exists() and not existing_installation:
         raise RuntimeError('existing service definition has unknown provenance')
     for project in config['projects']:create_account(project,journal_path,journal)
-    if current.exists():
-        # Retain earlier immutable package. Effect journals always remain newer.
-        previous=ROOT/('previous-'+uuid.uuid4().hex)
-        os.rename(current,previous)
-    os.rename(stage,current)
-    runtime=Path(config['python'])
-    if runtime!=current/'runtimes/python/bin/python3':raise RuntimeError('invalid sealed runtime path')
-    runtime.chmod(0o755)
-    if not registry.path.exists():
-        registry.initialize()
-        for project in config['projects']:
-            registry.set_intent(Path(project['repo']),'maintenance',goal_revision=project['goal_revision'])
-    else:
-        for project in config['projects']:
-            if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
-                raise RuntimeError('existing authority admits work; upgrade deferred')
-    for project in config['projects']:provision_worktree(config,project,current)
-    definition={'Label':LABEL,'ProgramArguments':[config['python'],'-I','-S','-B',str(current/'bootstrap.py')],
-                'UserName':'root','RunAtLoad':True,'KeepAlive':{'SuccessfulExit':False},
-                'WorkingDirectory':str(current),'EnvironmentVariables':{'PATH':'/usr/bin:/bin'},
-                'StandardOutPath':str(ROOT/'state/helper.out.log'),
-                'StandardErrorPath':str(ROOT/'state/helper.err.log')}
-    temporary=PLIST.with_suffix('.pending')
-    temporary.write_bytes(plistlib.dumps(definition));temporary.chmod(0o644)
-    os.chown(temporary,0,0);os.replace(temporary,PLIST)
-    run(['/bin/launchctl','bootstrap','system',str(PLIST)])
-    journal['source_sha']=config['source_sha'];journal['status']='installed_maintenance'
-    atomic(journal_path,journal)
-    print('SUPERVISOR_INSTALLED_MAINTENANCE')
+    with preview_cutover(config,registry,live.returncode==0):
+        if current.exists():
+            # Retain earlier immutable package. Effect journals always remain newer.
+            previous=ROOT/('previous-'+uuid.uuid4().hex)
+            os.rename(current,previous)
+        os.rename(stage,current)
+        runtime=Path(config['python'])
+        if runtime!=current/'runtimes/python/bin/python3':raise RuntimeError('invalid sealed runtime path')
+        runtime.chmod(0o755)
+        if not registry.path.exists():
+            registry.initialize()
+            for project in config['projects']:
+                registry.set_intent(Path(project['repo']),'maintenance',goal_revision=project['goal_revision'])
+        else:
+            for project in config['projects']:
+                if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+                    raise RuntimeError('existing authority admits work; upgrade deferred')
+        for project in config['projects']:provision_worktree(config,project,current)
+        definition={'Label':LABEL,'ProgramArguments':[config['python'],'-I','-S','-B',str(current/'bootstrap.py')],
+                    'UserName':'root','RunAtLoad':True,'KeepAlive':{'SuccessfulExit':False},
+                    'WorkingDirectory':str(current),'EnvironmentVariables':{'PATH':'/usr/bin:/bin'},
+                    'StandardOutPath':str(ROOT/'state/helper.out.log'),
+                    'StandardErrorPath':str(ROOT/'state/helper.err.log')}
+        temporary=PLIST.with_suffix('.pending')
+        temporary.write_bytes(plistlib.dumps(definition));temporary.chmod(0o644)
+        os.chown(temporary,0,0);os.replace(temporary,PLIST)
+        run(['/bin/launchctl','bootstrap','system',str(PLIST)])
+        journal['source_sha']=config['source_sha'];journal['status']='installed_maintenance'
+        atomic(journal_path,journal)
+        print('SUPERVISOR_INSTALLED_MAINTENANCE')
 
 
 if __name__=='__main__':
