@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
-  "last_request_id": "selfdev-rollout-zombie-test-failure-diagnostic-20261008-143",
+  "last_request_id": "selfdev-rollout-zombie-child-fix-worktree-tests-20261008-144",
   "last_request_state": "succeeded",
   "pid": 49258,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-08T13:06:56.457699+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T14:06:00.193738+00:00"
+  "updated_at_utc": "2026-10-08T14:09:06.925633+00:00"
 }
