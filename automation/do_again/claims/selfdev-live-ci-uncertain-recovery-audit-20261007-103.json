@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "claimed_at_utc": "2026-10-08T04:27:59.627424+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 98664,
+  "request_fingerprint": "0eda691bf9b6cb193cae309a53aa71f509dea141472571a57af0c2e2227b69b7",
+  "request_id": "selfdev-live-ci-uncertain-recovery-audit-20261007-103",
+  "schema_version": 1
+}
