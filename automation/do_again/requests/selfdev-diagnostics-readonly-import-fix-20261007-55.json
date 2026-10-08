@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-diagnostics-readonly-import-fix-20261007-55",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:26:10.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:06:10.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os\nimport subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"6e39cbcd7f1c3ca8f0ebfac6a2b9d6b2948a1b58\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=check, env=env)\n\nhead = run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch = run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nif head != expected or branch != \"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected isolated state head={head} branch={branch}\")\n\ntest = wt/\"tests/test_cli.py\"\ntext = test.read_text()\n\nif \"import json\\n\" not in text:\n    text = text.replace(\"import io\\n\", \"import io\\nimport json\\n\", 1)\n\nold = \"from do_again.cli import list_projects, main, setup_project, verify_project\\n\"\nnew = \"\"\"from do_again.cli import (\n    list_projects,\n    main,\n    request_history,\n    setup_project,\n    show_logs,\n    trace_request,\n    verify_project,\n)\nfrom do_again.service.runtime import runtime_layout\n\"\"\"\nif old not in text:\n    raise SystemExit(\"CLI test import anchor missing\")\ntext = text.replace(old, new, 1)\ntest.write_text(text)\n\nenv = os.environ.copy()\nenv[\"PYTHONPATH\"] = str(wt/\"src\")\n\nrun([\"python3\",\"-m\",\"py_compile\",\"src/do_again/cli.py\",\"tests/test_cli.py\"], env=env)\nprint(\"py_compile=ok\")\n\nfocused = run(\n    [\"python3\",\"-m\",\"unittest\",\n     \"tests.test_cli\",\n     \"tests.test_request_fingerprints\",\n     \"tests.test_agent_claims\"],\n    check=False,\n    env=env,\n)\nprint(\"=== focused stdout ===\")\nprint(focused.stdout)\nprint(\"=== focused stderr ===\")\nprint(focused.stderr)\nprint(\"focused_rc=\" + str(focused.returncode))\nif focused.returncode != 0:\n    raise SystemExit(focused.returncode)\n\nrun([\"git\",\"add\",\"src/do_again/cli.py\",\"tests/test_cli.py\"])\ncommit = run([\"git\",\"commit\",\"-m\",\"Add durable request diagnostics\"], check=False)\nprint(\"=== commit stdout ===\")\nprint(commit.stdout)\nprint(\"=== commit stderr ===\")\nprint(commit.stderr)\nif commit.returncode != 0:\n    raise SystemExit(commit.returncode)\n\nprint(\"new_head=\" + run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\" + repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
