@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:98664:1791432273:df28eadb0d97",
+  "error": null,
+  "finished_at_utc": "2026-10-08T04:34:24.127917+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "6e7912fb5e3ac582f7523ff275eaf03cb60f793b4ba66a4d5ed310e7c1345b0d",
+  "request_id": "selfdev-issue10-live-gap-audit-20261007-108",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "78d826e019428c1f1b0d98acf45f3c16812ae61a"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "6e7912fb5e3ac582f7523ff275eaf03cb60f793b4ba66a4d5ed310e7c1345b0d",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-issue10-live-gap-audit-20261007-108/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 1.155,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1696,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-issue10-live-gap-audit-20261007-108/script.py",
+      "script_sha256": "88bcfa6101c0c68959f5708ce3efc462076c56afa5bf185d072bea2750abff01",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"comment_count\": 12,\n  \"criteria_evidence\": {\n    \"crash_auth_network\": {\n      \"BrowserError\": true,\n      \"TimeoutError\": false,\n      \"auth\": true,\n      \"crash\": true,\n      \"network\": true\n    },\n    \"idle_after_receipt\": {\n      \"bounded continuation\": true,\n      \"idle after receipt\": false,\n      \"no-progress\": false\n    },\n    \"long_running_claim\": {\n      \"claimed request\": true,\n      \"long-running claim\": true,\n      \"waiting_for_execution\": true\n    },\n    \"no_duplicates\": {\n      \"duplicate\": true,\n      \"exactly once\": false,\n      \"no replay\": false\n    },\n    \"queued_delivery\": {\n      \"browser outbox\": true,\n      \"pending_receipts\": false,\n      \"queued delivery\": true\n    },\n    \"three_projects\": {\n      \"Do Again\": true,\n      \"Sonary\": true,\n      \"jobpipe\": true\n    },\n    \"visible_incident\": {\n      \"incident\": true,\n      \"issue_report\": false,\n      \"stalled_ci_handoff\": false,\n      \"visible\": true\n    }\n  },\n  \"issue_title_or_body_excerpt\": \"## Evidence \\u2014 2026-10-07 local audit\\n\\nDo Again's native watchdog was merged into `main` (`6afd748`), and PR #8 (`a02b997`) passed 17/17 CI jobs and was merged. However, **main branch success is not installed-runtime success**.\\n\\n- `jobpipe`: installed `service/liveness.py`, configuration explicitly sets `continuous=true`, `report_stalls=true`, and current `do-again status` exposes `liveness_state=working`.\\n- `Sonary`: installed runtime has no `service/liveness.py`, project configuration has no `continuous=true`, and `do-again status` exposes no liveness state; the project has been doing long-running recording/DAW development tasks.\\n- `do-again` itself: installed runtime has no `service/liveness.py`, configuration has no continuous mode, no liveness status. Its source checkout was fast-forwarded to merged `main`; copied service remains older code.\\n- Both jobpipe and Sonary were actively processing tasks at inspection. **Do not restart/replace their daemon, policy, browser, or execution worktree while a request is claimed/running.**\\n\\n## Acceptance criteria\\n\\n1. Develop safe, version-aware, in-flight-safe upgrade flow: checks outstanding requests/claims, execution PIDs and terminal receipts; waits or explicitly defers service replacement and restarts. Preserve project configuration, current ChatGPT chat ownership/rollover records, outbox, and resume state. Refuse unsafe upgrade, never silently cancel operations or replay unconfirmed effects.\\n2. Enable intentional continuous development goals for Do Again and Sonary where authorized; no auto-continuation of an explicitly completed, paused, or one-off goal. Preserve jobpipe setting and track it separately.\\n3. Use `do-again status` to distinguish idle-with-goal, queued delivery, running/claimed, authenticating, waiting for CI, paused, completed, recovering, and stalled. A green daemon alone must not pass the health check.\\n4. Live end-to-end fault-injection/soak for each project: idle ChatGPT after succeeded receipt; queued delivery; long-running claim; crash/auth/network failure; bounded recovery with no duplicate side effects. Prove at least one deliberate stall produces safe progress or visible incident/issue without manual chat prompting.\\n5. Surface notifications to user when a project cannot recover, deduplicated sanitized issues, and a no-secrets local incident trace. Avoid issue spam across restarts.\\n6. Only after safe rollout, validate running runtime has the expected source hash/feature imports, required config, daemon state, and recent progress evidence.\\n\\n**Status:** Source merged/CI green, rollout + live fault-injection evidence missing. Do not mark resolved solely on passing CI. Related root-cause issue: #9.\"\n}\ntest_agent_claims.py claim\ntest_browser.py browser,timeout,auth\ntest_browser_hardening.py browser,timeout,auth,network,outbox\ntest_cdp.py browser,timeout\ntest_ci_delivery_recovery.py browser,liveness,timeout\ntest_cli.py claim,browser,timeout,auth\ntest_controller_timeout.py browser,timeout,outbox\ntest_daemon.py browser,outbox\ntest_executor.py claim,timeout,auth\ntest_liveness.py browser,liveness\ntest_request_fingerprints.py claim,auth\ntest_rollout.py claim,browser,liveness,incident,outbox\ntest_service.py browser\ntest_soak.py soak\ntest_terminal_conflict_idempotency.py incident\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T04:34:22.587993+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
