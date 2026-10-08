@@ -1,63 +1,106 @@
 # Do Again Roadmap
 
-Do Again should be easy on the first run and still expose lower-level controls for advanced users.
+Do Again is a developer-alpha local execution bridge. Near-term work emphasizes reliability, recovery, and operator clarity before broader integration.
 
-## P0 — reliable core
+## P0 reliable core
 
-- [x] One-command local onboarding with `do-again setup`
-- [x] Project-specific policy file created by `do-again init` / `setup`
-- [x] Safe dedicated control-branch validation
+- [x] One-command project onboarding
+- [x] Project-specific policy
+- [x] Dedicated control-branch validation
 - [x] Custom Git remote support
 - [x] Future-dated request rejection
-- [x] Request-ID collision detection
+- [x] Request fingerprint and ID-collision detection
 - [x] Durable local request locks
-- [x] Distributed Git-backed request claims
+- [x] Distributed Git-backed claims
+- [x] Durable pre-execution started ledger
+- [x] Ambiguous replay blocking
 - [x] Observable malformed-request records
-- [x] Chronological request ordering across timezone offsets
 - [x] macOS launchd lifecycle
 - [x] Linux systemd user-service lifecycle
-- [x] Windows per-user Task Scheduler lifecycle
+- [x] Windows Task Scheduler lifecycle
 
-## P1 — frictionless ChatGPT connection
+## P1 browser and ChatGPT reliability
 
-- [x] Dedicated persistent automation Chrome/Chromium profile
-- [x] One-time visible ChatGPT sign-in / human-verification flow
+- [x] Dedicated persistent browser profile
+- [x] One-time visible authentication flow
 - [x] Real composer/session verification over localhost CDP
-- [x] True `--headless=new` operation when the authenticated session supports it
-- [x] Automatic background-headed fallback when true headless is unreliable
-- [x] No normal-profile attachment and no post-setup foreground focus requirement
+- [x] Headless operation when reliable
+- [x] Background-headed fallback
 - [x] Per-project automation conversation binding
 - [x] Shared browser runtime across concurrent projects
-- [x] Browser crash detection and automatic restart
-- [x] Durable browser-delivery outbox with idempotent receipt retries
-- [x] Explicit `auth_required` state instead of challenge/auth bypass loops
-- [x] Automatic safe new-chat rollover on conversation-length limits
-- [x] Browser state remains local; credentials are never requested or stored
-- [x] Git-backed request/receipt transport remains independent of the browser layer
+- [x] Browser crash recovery
+- [x] Durable browser receipt outbox
+- [x] Explicit auth-required state
+- [x] Proactive rollover threshold plus hard context-limit fallback
+- [x] Transactional successor acknowledgement before binding update
+- [x] Durable Git/receipt-grounded rollover checkpoints
+- [x] Bounded checkpoint transfer view
+- [x] Verified-owned predecessor archival only after successful handoff
+- [x] Retryable archive failure without invalidating the new binding
+- [x] No chat deletion
 
-## P1 — diagnostics and recovery
+## P1 acknowledgement and progress
 
-- [x] Measured local-agent soak benchmark covering exact-once duplicate/restart behavior; scope explicitly excludes Git/browser/network latency.
+- [x] Durable acknowledgement of prior receipts through continuation metadata
+- [x] Explicit goal state: in-progress, completed, blocked
+- [x] Receipt echo of operator progress
+- [x] Separate browser delivery, operator acknowledgement, and goal completion
+- [ ] Optional long-term progress index beyond request-file history
 
-- [x] Make `doctor` repository-aware and report browser/runtime repair information.
-- [x] Surface browser delivery failures and pending receipt count through `status`.
-- [ ] Surface recent core request/receipt failures without requiring users to inspect the control branch manually.
-- [ ] Add safe repair/reinstall behavior for damaged service definitions and runtime copies.
-- [ ] Add upgrade-path tests from older Do Again releases.
+## P1 diagnostics and recovery
 
-## P2 — broader integration
+- [x] Repository-aware doctor
+- [x] Conservative doctor --fix
+- [x] history
+- [x] trace <request-id>
+- [x] logs --follow
+- [x] Safe pre-execution cancellation
+- [x] Fresh-ID retry for terminal failed or blocked requests
+- [x] Explicit refusal to auto-retry ambiguous replay
+- [x] Browser delivery status and pending-receipt count
+- [x] End-to-end verify command proving ChatGPT -> Git -> local -> receipt
+- [ ] Explicit safe service-runtime reinstall/repair command distinct from doctor --fix
+- [ ] Upgrade-path tests from older releases
 
-- [ ] Pluggable transports beyond Git-backed control branches.
-- [ ] More end-to-end service tests on real Linux and Windows hosts, not only CI-level mocks/contracts.
-- [ ] Stable machine-readable CLI output for external agent integrations.
-- [ ] Signed release/install verification guidance.
+## P1 cleanup and conversation lifecycle
 
-## 0.3.0 release validation
+- [x] Durable owned-chat registry
+- [x] Global exclusion of all active bound project chats
+- [x] Dry-run cleanup inventory
+- [x] Historical verification requiring bootstrap markers plus receipt evidence
+- [x] Idempotent archive queue
+- [x] Active, unowned, duplicate, and archive-failure tests
+- [x] Automatic archive attempt after verified rollover
+- [ ] Live disposable-chat integration coverage for archive UI
 
-- [x] Unit and regression tests for shared startup, stale PID/port protection, auth recovery, rollover, and durable delivery.
-- [x] Real macOS Chrome smoke tests with disposable profiles, persistence, forced crash recovery, and background launch.
-- [x] Clean wheel, sdist, and npm installation verification.
-- [x] Browser hardening tests executed through a real Do Again request/receipt loop.
-- [x] Real Chrome smoke tests pass in Linux and Windows CI.
-- [x] Authenticated ChatGPT message/response succeeds after human verification and runtime restart (macOS background fallback).
-- [x] Publish 0.3.0 through Trusted Publishing after validation passes.
+## P1 resilience and measurement
+
+- [x] Request fingerprint/replay regression coverage
+- [x] Concurrent-agent claim coverage
+- [x] Browser crash/auth/delivery recovery coverage
+- [x] Partial rollover and archive-retry coverage
+- [x] Measured isolated local-agent soak benchmark
+- [x] Duplicate-delivery and restart-replay soak assertions
+- [ ] Longer unattended soak runs in CI
+- [ ] End-to-end latency instrumentation split by Git transport, local execution, browser delivery, and ChatGPT response
+- [ ] Controlled fault injection for Git push/rebase, browser, and network failures
+
+## P2 broader integration
+
+- [ ] Pluggable transports beyond Git-backed control branches
+- [ ] More real-host Linux and Windows lifecycle tests
+- [ ] Stable versioned machine-readable CLI output
+- [ ] Signed release/install verification guidance
+- [ ] Optional structured metrics export
+
+## Merge baseline
+
+Before merging major reliability work:
+
+- full unit/regression suite green;
+- browser-hardening suites green;
+- isolated local-agent soak green;
+- branch clean;
+- development branch pushed;
+- pull request CI green;
+- active installed runtime not self-overwritten during self-dogfood development.

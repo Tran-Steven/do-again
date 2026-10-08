@@ -1,201 +1,295 @@
 # Do Again
 
-[![CI](https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/do-again.svg?cacheSeconds=300)](https://pypi.org/project/do-again/)
-[![npm](https://img.shields.io/npm/v/do-again.svg?cacheSeconds=300)](https://www.npmjs.com/package/do-again)
-[![Python](https://img.shields.io/pypi/pyversions/do-again.svg?cacheSeconds=300)](https://pypi.org/project/do-again/)
-[![License](https://img.shields.io/github/license/Tran-Steven/do-again.svg?cacheSeconds=300)](LICENSE)
+Do Again is a developer-alpha local execution bridge for AI coding workflows. An agent writes a scoped request to a dedicated Git control branch, a local policy-controlled runner executes it, and a durable receipt comes back through Git. Optional browser automation connects that loop to a dedicated ChatGPT conversation without embedding an inference API key in the project.
 
-Do Again gives AI coding agents a policy-controlled way to execute work on a local development machine, return auditable receipts and artifacts, and keep iterating when another pass is needed.
+## Architecture
 
-## How it works
-
-```text
-agent
-  |
-  | request
-  v
+~~~text
+ChatGPT / coding agent
+        |
+        | scoped request JSON
+        v
 operator-control branch
-  |
+        |
+        v
+local Do Again agent
+  | validate policy / TTL / fingerprint
+  | acquire durable claim
+  | write local started ledger
+  | execute local operation
   v
-Do Again -> policy validation -> local command / file / test / git action
-  ^                                         |
-  |                                         |
-  +----------- receipt / artifact -----------+
-```
+durable receipt + local ledger
+        |
+        +--> Git control branch
+        +--> project ChatGPT conversation (optional)
+~~~
 
-The agent can inspect the result, decide what still needs work, and submit another scoped action instead of stopping at the first attempt.
+The Git control branch is the source of truth for requests and receipts. Local ledgers and Git-backed claims provide exact-once and replay protection. The browser layer is optional and does not replace Git transport.
 
 ## Install
 
-### Python / PyPI
-
-```bash
+~~~bash
 pip install do-again
-```
+~~~
 
-### Node / npm
+or:
 
-```bash
+~~~bash
 npm install -g do-again
-```
+~~~
 
-or run it without a global install:
+The npm launcher requires Node.js 18+ and Python 3.11+.
 
-```bash
-npx do-again setup
-```
+## Setup and verification
 
-Both distributions expose the same command:
+From the target repository:
 
-```bash
-do-again
-```
-
-The npm package ships the same Python runtime from this repository behind a small Node launcher. It requires Node.js 18+ and Python 3.11+.
-
-## Quick start
-
-From the Git repository you want an agent to work on:
-
-```bash
-pip install do-again
-cd my-project
+~~~bash
 do-again setup
-do-again start
-do-again status
-```
+~~~
 
-On the first browser-enabled setup, Do Again creates a dedicated automation Chrome/Chromium profile and opens it visibly so you can sign into ChatGPT and complete any human verification. Do Again watches for the real composer and continues automatically when sign-in is complete; you do not need to return to the terminal and confirm it. Do Again does not ask for or store your ChatGPT username or password.
+Browser-enabled setup uses a dedicated Chrome or Chromium profile. On first use it may open visibly so you can sign into ChatGPT and complete human verification. Do Again does not request or store ChatGPT credentials.
 
-After that one-time authentication step, setup automatically:
+Setup configures the project, control branch, policy, project automation chat, and optionally the background service. Configuration is intentionally separate from end-to-end readiness.
 
-- verifies the real ChatGPT composer through CDP;
-- tests the saved session with Chrome's current `--headless=new` mode;
-- uses true headless mode when it is reliable, otherwise falls back to a real background Chrome instance;
-- creates and binds a dedicated automation conversation for the project;
-- creates the Git control branch and project policy;
-- installs the native user-level background service; and
-- verifies the local runtime.
+Run:
 
-Normal use is intentionally small:
+~~~bash
+do-again verify
+~~~
 
-```bash
+A successful verification prints SETUP_OK and verification=end_to_end only after a unique read-only request has traveled through the real ChatGPT -> Git -> local agent -> receipt loop.
+
+## Normal operation
+
+~~~bash
 do-again start
 do-again status
 do-again stop
 do-again list
-```
+~~~
 
-`setup` already starts the project, so `start` is mainly for bringing it back later. Multiple projects can run at the same time; they share one dedicated authenticated browser runtime while keeping separate project conversations, service state, control worktrees, policies, and receipt queues.
+Attended mode without a background service:
 
-If you do not want ChatGPT browser automation for a project:
-
-```bash
-do-again setup --no-browser
-```
-
-For attended use without installing a native background service:
-
-```bash
+~~~bash
 do-again setup --no-service
 do-again run
-```
+~~~
+
+Git/local mode without ChatGPT browser delivery:
+
+~~~bash
+do-again setup --no-browser
+~~~
+
+## Request and receipt safety
+
+Requests live under automation/do_again/requests/<request-id>.json and receipts under automation/do_again/receipts/<request-id>.json.
+
+Core invariants:
+
+- request IDs are fingerprinted against their content;
+- changed content under a reused request ID is a conflict;
+- Git-backed claims prevent two agents from both executing one request;
+- a durable local started ledger is written before execution;
+- ambiguous started state is never silently replayed;
+- ambiguous replay becomes blocked_ambiguous_replay;
+- terminal receipts can be republished from the local ledger without re-execution.
+
+### Operator acknowledgement and goal progress
+
+Requests may include continuation metadata with acknowledged_receipts, goal_state, optional goal_id, and summary. Acknowledged receipt IDs must already exist durably.
+
+This deliberately separates three states:
+
+1. the browser delivered a receipt to ChatGPT;
+2. the operator acknowledged that receipt;
+3. the overall development goal is in_progress, completed, or blocked.
+
+A sent browser message is therefore not treated as proof that a task is complete.
+
+## Diagnostics
+
+Recent history:
+
+~~~bash
+do-again history
+do-again history --limit 50
+~~~
+
+Trace one request across request, claim, local ledger, receipt, and conflicts:
+
+~~~bash
+do-again trace <request-id>
+~~~
+
+Read or follow service logs:
+
+~~~bash
+do-again logs
+do-again logs --stream stderr
+do-again logs --follow
+~~~
+
+Repository-aware health checks:
+
+~~~bash
+do-again doctor
+do-again doctor --fix
+~~~
+
+doctor --fix is conservative. It may repair deterministic local state such as missing runtime directories or a missing clean control worktree. It does not silently reinstall or restart services, overwrite the copied runtime, switch browser modes, or bypass ChatGPT authentication.
+
+## Safe cancel and retry
+
+Cancel:
+
+~~~bash
+do-again cancel <request-id>
+~~~
+
+Cancellation is allowed only while the request is demonstrably unclaimed, not started, and non-terminal. A durable cancellation tombstone is written before execution. Once a claim, started ledger, or receipt exists, cancellation refuses rather than pretending an in-flight mutation was stopped.
+
+Retry:
+
+~~~bash
+do-again retry <request-id>
+~~~
+
+Retry always creates a fresh request ID, refreshes timestamps, preserves operation arguments and expectations, and links the new request to the prior terminal receipt.
+
+Successful requests are not retryable. blocked_ambiguous_replay is not auto-retried; inspect it with trace and create a newly scoped request after determining whether the original mutation may have executed.
 
 ## Browser runtime
 
-The browser is an implementation detail during normal operation. Do Again never attaches to your everyday Chrome/Chromium profile and does not touch your normal tabs, cookies, extensions, Firefox session, or browser history.
+Do Again uses a dedicated automation profile rather than the user's normal Chrome profile. CDP is loopback-only.
 
-The shared automation profile lives under `~/.do_again/browser/profile` by default. CDP listens only on loopback, and Do Again chooses another local port if its preferred port is occupied.
+Default browser mode is auto:
 
-The default browser mode is `auto`:
+1. initial authentication may be visible;
+2. the saved profile is tested in modern Chromium headless mode;
+3. if that authenticated session is unreliable headless, Do Again falls back to a real background browser process;
+4. later operation reuses the verified mode without normal foreground interaction.
 
-1. first authentication is visible and interactive;
-2. Do Again restarts the same persistent profile with `--headless=new`;
-3. if the authenticated ChatGPT session is not reliable in true headless mode, it automatically falls back to a real Chrome process running without a startup window;
-4. later starts reuse the verified mode without opening a foreground window.
+Useful controls:
 
-The daemon monitors the browser and restarts it after crashes. Browser delivery uses a durable per-project outbox, so a receipt is retried after browser/network failures instead of being lost. Receipt markers make retries idempotent. If ChatGPT reports that a conversation reached its maximum length, Do Again creates a fresh background conversation, carries over recent conversation excerpts, bootstraps it from the Git control state, rebinds the project, and continues there.
-
-If headless authentication fails, Do Again first checks the background browser with the same profile. If both modes fail, Do Again reports `auth_required` and waits for interactive setup. It does not repeatedly launch browsers or bypass verification. Local request execution continues, and browser receipts stay queued. Re-run `do-again setup` to reopen only the dedicated automation profile for human interaction.
-
-Advanced/debug controls remain available when needed:
-
-```bash
+~~~bash
 do-again browser status
 do-again browser test
 do-again browser login
 do-again browser stop
-```
+~~~
 
-You can force a browser mode during setup with `--browser-mode headless` or `--browser-mode background`; `auto` is recommended.
+Browser receipt delivery uses a durable outbox. Failed sends remain queued instead of losing the local receipt.
+
+## Transactional conversation rollover
+
+Do Again can proactively move a project to a fresh ChatGPT conversation before excessive conversation length, while retaining ChatGPT's explicit context-limit warning as a hard fallback.
+
+Rollover sequence:
+
+1. build a durable checkpoint grounded in Git branch and HEAD, request IDs, receipt states, and receipt hashes;
+2. create a unique handoff token;
+3. create a background successor chat;
+4. send a bounded checkpoint transfer view that includes the durable checkpoint path;
+5. require the exact response DO_AGAIN_HANDOFF_READY <token>;
+6. record the successor as owned;
+7. update the active project binding only after acknowledgement;
+8. queue the predecessor for archival only after the new binding is durable.
+
+If successor creation or acknowledgement fails, the predecessor remains active. Archive failure does not undo a successful handoff; it becomes retryable cleanup state.
+
+## Safe chat cleanup
+
+Do Again never deletes conversations.
+
+Automatic archival requires strong ownership provenance:
+
+- the chat was created by Do Again and is recorded in the project's durable owned-chat registry; or
+- a historical chat is independently verified by original Do Again bootstrap markers and corroborating local request/receipt evidence.
+
+Every currently bound project chat is globally excluded from archival.
+
+~~~bash
+do-again chats discover
+do-again chats verify --candidate <conversation-id>
+do-again chats cleanup
+do-again chats cleanup --apply
+do-again chats status
+do-again chats run
+~~~
+
+Cleanup is dry-run by default. Archival retries are idempotent. Unowned or active chats are blocked before archive UI interaction.
 
 ## Service lifecycle
 
-Do Again installs a per-repository background agent using the native user-level service manager:
+Do Again uses launchd on macOS, a systemd user service on Linux, and Task Scheduler on Windows.
 
-```bash
+~~~bash
 do-again start
-do-again status
 do-again restart
 do-again stop
-```
+~~~
 
-Low-level `install`, `uninstall`, `init`, and foreground `run` commands remain available for advanced use and backward compatibility, but they are intentionally omitted from the primary help surface.
+Each project gets an isolated runtime, control worktree, state directory, policy copy, and service label under ~/.do_again. The background service runs from a copied runtime so it remains stable after the invoking shell exits.
 
-Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under `~/.do_again`. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits. `do-again init` also creates `do-again-policy.json` for project-specific operation, binary, root, timeout, and execution controls. The control branch must be dedicated and cannot be `main`, `master`, `trunk`, or the currently checked-out branch.
+## Security model
 
-## Why Do Again
+Do Again is built around explicit operation, binary, and path policy; dedicated control-branch validation; bounded TTLs; request fingerprints; local exact-once ledgers; Git-backed distributed claims; project-scoped runtime state; a dedicated browser profile; localhost-only CDP; no stored ChatGPT credentials; no automatic replay of ambiguous mutations; and no archival without verified ownership provenance.
 
-- Explicit policy-based command permissions
-- GitHub-backed request and receipt transport
-- Project-scoped filesystem and command access
-- Deterministic audit trail and recovery
-- No agent API keys embedded in the project
-- Dedicated ChatGPT browser profile with headless-first operation
-- Durable retry/recovery when the browser crashes or a send fails
-- One shared browser runtime for multiple concurrent projects
-- A shared platform interface for macOS, Linux, and Windows
-- CI-tested on Python 3.11, 3.12, and 3.13 across all three platforms
+It should not be configured as unrestricted shell access.
 
-## Platform status
+## Validation and resilience
 
-| Platform | Service backend | Browser runtime |
-| --- | --- | --- |
-| macOS | launchd | Chrome/Chromium CDP, headless-first |
-| Linux | systemd user service | Chrome/Chromium CDP, headless-first |
-| Windows | per-user Task Scheduler | Chrome/Chromium CDP, headless-first |
+Full unit and regression suite:
 
-Do Again is currently alpha software. The foreground runner, per-repository service lifecycle, browser discovery, persistent profile model, and CDP runtime are implemented behind the same interface on macOS, Linux, and Windows. Browser availability still depends on a compatible local Chrome/Chromium installation and ChatGPT authentication.
+~~~bash
+PYTHONPATH=src python -m unittest discover -s tests -v
+~~~
+
+Disposable browser smoke:
+
+~~~bash
+python tools/browser_smoke.py
+~~~
+
+Isolated local-agent soak benchmark:
+
+~~~bash
+PYTHONPATH=src python tools/agent_soak.py --requests 250
+~~~
+
+The soak benchmark measures local Agent.process_path processing only. It excludes Git remote, browser, ChatGPT, and network latency.
+
+A representative 250-request hardening run measured:
+
+~~~text
+requests:          250
+executions:        250
+duplicate replays: 250
+restart replays:   250
+exact once:        true
+
+median: 5.624 ms
+p95:   11.314 ms
+max:   19.860 ms
+~~~
+
+These are empirical local-machine measurements, not an end-to-end SLA.
 
 ## Development
 
-```bash
+~~~bash
 git clone https://github.com/Tran-Steven/do-again.git
 cd do-again
 python -m pip install .
-python -m unittest discover -s tests -v
+PYTHONPATH=src python -m unittest discover -s tests -v
 python tools/browser_smoke.py
+PYTHONPATH=src python tools/agent_soak.py --requests 250
 do-again doctor
-```
+~~~
 
-Disposable-profile smoke tests verify real Chrome CDP, profile persistence, and crash recovery without signing into ChatGPT. Authenticated ChatGPT round trips are a separate manual integration check; mocked tests cannot establish that a real session works in headless mode. Linux background Chrome requires a graphical session or virtual display.
-
-## Release model
-
-Releases use semantic versioning. Pushing a version tag validates the shared release version, publishes the Python distribution to PyPI and the Node launcher to npm through Trusted Publishing, and creates the matching GitHub Release.
-
-PyPI distribution name: `do-again`
-
-npm package name: `do-again`
-
-CLI command: `do-again`
-
-Python package: `do_again`
-
-## Security
-
-Do Again is designed around explicit allowlists, scoped filesystem roots, bounded execution, and auditable request/receipt records. Browser cookies and session data remain in the dedicated local automation profile; credentials are never requested or stored by Do Again, and CDP is bound to localhost. It should not be configured as unrestricted shell access.
+CI covers Python 3.11, 3.12, and 3.13 across Linux, macOS, and Windows, plus browser-smoke, npm-package, and artifact-install validation.
 
 ## License
 
