@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-hardening-compile-audit-20261007-71",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:44:50.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:14:50.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os, subprocess\nfrom pathlib import Path\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\ndef run(args, check=True, env=None):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check,env=env)\nprint(\"branch=\"+run([\"git\",\"branch\",\"--show-current\"]).stdout.strip())\nprint(\"head=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status:\")\nprint(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout)\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\nfor target in [\"src/do_again/browser/runtime.py\",\"tests/test_browser_hardening.py\"]:\n    proc=run([\"python3\",\"-m\",\"py_compile\",target],check=False,env=env)\n    print(f\"=== compile {target} rc={proc.returncode} ===\")\n    print(proc.stdout)\n    print(proc.stderr)\nprint(\"diffstat:\")\nprint(run([\"git\",\"diff\",\"--stat\"]).stdout)\nprint(\"runtime diff:\")\nprint(run([\"git\",\"diff\",\"--\",\"src/do_again/browser/runtime.py\"]).stdout[-12000:])\nprint(\"test diff:\")\nprint(run([\"git\",\"diff\",\"--\",\"tests/test_browser_hardening.py\"]).stdout[-12000:])\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
