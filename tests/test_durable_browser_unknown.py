@@ -30,6 +30,7 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
         st.enter_context(patch.object(browser, "project_record", return_value={"chat_url": "https://chatgpt.com/c/bound"}))
         st.enter_context(patch.object(browser, "_find_chatgpt_target", return_value=object()))
         contain = st.enter_context(patch.object(browser, "_page_contains", return_value=False))
+        st.enter_context(patch.object(browser, "_assistant_snapshot", return_value={"busy": True, "latest": ""}))
         notify = st.enter_context(patch.object(daemon, "notify_receipts", side_effect=BrowserSubmissionUncertain("unknown after click")))
         return contain, notify
 
@@ -142,6 +143,58 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
             daemon._drain_browser_outbox_locked(self.repo,self.state)
         self.assertTrue(a.exists())
         notify.assert_not_called()
+
+    def test_old_preparing_batch_sends_one_read_only_ack_and_never_replays_original(self):
+        original = self._enqueue("jobpipe-complete")
+        contain, notify = self._mocks()
+        with self.assertRaises(BrowserSubmissionUncertain):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        notify.assert_called_once()
+        snap={"busy":False,"latest":""}
+        with patch.object(browser,"_assistant_snapshot",return_value=snap), patch.object(
+            browser,"send_message",return_value={"response":"submitted"}
+        ) as ack_send:
+            with patch.object(daemon.time,"time",return_value=1400):
+                state=self._uncertain()
+                state["first_seen_epoch"]=1000
+                daemon.atomic_json(daemon._uncertain_delivery_path(self.state),state)
+                with self.assertRaises(BrowserSubmissionUncertain):
+                    daemon._drain_browser_outbox_locked(self.repo,self.state)
+                ack_send.assert_called_once()
+                prompt=ack_send.call_args.args[1]
+                self.assertIn("READ-ONLY DELIVERY RECONCILIATION",prompt)
+                self.assertIn("Do not repeat any",prompt)
+                token=self._uncertain()["ack_probe_token"]
+                self.assertIn(token,prompt)
+                with self.assertRaises(BrowserSubmissionUncertain):
+                    daemon._drain_browser_outbox_locked(self.repo,self.state)
+                ack_send.assert_called_once()
+                self.assertTrue(original.exists())
+                snap["latest"]=token
+                self.assertEqual(daemon._drain_browser_outbox_locked(self.repo,self.state),1)
+                self.assertFalse(original.exists())
+                self.assertFalse(daemon._uncertain_delivery_path(self.state).exists())
+                notify.assert_called_once()
+
+    def test_acknowledgment_timeout_survives_restart_without_resend(self):
+        self._enqueue("jobpipe-done")
+        _, notify=self._mocks()
+        with self.assertRaises(BrowserSubmissionUncertain):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        state=self._uncertain()
+        state["first_seen_epoch"]=1000
+        daemon.atomic_json(daemon._uncertain_delivery_path(self.state),state)
+        with patch.object(browser,"_assistant_snapshot",return_value={"busy":False,"latest":""}),patch.object(
+            browser,"send_message",side_effect=TimeoutError("CDP uncertain")
+        ) as send, patch.object(daemon.time,"time",return_value=1400):
+            with self.assertRaises(BrowserSubmissionUncertain):
+                daemon._drain_browser_outbox_locked(self.repo,self.state)
+            with self.assertRaises(BrowserSubmissionUncertain):
+                daemon._drain_browser_outbox_locked(self.repo,self.state)
+        send.assert_called_once()
+        notify.assert_called_once()
+        self.assertTrue(self._uncertain()["ack_probe_token"])
+        self.assertTrue((self.state/"incidents/browser-submission-unacknowledged.json").exists())
 
     def test_no_browser_message_cannot_clear_outbox(self):
         self._enqueue("req-1")

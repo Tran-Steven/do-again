@@ -275,6 +275,35 @@ def _handle_goal_lifecycle(
         return state, "stop"
 
     if goal_state == "waiting_for_execution":
+        # This lifecycle metadata lives in an old request. It cannot freeze
+        # the entire continuous project forever after its own receipt and
+        # later requests have completed. Check the actual Git-backed queue.
+        goal_request_id = str(goal.get("request_id") or "")
+        receipt_path = control / "automation/do_again/receipts" / (goal_request_id + ".json")
+        latest_receipt_id, latest_receipt_time, pending = _activity(control)
+        if pending:
+            if _pending_stale(control, time.time()):
+                state["state"] = "stalled_pending"
+                state = _report_stall(repo, config, state, reason="pending")
+                return state, "stop"
+            state["state"] = "waiting_for_execution"
+            return state, "wait"
+        if receipt_path.is_file():
+            completed_at = receipt_path.stat().st_mtime
+            if (latest_receipt_id != goal_request_id and latest_receipt_time > completed_at) or (
+                time.time() - completed_at >= config["recovery_seconds"]
+            ):
+                # No requests outstanding and the supposed execution has
+                # already finished. Resume normal idle-watchdog accounting.
+                state["stale_goal_superseded"] = goal_request_id
+                state["goal_state"] = "in_progress"
+                return state, None
+        else:
+            # An incoherent control snapshot is not authority to replay work.
+            state["state"] = "stalled_execution_handoff"
+            state["execution_error"] = "Waiting goal has no matching receipt or unfinished request"
+            state = _report_stall(repo, config, state, reason="pending")
+            return state, "stop"
         state["state"] = "waiting_for_execution"
         return state, "wait"
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
 import re
 import signal
 import time
@@ -116,6 +117,13 @@ def _read_uncertain_delivery(state_dir: Path) -> dict[str, Any]:
     return value
 
 
+def _acknowledge_uncertain_batch(state_dir: Path, paths: list[Path]) -> None:
+    for path in paths:
+        path.unlink(missing_ok=True)
+    _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
+    _record_browser_state(state_dir, "queued" if _pending_outbox(state_dir) else "ready")
+
+
 def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, Any]) -> int:
     """A possibly-sent message must never be automatically submitted twice."""
     ids = [str(x) for x in state["request_ids"]]
@@ -133,14 +141,57 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
     session = ensure_browser_running(verify_auth=True)
     target = browser_runtime._find_chatgpt_target(int(session["port"]), chat_url)
     if target is not None and browser_runtime._page_contains(target, str(state["batch_marker"])):
-        # Confirmed in the bound user's message DOM: remove only that exact
-        # batch's outbox files, leaving later work queued for normal delivery.
-        for p in paths:
-            p.unlink(missing_ok=True)
-        _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
-        _record_browser_state(state_dir, "queued" if _pending_outbox(state_dir) else "ready")
+        # Exact original user-message evidence; never resubmit it.
+        _acknowledge_uncertain_batch(state_dir, paths)
         return len(paths)
     age = time.time() - float(state.get("first_seen_epoch", time.time()))
+    ack_token = str(state.get("ack_probe_token") or "")
+    if ack_token:
+        # A separately named, read-only reconciliation probe is allowed once,
+        # even if the original receipt send was uncertain. Its only action is
+        # to ask the model to acknowledge the durable receipt, not execute.
+        if target is not None:
+            snapshot = browser_runtime._assistant_snapshot(target)
+            if str(snapshot.get("latest") or "").strip() == ack_token:
+                _acknowledge_uncertain_batch(state_dir, paths)
+                return len(paths)
+    elif age >= 300 and target is not None:
+        snapshot = browser_runtime._assistant_snapshot(target)
+        if not snapshot.get("busy"):
+            # Persist a *new* immutable acknowledgment intent before CDP.
+            # This is not a replay of the original task/receipt notification.
+            digest = hashlib.sha256(
+                (chat_url + str(state["batch_marker"]) + str(state.get("first_seen_epoch"))).encode("utf-8")
+            ).hexdigest()[:24]
+            ack_token = "DO_AGAIN_RECEIPT_ACK token=" + digest
+            state = dict(state)
+            state["ack_probe_token"] = ack_token
+            state["ack_probe_at"] = time.time()
+            state["ack_probe_phase"] = "uncertain"
+            atomic_json(_uncertain_delivery_path(state_dir), state)
+            prompt = (
+                "READ-ONLY DELIVERY RECONCILIATION. A previously attempted receipt "
+                "notification may or may not have been delivered. Do not repeat any "
+                "prior actions, create Do Again requests, submit job applications, "
+                "or modify files in this turn. Inspect the durable receipt(s) on "
+                "operator-control: " + ", ".join(ids) + ". "
+                "Acknowledge that you have checked their current terminal states "
+                "by replying with exactly " + ack_token + " and nothing else. "
+                "The daemon will then independently continue its existing goal."
+            )
+            try:
+                browser_runtime.send_message(target, prompt, wait_for_response=False)
+            except Exception as exc:
+                state["ack_probe_error"] = type(exc).__name__
+                atomic_json(_uncertain_delivery_path(state_dir), state)
+                raise BrowserSubmissionUncertain(
+                    "Read-only receipt reconciliation probe outcome is uncertain; never replay"
+                ) from exc
+            state["ack_probe_phase"] = "submitted_unverified"
+            atomic_json(_uncertain_delivery_path(state_dir), state)
+            raise BrowserSubmissionUncertain(
+                "Awaiting one-time read-only receipt acknowledgment, without original notification replay"
+            )
     if age >= 300:
         incident = state_dir / "incidents" / "browser-submission-unacknowledged.json"
         incident.parent.mkdir(parents=True, exist_ok=True)

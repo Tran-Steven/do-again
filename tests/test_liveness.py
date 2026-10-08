@@ -364,6 +364,46 @@ class CiGoalLifecycleTests(unittest.TestCase):
             self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"blocked")
         mocks[-1].assert_not_called()
 
+    def test_completed_waiting_goal_with_newer_receipt_resumes_continuous_watchdog(self):
+        self._request(state="waiting_for_execution")
+        goal_receipt=self.control/"automation/do_again/receipts/ci-wait-1.json"
+        os.utime(goal_receipt,(time.time()-3600,time.time()-3600))
+        (self.control/"automation/do_again/receipts/newer-done.json").write_text('{"request_id":"newer-done","state":"succeeded"}')
+        mocks=self._browser()
+        with patch.object(liveness.browser,"_assistant_snapshot",return_value={"busy":False}),patch.object(
+            liveness.browser,"_context_limit_warning",return_value=""
+        ):
+            self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_grace")
+        row=json.loads((self.state/"liveness.json").read_text())
+        self.assertEqual(row["state"],"idle_grace")
+        self.assertEqual(row["receipt_id"],"newer-done")
+        mocks[-1].assert_not_called()
+
+    def test_completed_waiting_goal_without_newer_receipt_unlocks_after_deadline(self):
+        self._request(state="waiting_for_execution")
+        path=self.control/"automation/do_again/receipts/ci-wait-1.json"
+        os.utime(path,(time.time()-3600,time.time()-3600))
+        value, action=liveness._handle_goal_lifecycle(
+            self.repo,self.control,self.state,{},liveness._settings(self.repo))
+        self.assertEqual(action,None)
+        self.assertEqual(value["goal_state"],"in_progress")
+
+    def test_waiting_goal_with_real_outstanding_execution_never_resumes(self):
+        self._request(state="waiting_for_execution")
+        (self.control/"automation/do_again/requests/pending.json").write_text("{}")
+        value,action=liveness._handle_goal_lifecycle(
+            self.repo,self.control,self.state,{},liveness._settings(self.repo))
+        self.assertEqual((value["state"],action),("waiting_for_execution","wait"))
+
+    def test_waiting_goal_with_no_matching_receipt_escalates_without_send(self):
+        self._request(state="waiting_for_execution")
+        (self.control/"automation/do_again/receipts/ci-wait-1.json").unlink()
+        request=self.control/"automation/do_again/requests/ci-wait-1.json"
+        os.utime(request,(time.time()-7500,time.time()-7500))
+        mocks=self._browser()
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"stalled_pending")
+        mocks[-1].assert_not_called()
+
     def test_paused_and_validated_complete_never_prompt(self):
         mocks=self._browser()
         for goal_state in ("paused","validated_complete"):
