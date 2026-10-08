@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:08:13.897686+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "0942c02a65779ec1f4cc732c73091f3dbaca8340212376cf2f453a7d0e92dd5d",
+  "request_id": "selfdev-rollover-foundation-failure-diff-20261007-35",
+  "schema_version": 1
+}
