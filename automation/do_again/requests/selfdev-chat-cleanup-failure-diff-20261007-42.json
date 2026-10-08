@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-chat-cleanup-failure-diff-20261007-42",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:14:30.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:44:30.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\ndef run(*args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\n\nprint(\"branch=\"+run(\"git\",\"branch\",\"--show-current\").strip())\nprint(\"head=\"+run(\"git\",\"rev-parse\",\"HEAD\").strip())\nprint(\"status:\")\nprint(run(\"git\",\"status\",\"--porcelain=v1\"))\nprint(\"cli test excerpt:\")\nlines=(wt/\"tests/test_cli.py\").read_text().splitlines()\nfor i,line in enumerate(lines,1):\n    if \"test_chats_cleanup_is_dry_run_by_default\" in line:\n        for n in range(i, min(i+28,len(lines))+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n        break\nprint(\"diffstat:\")\nprint(run(\"git\",\"diff\",\"--stat\"))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
