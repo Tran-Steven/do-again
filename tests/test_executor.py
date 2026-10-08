@@ -255,7 +255,7 @@ class ExecutorTests(unittest.TestCase):
             state_dir=self.root / "reuse-state",
         )
         conflicts = []
-        agent.publish_conflict = lambda **kwargs: conflicts.append(kwargs)
+        agent.publish_conflict = lambda **kwargs: (conflicts.append(kwargs) or True)
         self.assertTrue(agent.process_path(request_path))
         self.assertEqual(len(conflicts), 1)
         self.assertEqual(conflicts[0]["existing_fingerprint"], "different")
@@ -289,7 +289,7 @@ class ExecutorTests(unittest.TestCase):
             },
         )
         conflicts = []
-        agent.publish_conflict = lambda **kwargs: conflicts.append(kwargs)
+        agent.publish_conflict = lambda **kwargs: (conflicts.append(kwargs) or True)
         self.assertTrue(agent.process_path(request_path))
         self.assertEqual(len(conflicts), 1)
 

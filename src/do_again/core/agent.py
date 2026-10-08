@@ -281,12 +281,38 @@ class Agent:
         request: dict[str, Any],
         reason: str,
         existing_fingerprint: str | None,
-    ) -> None:
+    ) -> bool:
+        """Publish one conflict per distinct cause, not once per polling tick."""
         fingerprint = request_fingerprint(request)
+        request_id = str(request.get("request_id") or "")
+        relative = self.conflict_relative(request_id, fingerprint)
+        old = self.control_worktree / relative
+
+        def same_published_conflict() -> bool:
+            try:
+                existing = read_json(old) if old.is_file() else None
+            except (OSError, json.JSONDecodeError):
+                return False
+            return (
+                isinstance(existing, dict)
+                and existing.get("request_fingerprint") == fingerprint
+                and existing.get("existing_fingerprint") == existing_fingerprint
+                and existing.get("reason") == reason
+            )
+
+        # The common case must be a local no-op: 100+ polling passes must
+        # not perform repeated remote requests or generate Git commits.
+        if same_published_conflict():
+            return False
+        # Fetch authoritative control state once when a conflict is first
+        # encountered or its root fingerprint/reason changed.
+        self.sync()
+        if same_published_conflict():
+            return False
         payload = {
             "schema_version": 1,
             "state": "blocked_request_id_reuse",
-            "request_id": request.get("request_id"),
+            "request_id": request_id,
             "request_fingerprint": fingerprint,
             "existing_fingerprint": existing_fingerprint,
             "reason": reason,
@@ -294,10 +320,20 @@ class Agent:
             "agent_instance_id": self.instance_id,
         }
         self.publish_json(
-            self.conflict_relative(str(request.get("request_id")), fingerprint),
-            payload,
-            f"Do Again conflict {request.get('request_id')}",
+            relative, payload,
+            f"Do Again conflict {request_id}",
         )
+        atomic_json(
+            self.state_dir / "stale_request_blocked.json",
+            {
+                "request_id": request_id,
+                "request_fingerprint": fingerprint,
+                "existing_fingerprint": existing_fingerprint,
+                "reason": reason,
+                "recorded_at_utc": payload["observed_at_utc"],
+            },
+        )
+        return True
 
     def invalid_relative(self, path: Path) -> Path:
         return Path(f"automation/do_again/invalid/{path.name}.json")
@@ -575,12 +611,11 @@ class Agent:
             )
             if self._request_matches_fingerprint(raw, existing_fingerprint):
                 return False
-            self.publish_conflict(
+            return self.publish_conflict(
                 request=raw,
                 reason="request_id already has a receipt for different request content",
                 existing_fingerprint=existing_fingerprint or None,
             )
-            return True
 
         if not self.acquire_request_lock(request_id):
             return False
@@ -593,12 +628,11 @@ class Agent:
                 )
                 if self._request_matches_fingerprint(raw, existing_fingerprint):
                     return False
-                self.publish_conflict(
+                return self.publish_conflict(
                     request=raw,
                     reason="request_id already has a receipt for different request content",
                     existing_fingerprint=existing_fingerprint or None,
                 )
-                return True
 
             ledger = self.local_ledger(request_id)
             if ledger:
@@ -606,12 +640,11 @@ class Agent:
                     ledger.get("request_fingerprint") or ""
                 )
                 if ledger_fingerprint and not self._request_matches_fingerprint(raw, ledger_fingerprint):
-                    self.publish_conflict(
+                    return self.publish_conflict(
                         request=raw,
                         reason="request_id conflicts with durable local ledger content",
                         existing_fingerprint=ledger_fingerprint,
                     )
-                    return True
 
                 ledger_state = ledger.get("state")
                 stored_receipt = ledger.get("receipt")
