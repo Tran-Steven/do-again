@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import shutil
@@ -33,6 +34,7 @@ from .browser import (
 from .browser import cdp
 from .platforms.detect import detect_platform
 from .browser.runtime import send_message, use_background_fallback
+from .core.schema import REQUEST_ID_RE, request_fingerprint
 from .service.runtime import (
     ServiceError,
     _default_policy,
@@ -556,6 +558,163 @@ def show_logs(
 
 
 
+
+def _git_control(layout, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(layout.control_worktree), *args],
+        text=True,
+        capture_output=True,
+    )
+
+
+def _sync_control(layout) -> None:
+    dirty = _git_control(layout, "status", "--porcelain")
+    if dirty.returncode != 0:
+        raise ServiceError((dirty.stderr or dirty.stdout).strip())
+    if dirty.stdout.strip():
+        raise ServiceError("operator control worktree is dirty")
+    fetch = _git_control(layout, "fetch", "--quiet", layout.remote, layout.branch)
+    if fetch.returncode != 0:
+        raise ServiceError((fetch.stderr or fetch.stdout).strip())
+    rebase = _git_control(layout, "rebase", "FETCH_HEAD")
+    if rebase.returncode != 0:
+        raise ServiceError((rebase.stderr or rebase.stdout).strip())
+
+
+def _publish_control_json(layout, relative: str, value: dict[str, object], message: str) -> None:
+    _sync_control(layout)
+    target = layout.control_worktree / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    add = _git_control(layout, "add", relative)
+    if add.returncode != 0:
+        raise ServiceError((add.stderr or add.stdout).strip())
+    commit = _git_control(layout, "commit", "-m", message)
+    if commit.returncode != 0:
+        raise ServiceError((commit.stderr or commit.stdout).strip())
+    push = _git_control(layout, "push", layout.remote, f"HEAD:{layout.branch}")
+    if push.returncode != 0:
+        raise ServiceError((push.stderr or push.stdout).strip())
+
+
+def cancel_request(request_id: str, path: str = ".", *, reason: str | None = None) -> int:
+    try:
+        if not REQUEST_ID_RE.fullmatch(request_id):
+            raise ServiceError("invalid request id")
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        _sync_control(layout)
+        base = layout.control_worktree / "automation/do_again"
+        request = _read_json_if_file(base / "requests" / f"{request_id}.json")
+        if request is None:
+            raise ServiceError(f"unknown request id: {request_id}")
+        receipt = _read_json_if_file(base / "receipts" / f"{request_id}.json")
+        claim = _read_json_if_file(base / "claims" / f"{request_id}.json")
+        ledger = _read_json_if_file(layout.state_dir / "ledger" / f"{request_id}.json")
+        if receipt is not None:
+            raise ServiceError("request is already terminal and cannot be cancelled")
+        if claim is not None:
+            raise ServiceError("request is already claimed and cannot be safely cancelled")
+        if isinstance(ledger, dict) and ledger.get("state") in {"started", "terminal"}:
+            raise ServiceError(
+                "request has local execution state and cannot be safely cancelled"
+            )
+        existing = _read_json_if_file(base / "cancellations" / f"{request_id}.json")
+        if existing is not None:
+            print(json.dumps(existing, indent=2, sort_keys=True))
+            return 0
+        payload = {
+            "schema_version": 1,
+            "request_id": request_id,
+            "request_fingerprint": request_fingerprint(request),
+            "state": "cancelled_before_execution",
+            "reason": reason or "cancelled by operator",
+            "cancelled_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
+        _publish_control_json(
+            layout,
+            f"automation/do_again/cancellations/{request_id}.json",
+            payload,
+            f"Do Again cancel {request_id}",
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    except ServiceError as exc:
+        print(f"do-again: cancel: {exc}", file=sys.stderr)
+        return 1
+
+
+def retry_request(request_id: str, path: str = ".") -> int:
+    try:
+        if not REQUEST_ID_RE.fullmatch(request_id):
+            raise ServiceError("invalid request id")
+        repo = find_repo(path)
+        layout = runtime_layout(repo)
+        _sync_control(layout)
+        base = layout.control_worktree / "automation/do_again"
+        request = _read_json_if_file(base / "requests" / f"{request_id}.json")
+        if request is None:
+            raise ServiceError(f"unknown request id: {request_id}")
+        receipt = _read_json_if_file(base / "receipts" / f"{request_id}.json")
+        ledger = _read_json_if_file(layout.state_dir / "ledger" / f"{request_id}.json")
+        if receipt is None:
+            raise ServiceError("request is not terminal; use trace before deciding to retry")
+        state = str(receipt.get("state") or "")
+        if state == "succeeded":
+            raise ServiceError("successful requests are not retryable")
+        if state == "blocked_ambiguous_replay":
+            raise ServiceError(
+                "ambiguous replay requires a fresh manually scoped request after inspection"
+            )
+        if isinstance(ledger, dict) and ledger.get("state") != "terminal":
+            raise ServiceError("local ledger is not terminal; refusing retry")
+
+        issued = datetime.now(timezone.utc)
+        old_issued = request.get("issued_at_utc")
+        old_expires = request.get("expires_at_utc")
+        ttl = timedelta(minutes=10)
+        try:
+            oi = datetime.fromisoformat(str(old_issued).replace("Z", "+00:00"))
+            oe = datetime.fromisoformat(str(old_expires).replace("Z", "+00:00"))
+            candidate = oe - oi
+            if timedelta(seconds=1) < candidate <= timedelta(hours=24):
+                ttl = candidate
+        except Exception:
+            pass
+        new_id = f"retry-{uuid.uuid4().hex[:16]}"
+        clone = dict(request)
+        clone["request_id"] = new_id
+        clone["issued_at_utc"] = issued.isoformat()
+        clone["expires_at_utc"] = (issued + ttl).isoformat()
+        continuation = dict(clone.get("continuation") or {})
+        acked = list(continuation.get("acknowledged_receipts") or [])
+        if request_id not in acked:
+            acked.append(request_id)
+        continuation["acknowledged_receipts"] = acked
+        continuation["goal_state"] = "in_progress"
+        summary = str(continuation.get("summary") or "").strip()
+        linkage = f"Retry of {request_id} after terminal state {state}."
+        continuation["summary"] = (summary + " " + linkage).strip()[:2000]
+        clone["continuation"] = continuation
+
+        _publish_control_json(
+            layout,
+            f"automation/do_again/requests/{new_id}.json",
+            clone,
+            f"Do Again retry {request_id} as {new_id}",
+        )
+        print(json.dumps({
+            "original_request_id": request_id,
+            "new_request_id": new_id,
+            "previous_state": state,
+            "request": clone,
+        }, indent=2, sort_keys=True))
+        return 0
+    except ServiceError as exc:
+        print(f"do-again: retry: {exc}", file=sys.stderr)
+        return 1
+
+
 def _service_action(action: str, path: str) -> int:
     try:
         repo = find_repo(path)
@@ -731,7 +890,7 @@ def main() -> int:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{setup,verify,start,status,history,trace,logs,stop,restart,list,doctor,browser}",
+        metavar="{setup,verify,start,status,history,trace,logs,cancel,retry,stop,restart,list,doctor,browser}",
     )
 
     sub.add_parser("doctor", help="Check runtime prerequisites")
@@ -789,6 +948,17 @@ def main() -> int:
     logs_parser.add_argument(
         "--stream", choices=("stdout", "stderr", "both"), default="both"
     )
+    cancel_parser = sub.add_parser(
+        "cancel", help="Cancel a request only if it is still demonstrably unclaimed"
+    )
+    cancel_parser.add_argument("request_id")
+    cancel_parser.add_argument("path", nargs="?", default=".")
+    cancel_parser.add_argument("--reason")
+    retry_parser = sub.add_parser(
+        "retry", help="Clone a terminal failed/blocked request into a fresh request ID"
+    )
+    retry_parser.add_argument("request_id")
+    retry_parser.add_argument("path", nargs="?", default=".")
 
     init_parser = sub.add_parser("init")
     init_parser.add_argument("path", nargs="?", default=".")
@@ -894,6 +1064,10 @@ def main() -> int:
             lines=args.lines,
             stream=args.stream,
         )
+    if args.command == "cancel":
+        return cancel_request(args.request_id, args.path, reason=args.reason)
+    if args.command == "retry":
+        return retry_request(args.request_id, args.path)
     if args.command == "list":
         return list_projects()
     if args.command == "init":

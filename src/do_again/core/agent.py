@@ -62,6 +62,7 @@ class Agent:
         self.invalid_dir = self.control_worktree / "automation/do_again/invalid"
         self.conflicts_dir = self.control_worktree / "automation/do_again/conflicts"
         self.claims_dir = self.control_worktree / "automation/do_again/claims"
+        self.cancellations_dir = self.control_worktree / "automation/do_again/cancellations"
         self.ledger_dir = self.state_dir / "ledger"
         self.locks_dir = self.state_dir / "locks"
         self.stop_requested = False
@@ -182,6 +183,19 @@ class Agent:
 
     def claim_payload(self, request_id: str) -> dict[str, Any] | None:
         path = self.control_worktree / self.claim_relative(request_id)
+        if not path.is_file():
+            return None
+        try:
+            value = read_json(path)
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def cancellation_relative(self, request_id: str) -> Path:
+        return Path(f"automation/do_again/cancellations/{request_id}.json")
+
+    def cancellation_payload(self, request_id: str) -> dict[str, Any] | None:
+        path = self.control_worktree / self.cancellation_relative(request_id)
         if not path.is_file():
             return None
         try:
@@ -629,6 +643,26 @@ class Agent:
                     self.notify_receipt(receipt)
                     return True
 
+            cancellation = self.cancellation_payload(request_id)
+            if cancellation is not None:
+                receipt = self.make_receipt(
+                    request=raw,
+                    state="cancelled",
+                    started_at=str(cancellation.get("cancelled_at_utc") or utc_now().isoformat()),
+                    error=str(cancellation.get("reason") or "cancelled before execution"),
+                )
+                self.write_ledger(
+                    request_id,
+                    {
+                        "state": "terminal",
+                        "request_fingerprint": fingerprint,
+                        "receipt": receipt,
+                    },
+                )
+                self.publish_receipt(receipt)
+                self.notify_receipt(receipt)
+                return True
+
             if not self.acquire_remote_claim(raw):
                 return False
 
@@ -719,6 +753,7 @@ class Agent:
         self.invalid_dir.mkdir(parents=True, exist_ok=True)
         self.conflicts_dir.mkdir(parents=True, exist_ok=True)
         self.claims_dir.mkdir(parents=True, exist_ok=True)
+        self.cancellations_dir.mkdir(parents=True, exist_ok=True)
         values = []
         far_future = datetime.max.replace(tzinfo=timezone.utc)
         for path in self.requests_dir.glob("*.json"):

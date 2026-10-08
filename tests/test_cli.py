@@ -12,7 +12,9 @@ from unittest.mock import patch
 from do_again.cli import (
     list_projects,
     main,
+    cancel_request,
     request_history,
+    retry_request,
     setup_project,
     show_logs,
     trace_request,
@@ -304,6 +306,73 @@ class CliOnboardingTests(unittest.TestCase):
             self.assertNotIn("\none\n", rendered)
             self.assertIn("two", rendered)
             self.assertIn("three", rendered)
+
+
+    def test_cancel_refuses_claimed_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            base = layout.control_worktree / "automation/do_again"
+            (base / "requests").mkdir(parents=True, exist_ok=True)
+            (base / "claims").mkdir(parents=True, exist_ok=True)
+            request = {
+                "schema_version": 1,
+                "request_id": "req-claimed-1234",
+                "operation": "status",
+                "issued_at_utc": "2026-10-08T00:00:00+00:00",
+                "expires_at_utc": "2026-10-08T00:10:00+00:00",
+                "args": {}, "expected": {}, "limits": {},
+            }
+            (base / "requests/req-claimed-1234.json").write_text(json.dumps(request), encoding="utf-8")
+            (base / "claims/req-claimed-1234.json").write_text(json.dumps({"request_id":"req-claimed-1234"}), encoding="utf-8")
+            with patch("do_again.cli._sync_control"):
+                rc = cancel_request("req-claimed-1234", str(repo))
+            self.assertEqual(rc, 1)
+            self.assertFalse((base / "cancellations/req-claimed-1234.json").exists())
+
+    def test_retry_uses_fresh_id_and_links_original(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            base = layout.control_worktree / "automation/do_again"
+            (base / "requests").mkdir(parents=True, exist_ok=True)
+            (base / "receipts").mkdir(parents=True, exist_ok=True)
+            layout.state_dir.joinpath("ledger").mkdir(parents=True, exist_ok=True)
+            request = {
+                "schema_version": 1,
+                "request_id": "req-failed-1234",
+                "operation": "status",
+                "issued_at_utc": "2026-10-08T00:00:00+00:00",
+                "expires_at_utc": "2026-10-08T00:10:00+00:00",
+                "args": {}, "expected": {}, "limits": {},
+            }
+            (base / "requests/req-failed-1234.json").write_text(json.dumps(request), encoding="utf-8")
+            (base / "receipts/req-failed-1234.json").write_text(json.dumps({"request_id":"req-failed-1234","state":"failed"}), encoding="utf-8")
+            (layout.state_dir / "ledger/req-failed-1234.json").write_text(json.dumps({"state":"terminal"}), encoding="utf-8")
+            captured = {}
+            def publish(layout_arg, relative, value, message):
+                captured.update(relative=relative, value=value, message=message)
+            with patch("do_again.cli._sync_control"), patch("do_again.cli._publish_control_json", side_effect=publish):
+                rc = retry_request("req-failed-1234", str(repo))
+            self.assertEqual(rc, 0)
+            clone = captured["value"]
+            self.assertNotEqual(clone["request_id"], "req-failed-1234")
+            self.assertIn("req-failed-1234", clone["continuation"]["acknowledged_receipts"])
+            self.assertEqual(clone["continuation"]["goal_state"], "in_progress")
+
+    def test_retry_refuses_ambiguous_replay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            layout = runtime_layout(repo)
+            base = layout.control_worktree / "automation/do_again"
+            (base / "requests").mkdir(parents=True, exist_ok=True)
+            (base / "receipts").mkdir(parents=True, exist_ok=True)
+            request = {"request_id":"req-ambiguous-1234","operation":"status"}
+            (base / "requests/req-ambiguous-1234.json").write_text(json.dumps(request), encoding="utf-8")
+            (base / "receipts/req-ambiguous-1234.json").write_text(json.dumps({"request_id":"req-ambiguous-1234","state":"blocked_ambiguous_replay"}), encoding="utf-8")
+            with patch("do_again.cli._sync_control"):
+                rc = retry_request("req-ambiguous-1234", str(repo))
+            self.assertEqual(rc, 1)
 
     def test_chats_cleanup_is_dry_run_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

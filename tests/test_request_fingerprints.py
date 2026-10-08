@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import json
 import tempfile
 import unittest
 from datetime import timedelta
@@ -72,6 +73,37 @@ class RequestFingerprintTests(unittest.TestCase):
                 restarted.executor.execute.assert_not_called()
         self.assertEqual(len(self.executions), 8)
         self.assertFalse(self.control.joinpath("automation/do_again/conflicts").exists())
+
+
+    def test_preclaim_cancellation_publishes_cancelled_receipt_without_execution(self):
+        request_id = "cancel-before-execution"
+        request = self.request(request_id)
+        agent = self.agent()
+        request_path = agent.requests_dir / f"{request_id}.json"
+        request_path.parent.mkdir(parents=True, exist_ok=True)
+        request_path.write_text(json.dumps(request), encoding="utf-8")
+        cancellation = {
+            "schema_version": 1,
+            "request_id": request_id,
+            "request_fingerprint": request_fingerprint(request),
+            "state": "cancelled_before_execution",
+            "reason": "test cancellation",
+            "cancelled_at_utc": request["issued_at_utc"],
+        }
+        cancel_path = agent.cancellations_dir / f"{request_id}.json"
+        cancel_path.parent.mkdir(parents=True, exist_ok=True)
+        cancel_path.write_text(json.dumps(cancellation), encoding="utf-8")
+        with patch.object(agent, "acquire_remote_claim") as claim, patch.object(
+            agent.executor, "execute"
+        ) as execute, patch.object(agent, "publish_receipt"), patch.object(
+            agent, "notify_receipt"
+        ):
+            changed = agent.process_path(request_path)
+        self.assertTrue(changed)
+        claim.assert_not_called()
+        execute.assert_not_called()
+        ledger = agent.local_ledger(request_id)
+        self.assertEqual(ledger["receipt"]["state"], "cancelled")
 
     def test_legacy_normalized_receipt_is_not_reexecuted_after_expiry(self):
         request = self.request()
