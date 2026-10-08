@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-stall-dedupe-readonly-diagnostic-20261007-110",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T04:40:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T05:00:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport json, subprocess, inspect, sys\nfrom pathlib import Path\n\nrepo=Path(\"/Users/steventran/do-again\")\nsys.path.insert(0,str(repo/\"src\"))\nfrom do_again.service import liveness\n\nhead=subprocess.run([\"git\",\"rev-parse\",\"HEAD\"],cwd=repo,text=True,capture_output=True).stdout.strip()\nprint(\"head=\"+head)\nprint(\"=== _report_stall source ===\")\nprint(inspect.getsource(liveness._report_stall))\n\ntitle=\"[do-again] No-progress after bounded continuation (do-again)\"\ncommands=[\n  [\"gh\",\"issue\",\"list\",\"--repo\",\"Tran-Steven/do-again\",\"--state\",\"open\",\"--limit\",\"100\",\"--search\",f\"{title} in:title\",\"--json\",\"number,title\"],\n  [\"gh\",\"issue\",\"list\",\"--repo\",\"Tran-Steven/do-again\",\"--state\",\"open\",\"--limit\",\"100\",\"--json\",\"number,title\"],\n  [\"gh\",\"search\",\"issues\",\"--repo\",\"Tran-Steven/do-again\",\"--state\",\"open\",\"--match\",\"title\",title,\"--json\",\"number,title\"],\n]\nfor i,cmd in enumerate(commands,1):\n    p=subprocess.run(cmd,cwd=repo,text=True,capture_output=True,check=False,timeout=30)\n    print(f\"=== command {i} rc={p.returncode} ===\")\n    print(\"argv=\"+json.dumps(cmd))\n    print(\"stdout=\"+p.stdout)\n    print(\"stderr=\"+p.stderr)\n\nprint(\"READ_ONLY_STALL_DEDUPE_DIAGNOSTIC_OK\")\n",
+    "cwd": "/Users/steventran/do-again"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
