@@ -3,7 +3,7 @@
   "control_worktree": "/Users/steventran/.do_again/projects/41857a676462/control",
   "host": "Stevens-Mac-mini.local",
   "instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
-  "last_request_id": "selfdev-long-running-claim-nonstall-20261008-117",
+  "last_request_id": "selfdev-transport-failure-no-replay-20261008-118",
   "last_request_state": "succeeded",
   "pid": 49258,
   "remote": "origin",
@@ -11,5 +11,5 @@
   "schema_version": 1,
   "started_at_utc": "2026-10-08T13:06:56.457699+00:00",
   "state": "ready",
-  "updated_at_utc": "2026-10-08T13:08:06.714935+00:00"
+  "updated_at_utc": "2026-10-08T13:16:41.717669+00:00"
 }
