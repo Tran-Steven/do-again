@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollout-architecture-audit-20261007-86",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T02:01:20.000000+00:00",
+  "expires_at_utc": "2026-10-08T02:21:20.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nfrom pathlib import Path\nimport subprocess, json\n\nwt=Path(\"/Users/steventran/.do_again/rollout-20261007\")\n\ndef run(args):\n    p=subprocess.run(args,cwd=wt,text=True,capture_output=True,check=False)\n    return {\"rc\":p.returncode,\"stdout\":p.stdout,\"stderr\":p.stderr}\n\nprint(\"branch=\"+run([\"git\",\"branch\",\"--show-current\"])[\"stdout\"].strip())\nprint(\"head=\"+run([\"git\",\"rev-parse\",\"HEAD\"])[\"stdout\"].strip())\nprint(\"status=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"])[\"stdout\"]))\n\nfor rel in [\n    \"src/do_again/service/runtime.py\",\n    \"src/do_again/service/daemon.py\",\n    \"src/do_again/cli.py\",\n    \"src/do_again/core/agent.py\",\n    \"tests/test_service.py\",\n    \"tests/test_cli.py\",\n    \"tests/test_executor.py\",\n]:\n    p=wt/rel\n    print(f\"\\n===== {rel} =====\")\n    if p.is_file():\n        text=p.read_text()\n        # keep only relevant sections by keyword windows\n        lines=text.splitlines()\n        keys=(\"install\",\"restart\",\"runtime\",\"copy\",\"service_status\",\"self_update\",\"bundle_deploy\",\"process\",\"ledger\",\"claim\",\"outbox\")\n        hits=[i for i,l in enumerate(lines) if any(k in l.lower() for k in keys)]\n        spans=[]\n        for i in hits:\n            spans.append((max(0,i-5),min(len(lines),i+12)))\n        merged=[]\n        for a,b in sorted(spans):\n            if not merged or a>merged[-1][1]+2: merged.append([a,b])\n            else: merged[-1][1]=max(merged[-1][1],b)\n        for a,b in merged[:20]:\n            print(f\"--- lines {a+1}-{b} ---\")\n            print(\"\\n\".join(f\"{j+1}: {lines[j]}\" for j in range(a,b)))\n    else:\n        print(\"missing\")\n\nprint(\"\\n===== tree service =====\")\nprint(run([\"find\",\"src/do_again/service\",\"-maxdepth\",\"2\",\"-type\",\"f\",\"-print\"])[\"stdout\"])\nprint(\"\\n===== tree tests rollout-ish =====\")\nprint(run([\"find\",\"tests\",\"-maxdepth\",\"1\",\"-type\",\"f\",\"-print\"])[\"stdout\"])\n",
+    "cwd": "/Users/steventran/.do_again/rollout-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
