@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "claimed_at_utc": "2026-10-08T14:05:53.804235+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 49258,
+  "request_fingerprint": "579603c0831d5402a9c84e384f3e960de46b8c7d151af428d39c03c12d20b18e",
+  "request_id": "selfdev-rollout-zombie-test-failure-diagnostic-20261008-143",
+  "schema_version": 1
+}
