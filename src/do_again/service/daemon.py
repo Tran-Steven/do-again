@@ -23,6 +23,7 @@ from ..core.agent import Agent
 from ..core.schema import atomic_json, utc_now
 from ..browser.runtime import _file_lock
 from .runtime import runtime_layout
+from .liveness import check_liveness
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -139,6 +140,9 @@ def _browser_monitor(
     while not stop_event.is_set():
         try:
             delivered = _drain_browser_outbox(repo, state_dir)
+            if not delivered and not _pending_outbox(state_dir):
+                with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
+                    check_liveness(repo, runtime_layout(repo).control_worktree, state_dir)
             delay = 3.0 if delivered else 30.0
         except BrowserAuthRequired as exc:
             _record_browser_state(state_dir, "auth_required", error=str(exc))

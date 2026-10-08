@@ -145,6 +145,42 @@ Low-level `install`, `uninstall`, `init`, and foreground `run` commands remain a
 
 Each repository gets an isolated runtime, control worktree, state directory, policy copy, and service label under `~/.do_again`. The installed service runs from a copied runtime so installs made through either PyPI or npm remain stable after the invoking shell exits. `do-again init` also creates `do-again-policy.json` for project-specific operation, binary, root, timeout, and execution controls. The control branch must be dedicated and cannot be `main`, `master`, `trunk`, or the currently checked-out branch.
 
+## Continuous development and stall reporting
+
+A healthy daemon is not proof that the agent is progressing. Continuous development
+is **opt-in** per project. For an ongoing goal, add the following to that project's
+`do-again.toml` under `[do_again]`:
+
+```toml
+continuous = true
+idle_seconds = 1800
+recovery_seconds = 900
+report_stalls = true
+stall_issue_repo = "YOUR_ORG/do-again"
+```
+
+With this enabled, Do Again checks the dedicated project conversation and request
+ledger after the receipt queue is drained. It waits during active model generation
+or pending requests, retries an idle goal at most twice with durable cooldowns,
+and classifies repeated no-progress, stuck generation, and stale requests as
+stalls. After a verified new receipt, the recovery budget resets. Disabling
+`continuous` is the explicit way to stop a finished project's auto-continuation.
+
+Issue reporting requires an authenticated GitHub CLI (`gh auth login`) with
+permission to create issues in the configured destination. Reported issues
+contain only a sanitized project slug and failure category, never browser content,
+candidate data, credentials, raw logs, or prompts. Issues are deduplicated by
+failure class and project and reporting failures are bounded. If reporting is
+unavailable, `do-again status` still exposes the local stall state.
+
+An idle model can be asked to continue but cannot be forced to deliver useful
+engineering work. The watchdog avoids infinite prompt loops; use independent
+acceptance checks and periodic product reviews before interpreting receipt volume
+as progress. `continuous` does not change submission/approval authorization.
+
+After editing configuration or upgrading the package, reinstall the project's
+background runtime with `do-again install /path/to/project`.
+
 ## Why Do Again
 
 - Explicit policy-based command permissions

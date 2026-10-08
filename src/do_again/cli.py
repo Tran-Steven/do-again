@@ -131,6 +131,20 @@ def status(path: str = ".") -> int:
                 print(f"browser_pending_receipts={delivery.get('pending_receipts', 0)}")
                 if delivery.get("error"):
                     print(f"browser_delivery_error={delivery.get('error')}")
+        liveness_path = layout.state_dir / "liveness.json"
+        if liveness_path.is_file():
+            try:
+                liveness = json.loads(liveness_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                liveness = {}
+            if isinstance(liveness, dict):
+                print(f"liveness_state={liveness.get('state', 'unknown')}")
+                print(f"liveness_last_progress={liveness.get('progress_at')}")
+                print(f"liveness_recovery_attempts={liveness.get('attempts', 0)}")
+                if liveness.get("issue_report"):
+                    print(f"liveness_issue_report={liveness['issue_report']}")
+                if liveness.get("issue_number"):
+                    print(f"liveness_issue_number={liveness['issue_number']}")
         if browser.get("auth_required"):
             print("browser_action=run do-again setup")
     return 0
