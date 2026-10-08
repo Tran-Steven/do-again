@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..core.schema import atomic_json, utc_now
+from ..platforms.process import pid_alive
 from .runtime import (
     RuntimeLayout,
     ServiceError,
@@ -112,6 +113,60 @@ def _descendants(pid: int | None, rows: list[dict[str, Any]]) -> list[dict[str, 
     return children
 
 
+def _shared_browser_child_pids(rows: list[dict[str, Any]], *, repo: Path) -> set[int]:
+    """Recognize our dedicated persistent Chrome, never arbitrary Chrome or executor work.
+
+    A managed browser is allowed to survive this one project's restart only
+    when another live Do Again project owns a browser lease. Normal child
+    scripts and test/browser processes remain upgrade blockers.
+    """
+    root = Path(os.environ.get("DO_AGAIN_HOME", str(Path.home() / ".do_again"))).expanduser().resolve()
+    browser_root = root / "browser"
+    state = _json(browser_root / "state.json")
+    try:
+        browser_pid = int(state.get("pid") or 0)
+        port = int(state.get("port") or 0)
+    except (ValueError, TypeError):
+        return set()
+    if not browser_pid or not port:
+        return set()
+    expected_profile = (browser_root / "profile").resolve()
+    if str(state.get("profile_dir") or "") != str(expected_profile):
+        return set()
+    process = next((row for row in rows if row["pid"] == browser_pid), None)
+    if process is None:
+        return set()
+    command = str(process["command"])
+    if (
+        "--user-data-dir=" + str(expected_profile) not in command
+        or "--remote-debugging-port=" + str(port) not in command
+        or "Chrome" not in command
+        or not pid_alive(browser_pid)
+    ):
+        return set()
+    other_live_leases = False
+    for lease_path in (browser_root / "leases").glob("*.json"):
+        lease = _json(lease_path)
+        lease_repo = str(lease.get("repo") or "")
+        lease_pid = lease.get("daemon_pid")
+        try:
+            other_pid = int(lease_pid or 0)
+        except (ValueError, TypeError):
+            continue
+        if (
+            lease.get("active") is True
+            and lease_repo
+            and lease_repo != str(repo.resolve())
+            and other_pid > 0
+            and pid_alive(other_pid)
+        ):
+            other_live_leases = True
+            break
+    if not other_live_leases:
+        return set()
+    return {browser_pid, *(row["pid"] for row in _descendants(browser_pid, rows))}
+
+
 def assess_upgrade(repo: Path, *, process_rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     layout = runtime_layout(repo)
     status = service_status(repo)
@@ -121,6 +176,9 @@ def assess_upgrade(repo: Path, *, process_rows: list[dict[str, Any]] | None = No
     browser = _json(layout.state_dir / "browser_status.json")
     rows = process_rows if process_rows is not None else _process_rows()
     descendants = _descendants(status.get("pid"), rows)
+    shared_browser_pids = _shared_browser_child_pids(rows, repo=repo)
+    ignored_browser_children = [row for row in descendants if row["pid"] in shared_browser_pids]
+    descendants = [row for row in descendants if row["pid"] not in shared_browser_pids]
     blockers: list[dict[str, Any]] = []
 
     if not status.get("installed"):
@@ -156,6 +214,7 @@ def assess_upgrade(repo: Path, *, process_rows: list[dict[str, Any]] | None = No
         "started_requests": request_state["started_requests"],
         "outbox_pending": pending_outbox,
         "runtime_hash": _tree_hash(live_package),
+        "ignored_shared_browser_children": [row["pid"] for row in ignored_browser_children],
         "features": {
             "liveness": (live_package / "service" / "liveness.py").is_file(),
             "rollout": (live_package / "service" / "rollout.py").is_file(),
