@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-retry-cancel-final-test-fix-20261007-61",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:32:50.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:12:50.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import os, subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"6f219b829fac59a7ca0e0b27cdff81b9d04c365b\"\n\ndef run(args, check=True, env=None):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check,env=env)\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()\nbranch=run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()\nif head!=expected or branch!=\"feat/self-dogfood-20261007\":\n    raise SystemExit(f\"unexpected state head={head} branch={branch}\")\n\np=wt/\"tests/test_request_fingerprints.py\"\ntext=p.read_text()\nold=\"changed = agent.process_request(request_path)\"\nnew=\"changed = agent.process_path(request_path)\"\nif old not in text:\n    raise SystemExit(\"expected failing test call missing\")\ntext=text.replace(old,new,1)\np.write_text(text)\n\nenv=os.environ.copy()\nenv[\"PYTHONPATH\"]=str(wt/\"src\")\nrun([\"python3\",\"-m\",\"py_compile\",\n     \"src/do_again/core/agent.py\",\n     \"src/do_again/cli.py\",\n     \"tests/test_cli.py\",\n     \"tests/test_request_fingerprints.py\"],env=env)\nprint(\"py_compile=ok\")\n\nfocused=run(\n    [\"python3\",\"-m\",\"unittest\",\n     \"tests.test_cli\",\n     \"tests.test_request_fingerprints\",\n     \"tests.test_agent_claims\"],\n    check=False,env=env\n)\nprint(\"=== focused stdout ===\")\nprint(focused.stdout)\nprint(\"=== focused stderr ===\")\nprint(focused.stderr)\nprint(\"focused_rc=\"+str(focused.returncode))\nif focused.returncode!=0:\n    raise SystemExit(focused.returncode)\n\nrun([\"git\",\"add\",\n     \"src/do_again/core/agent.py\",\n     \"src/do_again/cli.py\",\n     \"tests/test_cli.py\",\n     \"tests/test_request_fingerprints.py\"])\ncommit=run([\"git\",\"commit\",\"-m\",\"Add safe request cancel and retry controls\"],check=False)\nprint(\"=== commit stdout ===\")\nprint(commit.stdout)\nprint(\"=== commit stderr ===\")\nprint(commit.stderr)\nif commit.returncode!=0:\n    raise SystemExit(commit.returncode)\n\nprint(\"new_head=\"+run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 600
+  }
+}
