@@ -1307,13 +1307,19 @@ def verify_candidate_chat(
             "reason": "bootstrap_markers_missing",
             "receipt_evidence": evidence,
         }
-    row = _record_owned_chat(
+    _record_owned_chat(
         repo,
         f"https://chatgpt.com/c/{chat_id}",
         created_reason="historical_verified",
     )
-    row["verified_from"] = "bootstrap_markers_and_receipts"
     registry = _read_json(_owned_chat_registry_path(repo))
+    chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
+    for row in chats:
+        if str(row.get("chat_id") or "") == chat_id:
+            row["verified_from"] = "bootstrap_markers_and_receipts"
+            row["verified_utc"] = _utc_now()
+            break
+    registry["updated_utc"] = _utc_now()
     _atomic_json(_owned_chat_registry_path(repo), registry)
     return {
         "chat_id": chat_id,
@@ -1485,6 +1491,39 @@ def _build_rollover_checkpoint(
     request_ids = sorted(path.stem for path in requests_dir.glob("*.json")) if requests_dir.is_dir() else []
     completed = sorted(request_id for request_id in request_ids if request_id in receipts)
     pending = sorted(request_id for request_id in request_ids if request_id not in receipts)
+
+    request_rows: list[tuple[str, dict[str, Any]]] = []
+    if requests_dir.is_dir():
+        for path in requests_dir.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(payload, dict):
+                request_rows.append((str(payload.get("issued_at_utc") or ""), payload))
+    request_rows.sort(key=lambda item: item[0])
+
+    latest_continuation = None
+    for _, payload in reversed(request_rows):
+        continuation = payload.get("continuation")
+        if isinstance(continuation, dict):
+            latest_continuation = continuation
+            break
+
+    if latest_continuation and latest_continuation.get("summary"):
+        objective = str(latest_continuation.get("summary"))
+    unresolved = [
+        {"request_id": request_id, "state": row.get("state")}
+        for request_id, row in sorted(receipts.items())
+        if str(row.get("state") or "") not in {"succeeded", "cancelled"}
+    ]
+    if pending:
+        next_action = f"Inspect and complete pending request {pending[-1]}, then continue the existing goal once."
+    elif unresolved:
+        next_action = f"Inspect unresolved receipt {unresolved[-1]['request_id']} and continue with a newly scoped request if needed."
+    else:
+        next_action = "Continue the existing goal from the latest acknowledged receipt and Git state."
+
     checkpoint = {
         "schema_version": 1,
         "handoff_token": token,
@@ -1498,12 +1537,42 @@ def _build_rollover_checkpoint(
         "completed_request_ids": completed,
         "pending_request_ids": pending,
         "receipts": {key: receipts[key] for key in completed},
-        "unresolved_issues": [],
-        "next_action": "Inspect pending work and latest receipts, then continue the existing goal once.",
+        "latest_operator_progress": latest_continuation,
+        "unresolved_issues": unresolved,
+        "next_action": next_action,
         "created_utc": _utc_now(),
     }
     _atomic_json(_checkpoint_path(repo, token), checkpoint)
     return checkpoint
+
+
+def _checkpoint_transfer_view(checkpoint: dict[str, Any], *, max_completed: int = 40, max_pending: int = 40) -> dict[str, Any]:
+    completed = list(checkpoint.get("completed_request_ids") or [])
+    pending = list(checkpoint.get("pending_request_ids") or [])
+    receipt_rows = checkpoint.get("receipts") if isinstance(checkpoint.get("receipts"), dict) else {}
+    selected_completed = completed[-max_completed:]
+    selected_pending = pending[-max_pending:]
+    return {
+        "schema_version": checkpoint.get("schema_version"),
+        "handoff_token": checkpoint.get("handoff_token"),
+        "project": checkpoint.get("project"),
+        "repo": checkpoint.get("repo"),
+        "objective": checkpoint.get("objective"),
+        "branch": checkpoint.get("branch"),
+        "head": checkpoint.get("head"),
+        "control_branch": checkpoint.get("control_branch"),
+        "active_chat_url": checkpoint.get("active_chat_url"),
+        "completed_request_ids": selected_completed,
+        "completed_request_count": len(completed),
+        "pending_request_ids": selected_pending,
+        "pending_request_count": len(pending),
+        "receipts": {key: receipt_rows[key] for key in selected_completed if key in receipt_rows},
+        "latest_operator_progress": checkpoint.get("latest_operator_progress"),
+        "unresolved_issues": list(checkpoint.get("unresolved_issues") or [])[-20:],
+        "next_action": checkpoint.get("next_action"),
+        "created_utc": checkpoint.get("created_utc"),
+        "durable_checkpoint_path": checkpoint.get("durable_checkpoint_path"),
+    }
 
 
 def _conversation_pressure_chars(target: cdp.Target) -> int:
@@ -1549,6 +1618,9 @@ def _rollover_project_chat(
 
     token = secrets.token_hex(16)
     checkpoint = _build_rollover_checkpoint(repo, record, token=token)
+    checkpoint["durable_checkpoint_path"] = str(_checkpoint_path(repo, token))
+    _atomic_json(_checkpoint_path(repo, token), checkpoint)
+    transfer_checkpoint = _checkpoint_transfer_view(checkpoint)
     transaction = {
         "schema_version": 1,
         "handoff_token": token,
@@ -1562,7 +1634,7 @@ def _rollover_project_chat(
     }
     _atomic_json(_rollover_transaction_path(repo), transaction)
 
-    prompt = _bootstrap_prompt(repo, remote_url, control_branch) + (
+    prompt = _bootstrap_prompt(repo, remote_url, control_branch, readiness_marker=None) + (
         "\n\nThis is a transactional Do Again rollover. Git, requests, receipts, and the "
         "structured checkpoint below are the source of truth. Do not invent missing state."
         "\nHandoff token: " + token
@@ -1581,7 +1653,7 @@ def _rollover_project_chat(
         _atomic_json(_rollover_transaction_path(repo), transaction)
 
         expected = "DO_AGAIN_HANDOFF_READY " + token
-        if expected not in str(result.get("response") or ""):
+        if str(result.get("response") or "").strip() != expected:
             raise BrowserError("successor chat did not acknowledge the exact rollover handoff token")
         if "/c/" not in new_url:
             raise BrowserError("successor chat did not bind a conversation URL")
@@ -1610,9 +1682,44 @@ def _rollover_project_chat(
         _atomic_json(_project_record_path(repo), updated)
 
         transaction["state"] = "bound"
-        transaction["archive_state"] = "pending"
+        transaction["archive_state"] = "pending" if previous_url else "not_applicable"
         transaction["updated_utc"] = _utc_now()
         _atomic_json(_rollover_transaction_path(repo), transaction)
+
+        if previous_url:
+            previous_id = _chat_id(previous_url)
+            registry = _read_json(_owned_chat_registry_path(repo))
+            chats = registry.get("chats") if isinstance(registry.get("chats"), list) else []
+            predecessor = next(
+                (row for row in chats if str(row.get("chat_id") or "") == previous_id),
+                None,
+            )
+            if predecessor is not None:
+                queue_verified_archives(repo, candidate_ids=[previous_id], apply=True)
+                try:
+                    archive_result = process_archive_queue(repo)
+                    archived = next(
+                        (
+                            row for row in archive_result.get("items", [])
+                            if str(row.get("chat_id") or "") == previous_id
+                        ),
+                        None,
+                    )
+                    transaction["archive_state"] = str(
+                        (archived or {}).get("state") or "pending"
+                    )
+                    if archived and archived.get("last_error"):
+                        transaction["archive_error"] = archived.get("last_error")
+                except Exception as archive_exc:
+                    transaction["archive_state"] = "retry"
+                    transaction["archive_error"] = f"{type(archive_exc).__name__}: {archive_exc}"
+                transaction["updated_utc"] = _utc_now()
+                _atomic_json(_rollover_transaction_path(repo), transaction)
+            else:
+                transaction["archive_state"] = "blocked_unowned"
+                transaction["archive_error"] = "predecessor is not in the verified owned-chat registry"
+                transaction["updated_utc"] = _utc_now()
+                _atomic_json(_rollover_transaction_path(repo), transaction)
 
         if old_target is not None and old_target.id != target.id:
             cdp.close_target(port, old_target.id)
@@ -1668,16 +1775,23 @@ def register_project(
     return value
 
 
-def _bootstrap_prompt(repo: Path, remote_url: str, control_branch: str) -> str:
-    return f"""Do Again automation workspace bootstrap.
+def _bootstrap_prompt(
+    repo: Path,
+    remote_url: str,
+    control_branch: str,
+    *,
+    readiness_marker: str | None = "DO_AGAIN_PROJECT_READY",
+) -> str:
+    prompt = f"""Do Again automation workspace bootstrap.
 
 Project: {repo.name}
 Repository: {remote_url}
 Control branch: {control_branch}
 
-When development work is requested in this conversation, use the Do Again request/receipt loop for local execution. Submit scoped request JSON files under automation/do_again/requests on the control branch, read matching receipts under automation/do_again/receipts, inspect failures, and iterate until the goal is actually complete. Do not claim a local action succeeded without a receipt.
-
-Reply exactly: DO_AGAIN_PROJECT_READY"""
+When development work is requested in this conversation, use the Do Again request/receipt loop for local execution. Submit scoped request JSON files under automation/do_again/requests on the control branch, read matching receipts under automation/do_again/receipts, inspect failures, and iterate until the goal is actually complete. Do not claim a local action succeeded without a receipt."""
+    if readiness_marker:
+        prompt += f"\n\nReply exactly: {readiness_marker}"
+    return prompt
 
 
 def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, Any]]:

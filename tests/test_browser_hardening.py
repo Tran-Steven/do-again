@@ -324,6 +324,7 @@ class BrowserHardeningTests(unittest.TestCase):
 
     def test_successful_rollover_records_owned_successor_before_binding(self):
         record = self.bind()
+        browser._record_owned_chat(self.repo, self.target.url, created_reason="bootstrap")
         new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
         checkpoint = {
             "handoff_token": "fixedtoken", "project": "repo", "completed_request_ids": [],
@@ -339,7 +340,7 @@ class BrowserHardeningTests(unittest.TestCase):
                 "response": "DO_AGAIN_HANDOFF_READY fixedtoken",
                 "chat_url": "https://chatgpt.com/c/new"
             }
-        ), patch.object(cdp, "close_target"):
+        ), patch.object(browser, "process_archive_queue", return_value={"items": []}), patch.object(cdp, "close_target"):
             _, updated = browser._rollover_project_chat(
                 self.repo, record, port=9223, old_target=self.target
             )
@@ -348,8 +349,8 @@ class BrowserHardeningTests(unittest.TestCase):
         self.assertEqual(tx["state"], "bound")
         self.assertEqual(tx["archive_state"], "pending")
         registry = browser._read_json(browser._owned_chat_registry_path(self.repo))
-        self.assertEqual(registry["chats"][0]["chat_id"], "new")
-        self.assertEqual(registry["chats"][0]["handoff_token"], "fixedtoken")
+        successor = next(row for row in registry["chats"] if row["chat_id"] == "new")
+        self.assertEqual(successor["handoff_token"], "fixedtoken")
 
     def test_rollover_pressure_uses_configured_character_threshold(self):
         with patch.object(browser, "_context_limit_warning", return_value=""), patch.object(
@@ -389,6 +390,108 @@ class BrowserHardeningTests(unittest.TestCase):
         self.assertEqual(len(cp["receipts"]["request-one"]["sha256"]), 64)
 
 
+
+
+    def test_rollover_requires_exact_handoff_response_not_containment(self):
+        record = self.bind()
+        new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
+        checkpoint = {
+            "handoff_token": "fixedtoken", "project": "repo", "completed_request_ids": [],
+            "pending_request_ids": [], "receipts": {}, "next_action": "continue"
+        }
+        with patch.object(browser, "_build_rollover_checkpoint", return_value=checkpoint), patch.object(
+            browser.secrets, "token_hex", return_value="fixedtoken"
+        ), patch.object(cdp, "create_target", return_value=new), patch.object(
+            browser, "wait_for_authenticated", return_value=(new, {})
+        ), patch.object(
+            browser, "send_message",
+            return_value={
+                "response": "prefix DO_AGAIN_HANDOFF_READY fixedtoken suffix",
+                "chat_url": "https://chatgpt.com/c/new"
+            }
+        ), patch.object(cdp, "close_target"):
+            with self.assertRaisesRegex(browser.BrowserError, "handoff token"):
+                browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
+
+    def test_rollover_prompt_has_only_handoff_readiness_instruction(self):
+        record = self.bind()
+        new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
+        checkpoint = {
+            "handoff_token": "fixedtoken", "project": "repo", "completed_request_ids": [],
+            "pending_request_ids": [], "receipts": {}, "next_action": "continue"
+        }
+        captured = {}
+        def send(target, prompt, **kwargs):
+            captured["prompt"] = prompt
+            return {"response": "DO_AGAIN_HANDOFF_READY fixedtoken", "chat_url": "https://chatgpt.com/c/new"}
+        with patch.object(browser, "_build_rollover_checkpoint", return_value=checkpoint), patch.object(
+            browser.secrets, "token_hex", return_value="fixedtoken"
+        ), patch.object(cdp, "create_target", return_value=new), patch.object(
+            browser, "wait_for_authenticated", return_value=(new, {})
+        ), patch.object(browser, "send_message", side_effect=send), patch.object(
+            browser, "process_archive_queue", return_value={"items": []}
+        ), patch.object(cdp, "close_target"):
+            browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
+        self.assertNotIn("Reply exactly: DO_AGAIN_PROJECT_READY", captured["prompt"])
+        self.assertIn("reply exactly: DO_AGAIN_HANDOFF_READY fixedtoken", captured["prompt"])
+
+    def test_checkpoint_transfer_is_bounded_but_durable_checkpoint_retains_full_history(self):
+        checkpoint = {
+            "schema_version": 1,
+            "handoff_token": "t",
+            "project": "repo",
+            "completed_request_ids": [f"done-{i}" for i in range(100)],
+            "pending_request_ids": [f"pending-{i}" for i in range(75)],
+            "receipts": {f"done-{i}": {"state": "succeeded", "sha256": str(i)} for i in range(100)},
+            "unresolved_issues": [{"request_id": f"bad-{i}", "state": "failed"} for i in range(30)],
+            "durable_checkpoint_path": "/tmp/full.json",
+        }
+        view = browser._checkpoint_transfer_view(checkpoint)
+        self.assertEqual(len(view["completed_request_ids"]), 40)
+        self.assertEqual(view["completed_request_count"], 100)
+        self.assertEqual(len(view["pending_request_ids"]), 40)
+        self.assertEqual(view["pending_request_count"], 75)
+        self.assertEqual(len(view["unresolved_issues"]), 20)
+        self.assertEqual(view["durable_checkpoint_path"], "/tmp/full.json")
+
+    def test_rollover_archive_failure_does_not_undo_successful_binding(self):
+        record = self.bind()
+        browser._record_owned_chat(self.repo, self.target.url, created_reason="bootstrap")
+        new = cdp.Target("new", browser.CHATGPT_URL, "", "ws://127.0.0.1/new")
+        checkpoint = {
+            "handoff_token": "fixedtoken", "project": "repo", "completed_request_ids": [],
+            "pending_request_ids": [], "receipts": {}, "next_action": "continue"
+        }
+        with patch.object(browser, "_build_rollover_checkpoint", return_value=checkpoint), patch.object(
+            browser.secrets, "token_hex", return_value="fixedtoken"
+        ), patch.object(cdp, "create_target", return_value=new), patch.object(
+            browser, "wait_for_authenticated", return_value=(new, {})
+        ), patch.object(
+            browser, "send_message",
+            return_value={"response": "DO_AGAIN_HANDOFF_READY fixedtoken", "chat_url": "https://chatgpt.com/c/new"}
+        ), patch.object(browser, "queue_verified_archives"), patch.object(
+            browser, "process_archive_queue", side_effect=browser.BrowserError("archive ui changed")
+        ), patch.object(cdp, "close_target"):
+            _, updated = browser._rollover_project_chat(self.repo, record, port=9223, old_target=self.target)
+        self.assertEqual(updated["chat_url"], "https://chatgpt.com/c/new")
+        tx = browser._read_json(browser._rollover_transaction_path(self.repo))
+        self.assertEqual(tx["state"], "bound")
+        self.assertEqual(tx["archive_state"], "retry")
+        self.assertIn("archive ui changed", tx["archive_error"])
+
+    def test_historical_verification_provenance_is_persisted(self):
+        chat_id = "historical-owned"
+        with patch.object(browser, "_all_bound_chat_ids", return_value=set()), patch.object(
+            browser, "_candidate_receipt_evidence", return_value=[{"receipt": "x"}]
+        ), patch.object(browser, "ensure_browser_running", return_value={"port": 9223}), patch.object(
+            browser, "_verify_historical_chat_ownership", return_value={"owned": True}
+        ):
+            result = browser.verify_candidate_chat(self.repo, chat_id)
+        self.assertTrue(result["verified"])
+        registry = browser._read_json(browser._owned_chat_registry_path(self.repo))
+        row = next(row for row in registry["chats"] if row["chat_id"] == chat_id)
+        self.assertEqual(row["verified_from"], "bootstrap_markers_and_receipts")
+        self.assertTrue(row["verified_utc"])
 
     def test_cleanup_inventory_excludes_active_bound_and_unverified_candidates(self):
         record = self.bind()
