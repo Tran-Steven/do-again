@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-diagnostics-ledger-audit-retry-20261007-51",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:22:20.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:52:20.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt = Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected = \"6e39cbcd7f1c3ca8f0ebfac6a2b9d6b2948a1b58\"\n\ndef run(args):\n    return subprocess.run(args, cwd=wt, text=True, capture_output=True, check=True).stdout\n\nhead = run([\"git\", \"rev-parse\", \"HEAD\"]).strip()\nstatus = run([\"git\", \"status\", \"--porcelain=v1\"]).strip()\nif head != expected or status:\n    raise SystemExit(f\"unexpected isolated state head={head} status={status!r}\")\n\ntargets = [\n    \"src/do_again/core/agent.py\",\n    \"src/do_again/cli.py\",\n    \"tests/test_agent.py\",\n    \"tests/test_cli.py\",\n]\nneedles = [\n    \"ledger_path(\",\n    \"atomic_json(self.ledger\",\n    \"ledger =\",\n    '\"state\":',\n    \"publish_receipt\",\n    \"process_request\",\n    \"handle_request\",\n    \"blocked_ambiguous_replay\",\n    \"receipt_payload\",\n    \"claim_payload\",\n    \"def main\",\n    \"sub.add_parser\",\n]\n\nfor rel in targets:\n    p = wt / rel\n    print(f\"=== {rel} ===\")\n    lines = p.read_text().splitlines()\n    hits = []\n    for i, line in enumerate(lines, 1):\n        if any(n in line for n in needles):\n            hits.append(i)\n    seen = set()\n    for i in hits:\n        start = max(1, i - 8)\n        end = min(len(lines), i + 28)\n        if any(n in seen for n in range(start, end + 1)):\n            continue\n        seen.update(range(start, end + 1))\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start, end + 1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
