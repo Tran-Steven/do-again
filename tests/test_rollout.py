@@ -63,6 +63,68 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
         block=next(b for b in value["blockers"] if b["kind"]=="executor_children")
         self.assertEqual([p["pid"] for p in block["processes"]],[101,102])
 
+    def _managed_browser_fixture(self, *, profile_ok=True, other_lease=True):
+        browser=self.home/"browser"
+        browser.mkdir(parents=True,exist_ok=True)
+        profile=(browser/"profile").resolve()
+        (browser/"state.json").write_text(json.dumps({
+            "pid":110,"port":9224,
+            "profile_dir":str(profile if profile_ok else browser/"user-profile"),
+        }))
+        leases=browser/"leases"
+        leases.mkdir()
+        if other_lease:
+            (leases/"other.json").write_text(json.dumps({
+                "active":True,"repo":str(self.root/"jobpipe"),
+                "daemon_pid":999
+            }))
+        return [
+            {"pid":100,"ppid":1,"command":"python -m do_again.service.daemon"},
+            {"pid":110,"ppid":100,"command":f"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --remote-debugging-port=9224 --user-data-dir={profile}"},
+            {"pid":111,"ppid":110,"command":"Google Chrome Helper (Renderer)"},
+            {"pid":112,"ppid":111,"command":"Google Chrome Helper (Renderer)"},
+        ]
+
+    def test_shared_managed_browser_does_not_block_restart(self):
+        rows=self._managed_browser_fixture()
+        with patch.object(rollout,"pid_alive",return_value=True):
+            value=self.assess(rows)
+        self.assertTrue(value["safe"])
+        self.assertEqual(value["ignored_shared_browser_children"],[110,111,112])
+
+    def test_real_executor_alongside_managed_browser_still_blocks_upgrade(self):
+        rows=self._managed_browser_fixture()
+        rows.extend([
+            {"pid":120,"ppid":100,"command":"python run_proof.py"},
+            {"pid":121,"ppid":120,"command":"node playwright"},
+        ])
+        with patch.object(rollout,"pid_alive",return_value=True):
+            value=self.assess(rows)
+        self.assertFalse(value["safe"])
+        blocked=next(b for b in value["blockers"] if b["kind"]=="executor_children")
+        self.assertEqual([x["pid"] for x in blocked["processes"]],[120,121])
+        self.assertEqual(value["ignored_shared_browser_children"],[110,111,112])
+
+    def test_user_browser_with_different_profile_still_blocks(self):
+        rows=self._managed_browser_fixture(profile_ok=False)
+        with patch.object(rollout,"pid_alive",return_value=True):
+            value=self.assess(rows)
+        self.assertFalse(value["safe"])
+        self.assertIn("executor_children",{b["kind"] for b in value["blockers"]})
+
+    def test_browser_without_other_live_lease_remains_blocker(self):
+        rows=self._managed_browser_fixture(other_lease=False)
+        with patch.object(rollout,"pid_alive",return_value=True):
+            value=self.assess(rows)
+        self.assertFalse(value["safe"])
+        self.assertEqual(value["ignored_shared_browser_children"],[])
+
+    def test_stale_managed_browser_pid_is_not_whitelisted(self):
+        rows=self._managed_browser_fixture()
+        with patch.object(rollout,"pid_alive",return_value=False):
+            value=self.assess(rows)
+        self.assertFalse(value["safe"])
+
     def test_outbox_blocks_upgrade(self):
         outbox=self.layout.state_dir/"browser_outbox"
         outbox.mkdir()
