@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-diagnostics-architecture-audit-20261007-49",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:21:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T00:51:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"6e39cbcd7f1c3ca8f0ebfac6a2b9d6b2948a1b58\"\n\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\n\nhead=run([\"git\",\"rev-parse\",\"HEAD\"]).strip()\nstatus=run([\"git\",\"status\",\"--porcelain=v1\"]).strip()\nif head != expected or status:\n    raise SystemExit(f\"unexpected isolated state head={head} status={status!r}\")\n\nfor rel in [\n    \"src/do_again/cli.py\",\n    \"src/do_again/core/agent.py\",\n    \"src/do_again/core/executor.py\",\n    \"src/do_again/service/runtime.py\",\n]:\n    p=wt/rel\n    print(f\"=== {rel} ===\")\n    lines=p.read_text().splitlines()\n    keys=[\n        \"def doctor\", \"def status\", \"def history\", \"def trace\", \"def retry\", \"def cancel\",\n        \"ledger\", \"receipt\", \"request\", \"log\", \"state/\", \"runtime_layout\",\n        \"blocked_ambiguous_replay\", \"claim\", \"cancelled\", \"retry\"\n    ]\n    hits=[]\n    for i,line in enumerate(lines,1):\n        if any(k in line.lower() for k in [x.lower() for x in keys]):\n            hits.append(i)\n    # print merged small windows around first ~30 meaningful hits\n    seen=set()\n    for i in hits[:35]:\n        start=max(1,i-5); end=min(len(lines),i+18)\n        if any(n in seen for n in range(start,end+1)):\n            continue\n        seen.update(range(start,end+1))\n        print(f\"--- {start}-{end} ---\")\n        for n in range(start,end+1):\n            print(f\"{n:04d}: {lines[n-1]}\")\n\nprint(\"=== tests mentioning diagnostics ===\")\nproc=subprocess.run(\n    [\"git\",\"grep\",\"-ni\",\"doctor\\|history\\|trace\\|logs\\|retry\\|cancel\"],\n    cwd=wt,text=True,capture_output=True\n)\nprint(proc.stdout)\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
