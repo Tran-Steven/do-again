@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:37:42.227903+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "eab5143472b23dbf8407cdf8e440a91538097d021fc9d8791bb53847edd52586",
+  "request_id": "selfdev-doctor-fix-test-stub-repair-20261007-65",
+  "schema_version": 1
+}
