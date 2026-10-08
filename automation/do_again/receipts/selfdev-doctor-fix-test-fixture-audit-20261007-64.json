@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:36:43.322733+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "0c87afd92623a37ac7c5963fc806723eccdc5d367d31dfd9019d862279dea204",
+  "request_id": "selfdev-doctor-fix-test-fixture-audit-20261007-64",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "0c87afd92623a37ac7c5963fc806723eccdc5d367d31dfd9019d862279dea204",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-doctor-fix-test-fixture-audit-20261007-64/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 0.211,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 986,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-doctor-fix-test-fixture-audit-20261007-64/script.py",
+      "script_sha256": "0be32609871b61af7c16affbf42fa86bb8fcc985ce82188ebe20144994eb30f5",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "branch=feat/self-dogfood-20261007\nhead=5dcb550375737c002dbff316121ed1d0c71a27dc\nstatus:\n M src/do_again/cli.py\n M tests/test_cli.py\n\n0320:                 patch(\"do_again.cli.service_status\", return_value={\"installed\": True, \"running\": True}),\n0321:                 patch(\"do_again.cli._ensure_remote_control_branch\"),\n0322:                 patch(\"do_again.cli._ensure_control_worktree\") as ensure_control,\n0323:                 patch(\"do_again.cli.restart_service\") as restart,\n0324:                 patch(\"do_again.cli.install_service\") as install,\n0325:                 redirect_stdout(output),\n0326:             ):\n0327:                 rc = doctor(str(repo), fix=True)\n0328:             self.assertEqual(rc, 0)\n0329:             self.assertTrue(layout.state_dir.is_dir())\n0330:             self.assertTrue(layout.stdout_log.parent.is_dir())\n0331:             ensure_control.assert_called_once()\n0332:             restart.assert_not_called()\n0333:             install.assert_not_called()\n0334:             self.assertIn(\"FIXED created missing runtime directories\", output.getvalue())\n0335: \n0336:     def test_doctor_fix_does_not_touch_dirty_existing_control_worktree(self) -> None:\n0337:         with tempfile.TemporaryDirectory() as tmp:\n0338:             repo = self.make_repo(Path(tmp))\n0339:             layout = runtime_layout(repo)\n0340:             layout.control_worktree.mkdir(parents=True)\n0341:             output = io.StringIO()\n0342:             fake_probe = subprocess.CompletedProcess([], 0, str(layout.control_worktree), \"\")\n0343:             fake_dirty = subprocess.CompletedProcess([], 0, \" M unsafe\\n\", \"\")\n0344:             with (\n0345:                 patch(\"do_again.cli.runtime_layout\", return_value=layout),\n0346:                 patch(\"do_again.cli.service_status\", return_value={\"installed\": True, \"running\": True}),\n0347:                 patch(\"do_again.cli.subprocess.run\", side_effect=[fake_probe, fake_dirty]),\n0348:                 patch(\"do_again.cli._ensure_control_worktree\") as ensure_control,\n0349:                 redirect_stdout(output),\n0350:             ):\n0351:                 rc = doctor(str(repo), fix=True)\n0352:             self.assertEqual(rc, 1)\n0353:             ensure_control.assert_not_called()\n0354:             self.assertIn(\"ACTION control_worktree: existing control worktree is dirty or unhealthy\", output.getvalue())\n0355: \n0356:     def test_doctor_reports_browser_auth_as_manual_action(self) -> None:\n0357:         with tempfile.TemporaryDirectory() as tmp:\n0358:             repo = self.make_repo(Path(tmp))\n0359:             (repo / \"do-again.toml\").write_text(\n0360:                 '[do_again]\\ncontrol_branch = \"operator-control\"\\nbrowser = true\\n',\n0361:                 encoding=\"utf-8\",\n0362:             )\n0363:             layout = runtime_layout(repo)\n0364:             layout.control_worktree.mkdir(parents=True)\n0365:             output = io.StringIO()\n0366:             clean = subprocess.CompletedProcess([], 0, \"\", \"\")\n0367:             with (\n0368:                 patch(\"do_again.cli.runtime_layout\", return_value=layout),\n0369:                 patch(\"do_again.cli.service_status\", return_value={\"installed\": True, \"running\": True}),\n0370:                 patch(\"do_again.cli.subprocess.run\", side_effect=[clean, clean]),\n0371:                 patch(\"do_again.cli.discover_browser\", return_value=Path(\"/Applications/Chrome.app\")),\n0372:                 patch(\"do_again.cli.browser_status\", side_effect=[\n0373:                     {\"running\": True},\n0374:                     {\"running\": True, \"authenticated\": False},\n0375:                 ]),\n0376:                 patch(\"do_again.cli.setup_browser\") as setup_browser_mock,\n0377:                 redirect_stdout(output),\n0378:             ):\n0379:                 rc = doctor(str(repo), fix=True)\n0380:             self.assertEqual(rc, 1)\n0381:             setup_browser_mock.assert_not_called()\n0382:             self.assertIn(\"ACTION browser_auth: run do-again browser login\", output.getvalue())\n0383: \n0384:     def test_cancel_refuses_claimed_request(self) -> None:\n0385:         with tempfile.TemporaryDirectory() as tmp:\n0386:             repo = self.make_repo(Path(tmp))\n0387:             layout = runtime_layout(repo)\n0388:             base = layout.control_worktree / \"automation/do_again\"\n0389:             (base / \"requests\").mkdir(parents=True, exist_ok=True)\n0390:             (base / \"claims\").mkdir(parents=True, exist_ok=True)\n0391:             request = {\n0392:                 \"schema_version\": 1,\n0393:                 \"request_id\": \"req-claimed-1234\",\n0394:                 \"operation\": \"status\",\n0395:                 \"issued_at_utc\": \"2026-10-08T00:00:00+00:00\",\ndoctor subprocess sites:\n--- 95-109 ---\n0095:             checks[\"runtime_dirs\"] = True\n0096: \n0097:         control_ok = False\n0098:         if layout.control_worktree.exists():\n0099:             probe = subprocess.run(\n0100:                 [\"git\", \"-C\", str(layout.control_worktree), \"rev-parse\", \"--show-toplevel\"],\n0101:                 text=True,\n0102:                 capture_output=True,\n0103:             )\n0104:             if probe.returncode == 0:\n0105:                 dirty = subprocess.run(\n0106:                     [\"git\", \"-C\", str(layout.control_worktree), \"status\", \"--porcelain\"],\n0107:                     text=True,\n0108:                     capture_output=True,\n0109:                 )\n--- 101-115 ---\n0101:                 text=True,\n0102:                 capture_output=True,\n0103:             )\n0104:             if probe.returncode == 0:\n0105:                 dirty = subprocess.run(\n0106:                     [\"git\", \"-C\", str(layout.control_worktree), \"status\", \"--porcelain\"],\n0107:                     text=True,\n0108:                     capture_output=True,\n0109:                 )\n0110:                 control_ok = dirty.returncode == 0 and not dirty.stdout.strip()\n0111:                 if not control_ok:\n0112:                     actions.append(\"control_worktree: existing control worktree is dirty or unhealthy\")\n0113:         checks[\"control_worktree\"] = control_ok\n0114: \n0115:         if fix and not control_ok and not layout.control_worktree.exists():\ndiffstat:\n src/do_again/cli.py | 131 ++++++++++++++++++++++++++++++++++++++++++++++------\n tests/test_cli.py   |  73 +++++++++++++++++++++++++++++\n 2 files changed, 189 insertions(+), 15 deletions(-)\n\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:36:42.918744+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
