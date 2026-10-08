@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:49258:1791464816:1347913282bc",
+  "error": null,
+  "finished_at_utc": "2026-10-08T13:55:01.448619+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "4f1ca446fd7252105196c518e242ff5fb712772f08ea34a4f71ca6b8781a2c6f",
+  "request_id": "selfdev-self-138-delivery-diagnostic-20261008-139",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "b5c09ec117b4cc9a3cb752ad248631a32a0b08eb"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "4f1ca446fd7252105196c518e242ff5fb712772f08ea34a4f71ca6b8781a2c6f",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-138-delivery-diagnostic-20261008-139/script.py"
+      ],
+      "cwd": "/Users/steventran/do-again",
+      "duration_seconds": 0.651,
+      "language": "python",
+      "returncode": 0,
+      "script_bytes": 1046,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-self-138-delivery-diagnostic-20261008-139/script.py",
+      "script_sha256": "0cb20ec3a280dc2fd3ea28d76a203d0960ed0789d57f9038708c4c75e8c24c98",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "{\n  \"browser_status\": {\n    \"error\": null,\n    \"pending_receipts\": 0,\n    \"recorded_at_utc\": \"2026-10-08T13:54:44.134553+00:00\",\n    \"state\": \"ready\"\n  },\n  \"liveness\": {\n    \"attempts\": 1,\n    \"goal_id\": \"issue-10-live-ci-handoff-proof\",\n    \"goal_state\": \"in_progress\",\n    \"idle_resume_at\": 1791467644.440738,\n    \"idle_resume_marker\": \"DO_AGAIN_LIVENESS_CONTINUE token=dbec7bdaed2a40219003\",\n    \"idle_resume_phase\": \"observed\",\n    \"last_resume_at\": 1791467644.440738,\n    \"progress_at\": 1791467331.0720327,\n    \"receipt_id\": \"selfdev-self-clean-new-main-upgrade-preflight-20261008-138\",\n    \"stale_goal_superseded\": \"selfdev-live-ci-uncertain-recovery-audit-20261007-103\",\n    \"state\": \"idle_handoff_observed\"\n  },\n  \"outbox_items\": [],\n  \"target_exists\": false,\n  \"target_payload\": null,\n  \"uncertain\": null,\n  \"uncertain_exists\": false\n}\nSELF_138_DELIVERY_DIAGNOSTIC_OK\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T13:55:00.501848+00:00",
+  "state": "succeeded",
+  "traceback": null
+}
