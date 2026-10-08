@@ -1,0 +1,45 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "error": null,
+  "finished_at_utc": "2026-10-08T00:09:03.853726+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "operation": "scratch_script",
+  "request_fingerprint": "a2921924b6f8e4718f17d13bfb38f8bc972f5eefd6f82ef03f237f26cc2d4012",
+  "request_id": "selfdev-rollover-foundation-fix-20261007-36",
+  "result": {
+    "authority_after": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "authority_before": {
+      "repo_branch": "main",
+      "repo_dirty": true,
+      "repo_head": "1926138e8910a1d2ad9db68db0940f7584f4b092"
+    },
+    "operation": "scratch_script",
+    "request_fingerprint": "a2921924b6f8e4718f17d13bfb38f8bc972f5eefd6f82ef03f237f26cc2d4012",
+    "result": {
+      "argv": [
+        "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3",
+        "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-foundation-fix-20261007-36/script.py"
+      ],
+      "cwd": "/Users/steventran/.do_again/selfdev-20261007",
+      "duration_seconds": 1.728,
+      "language": "python",
+      "returncode": 1,
+      "script_bytes": 2854,
+      "script_path": "/Users/steventran/.do_again/projects/41857a676462/state/scratch/selfdev-rollover-foundation-fix-20261007-36/script.py",
+      "script_sha256": "fe4989debadb5566382501553b3442d425b5afcaccc136a9ca403e326e07b8cd",
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout": "py_compile=ok\n=== focused stdout ===\n\nDo Again needs one-time ChatGPT authentication.\nA dedicated automation Chrome profile is open.\nSign into ChatGPT and complete any human verification there.\nDo Again does not read or store your username or password.\nWaiting for ChatGPT to become ready; no terminal action is required.\n\n=== focused stderr ===\n........do-again browser authentication requires interaction; run do-again setup in the project to re-authenticate.\n.....................................E..E....\n======================================================================\nERROR: test_notify_receipts_batches_multiple_receipts_in_one_submission (tests.test_browser.BrowserRuntimeTests.test_notify_receipts_batches_multiple_receipts_in_one_submission)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/cdp.py\", line 105, in __init__\n    self.sock = socket.create_connection((host, port), timeout=timeout)\n                ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py\", line 868, in create_connection\n    raise exceptions[0]\n  File \"/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/socket.py\", line 853, in create_connection\n    sock.connect(sa)\n    ~~~~~~~~~~~~^^^^\nConnectionRefusedError: [Errno 61] Connection refused\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser.py\", line 567, in test_notify_receipts_batches_multiple_receipts_in_one_submission\n    value = notify_receipts(\n        repo,\n    ...<3 lines>...\n        ],\n    )\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 300, in wrapped\n    return function(repo, *args, **kwargs)\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1418, in notify_receipts\n    if _rollover_needed(target):\n       ~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1131, in _rollover_needed\n    return _conversation_pressure_chars(target) >= threshold\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1116, in _conversation_pressure_chars\n    value = cdp.evaluate(target, expression, timeout=10.0)\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/cdp.py\", line 326, in evaluate\n    result = target_call(\n        target,\n    ...<7 lines>...\n        timeout=timeout,\n    )\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/cdp.py\", line 282, in target_call\n    return call(url, method, params, timeout=timeout)\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/cdp.py\", line 239, in call\n    ws = WebSocket(url, timeout=timeout)\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/cdp.py\", line 107, in __init__\n    raise CdpError(f\"CDP websocket connection failed: {exc}\") from exc\ndo_again.browser.cdp.CdpError: CDP websocket connection failed: [Errno 61] Connection refused\n\n======================================================================\nERROR: test_rollover_persists_new_chat_and_closes_old_target (tests.test_browser.BrowserRuntimeTests.test_rollover_persists_new_chat_and_closes_old_target)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/Users/steventran/.do_again/selfdev-20261007/tests/test_browser.py\", line 431, in test_rollover_persists_new_chat_and_closes_old_target\n    target, updated = _rollover_project_chat(\n                      ~~~~~~~~~~~~~~~~~~~~~~^\n        repo, record, port=9223, old_target=old_target\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/steventran/.do_again/selfdev-20261007/src/do_again/browser/runtime.py\", line 1182, in _rollover_project_chat\n    raise BrowserError(\"successor chat did not acknowledge the exact rollover handoff token\")\ndo_again.browser.errors.BrowserError: successor chat did not acknowledge the exact rollover handoff token\n\n----------------------------------------------------------------------\nRan 53 tests in 1.086s\n\nFAILED (errors=2)\n\nfocused_rc=1\n",
+      "stdout_truncated": false,
+      "timed_out": false
+    }
+  },
+  "schema_version": 1,
+  "started_at_utc": "2026-10-08T00:09:01.878130+00:00",
+  "state": "failed",
+  "traceback": null
+}
