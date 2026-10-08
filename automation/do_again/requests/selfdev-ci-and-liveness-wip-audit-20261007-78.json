@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ci-and-liveness-wip-audit-20261007-78",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T01:06:10.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:36:10.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport subprocess\nfrom pathlib import Path\n\niso=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\norig=Path(\"/Users/steventran/do-again\")\n\ndef run(cwd,args,check=True):\n    return subprocess.run(args,cwd=cwd,text=True,capture_output=True,check=check)\n\nprint(\"=== isolated ===\")\nprint(\"branch=\"+run(iso,[\"git\",\"branch\",\"--show-current\"]).stdout.strip())\nprint(\"head=\"+run(iso,[\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status:\")\nprint(run(iso,[\"git\",\"status\",\"--porcelain=v1\"]).stdout)\nprint(\"ci.yml:\")\nprint((iso/\".github/workflows/ci.yml\").read_text())\n\nprint(\"=== original checkout READ ONLY ===\")\nprint(\"branch=\"+run(orig,[\"git\",\"branch\",\"--show-current\"]).stdout.strip())\nprint(\"head=\"+run(orig,[\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip())\nprint(\"status:\")\nprint(run(orig,[\"git\",\"status\",\"--porcelain=v1\"]).stdout)\nprint(\"diffstat:\")\nprint(run(orig,[\"git\",\"diff\",\"--stat\"]).stdout)\n\nfor rel in [\n    \"src/do_again/cli.py\",\n    \"src/do_again/service/daemon.py\",\n    \"src/do_again/service/liveness.py\",\n    \"tests/test_liveness.py\",\n]:\n    p=orig/rel\n    print(f\"=== {rel} exists={p.exists()} ===\")\n    if not p.exists():\n        continue\n    if rel in {\"src/do_again/service/liveness.py\",\"tests/test_liveness.py\"}:\n        print(p.read_text())\n    else:\n        diff=run(orig,[\"git\",\"diff\",\"--\",rel],check=False)\n        print(diff.stdout)\n\nprint(\"=== focused liveness test names ===\")\nif (orig/\"tests/test_liveness.py\").exists():\n    for line in (orig/\"tests/test_liveness.py\").read_text().splitlines():\n        if line.lstrip().startswith(\"def test_\"):\n            print(line.strip())\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 240
+  }
+}
