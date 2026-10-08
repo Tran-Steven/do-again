@@ -1,0 +1,9 @@
+{
+  "agent_instance_id": "Stevens-Mac-mini.local:60491:1791409513:6d4bf3c394b8",
+  "claimed_at_utc": "2026-10-08T00:18:46.571551+00:00",
+  "host": "Stevens-Mac-mini.local",
+  "pid": 60491,
+  "request_fingerprint": "c934501b0c3dc04b0c72903692591c12cc29f576643a92ec4822e838b9049134",
+  "request_id": "selfdev-chat-cleanup-dryrun-candidates-20261007-46",
+  "schema_version": 1
+}
