@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-rollover-hardening-targeted-audit-20261007-69",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T00:42:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T01:12:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "import subprocess\nfrom pathlib import Path\nwt=Path(\"/Users/steventran/.do_again/selfdev-20261007\")\nexpected=\"da7e46f5e07922eb63b7b48e71319588bd28d3d5\"\ndef run(args):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=True).stdout\nif run([\"git\",\"rev-parse\",\"HEAD\"]).strip()!=expected:\n    raise SystemExit(\"unexpected head\")\nprint(\"status=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"])))\np=wt/\"src/do_again/browser/runtime.py\"\nlines=p.read_text().splitlines()\nfor start,end in [(880,980),(1450,1625),(1625,1695)]:\n    print(f\"=== {start}-{end} ===\")\n    for n in range(start,min(end,len(lines))+1):\n        print(f\"{n:04d}: {lines[n-1]}\")\n",
+    "cwd": "/Users/steventran/.do_again/selfdev-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 180
+  }
+}
