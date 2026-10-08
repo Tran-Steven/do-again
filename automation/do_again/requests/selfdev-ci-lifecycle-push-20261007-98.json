@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "request_id": "selfdev-ci-lifecycle-push-20261007-98",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-08T03:28:00.000000+00:00",
+  "expires_at_utc": "2026-10-08T03:48:00.000000+00:00",
+  "args": {
+    "language": "python",
+    "content": "\nimport subprocess\nfrom pathlib import Path\n\nwt=Path(\"/Users/steventran/.do_again/lifecycle-ci-20261007\")\nexpected=\"65f9a3e792c3cf3fa951df21fe9114a180d85d40\"\nbranch=\"feat/ci-wait-lifecycle-20261007\"\n\ndef run(args,check=True):\n    return subprocess.run(args,cwd=wt,text=True,capture_output=True,check=check)\n\nif run([\"git\",\"rev-parse\",\"HEAD\"]).stdout.strip()!=expected:\n    raise SystemExit(\"unexpected head\")\nif run([\"git\",\"branch\",\"--show-current\"]).stdout.strip()!=branch:\n    raise SystemExit(\"unexpected branch\")\nif run([\"git\",\"status\",\"--porcelain=v1\"]).stdout.strip():\n    raise SystemExit(\"worktree not clean\")\n\np=run([\"git\",\"push\",\"-u\",\"origin\",branch],check=False)\nprint(p.stdout); print(p.stderr)\nprint(\"push_rc=\"+str(p.returncode))\nif p.returncode:\n    raise SystemExit(p.returncode)\n\nremote=run([\"git\",\"ls-remote\",\"origin\",f\"refs/heads/{branch}\"]).stdout.strip()\nprint(\"remote_ref=\"+remote)\nif expected not in remote:\n    raise SystemExit(\"remote ref mismatch\")\nprint(\"status_after=\"+repr(run([\"git\",\"status\",\"--porcelain=v1\"]).stdout))\n",
+    "cwd": "/Users/steventran/.do_again/lifecycle-ci-20261007"
+  },
+  "expected": {},
+  "limits": {
+    "timeout_seconds": 300
+  }
+}
