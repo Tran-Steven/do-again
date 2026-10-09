@@ -29,7 +29,11 @@ def wheel_fixture(extra=None):
                  'fixture-1.0.dist-info/METADATA':'Name: fixture\nVersion: 1.0\n',
                  'fixture-1.0.dist-info/WHEEL':'Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n'}
         for name, content in (files | (extra or {})).items():
-            wheel.writestr(name, content)
+            # ZipFile's string-name constructor normalizes backslashes on Windows.
+            # Preserve adversarial archive bytes rather than testing a safe alias.
+            entry = zipfile.ZipInfo('placeholder')
+            entry.filename = name; entry.orig_filename = name
+            wheel.writestr(entry, content)
     content = data.getvalue()
     return content, {'id':'fixture-1','name':'fixture','version':'1.0',
                      'url':'https://files.pythonhosted.org/packages/fixture.whl',
