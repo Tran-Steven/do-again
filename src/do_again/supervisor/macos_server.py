@@ -83,10 +83,44 @@ class ProjectBroker:
         self.registry = AuthorityRegistry(Path(config['authority_path']), owner_uid=0)
         self.state = INSTALL_ROOT / 'state' / self.project.key
         self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.ledger = ExecutionLedger(Path(config['authority_path']))
+        self._initialize_activity()
+        self.ledger = ExecutionLedger(Path(config['authority_path']),on_reserve=self._record_inflight)
         self.lock = threading.Lock()
 
+    def _initialize_activity(self):
+        self._activity_lock = threading.Lock()
+        self._activity = set()
+        self._activity_scope = threading.local()
+
+    def _record_inflight(self, project, request_id):
+        scope = getattr(self._activity_scope, 'reserved', None)
+        if scope is not None and project == self.project.key:
+            with self._activity_lock:
+                self._activity.add(request_id)
+                scope.add(request_id)
+
+    def _inflight(self):
+        with self._activity_lock:
+            return sorted(self._activity)
+
     def dispatch(self, packet: dict, uid: int) -> dict:
+        if uid != self.config['operator_uid']:
+            raise ExecutionBlocked('peer is not the trusted operator identity')
+        if not hasattr(self, '_activity_lock'):
+            self._initialize_activity()
+            if hasattr(self, 'ledger'):
+                self.ledger.on_reserve = self._record_inflight
+        previous = getattr(self._activity_scope, 'reserved', None)
+        reserved = set()
+        self._activity_scope.reserved = reserved
+        try:
+            return self._dispatch(packet, uid)
+        finally:
+            with self._activity_lock:
+                self._activity.difference_update(reserved)
+            self._activity_scope.reserved = previous
+
+    def _dispatch(self, packet: dict, uid: int) -> dict:
         if uid != self.config['operator_uid']:
             raise ExecutionBlocked('peer is not the trusted operator identity')
         if packet == {'operation': 'status'}:
@@ -101,7 +135,8 @@ class ProjectBroker:
                     'enforcement_verified': self._verified(),
                     'enforcement_blocker': self._probe_blocker(),
                     'effect_journal': self.ledger.evidence(self.project.key),
-                    'unresolved_executions': self.ledger.pending(self.project.key)}
+                    'unresolved_executions': self.ledger.pending(self.project.key),
+                    'inflight_request_ids':self._inflight()}
         if packet == {'operation': 'probe'}:
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('installation probes require maintenance intent')
@@ -132,6 +167,9 @@ class ProjectBroker:
         if packet.get('operation') == 'worker_register':
             from .worker_service import register_worker
             return register_worker(self,packet)
+        if packet.get('operation') == 'browser_reconcile':
+            from .browser_broker import reconcile_browser
+            return reconcile_browser(self,packet)
         if packet.get('operation') == 'browser_tick':
             from .browser_broker import browser_tick
             return browser_tick(self,packet)

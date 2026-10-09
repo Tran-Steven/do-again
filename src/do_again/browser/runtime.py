@@ -2035,6 +2035,20 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
         + acknowledgment_token
     )
 
+    purpose = 'receipt_notification'
+    if len(receipts) == 1 and receipts[0].get('kind') == 'continuation':
+        intent = receipts[0]
+        purpose = str(intent.get('purpose') or '')
+        if purpose not in {'ci_continuation', 'idle_continuation'}:
+            raise BrowserError('invalid continuation purpose')
+        batch_marker = str(intent.get('event_marker') or '')
+        prompt = intent.get('prompt')
+        if not batch_marker or not isinstance(prompt, str) or not prompt:
+            raise BrowserError('invalid continuation payload')
+        message = batch_marker + ': ' + prompt + newline + (
+            'After inspecting the event, include this exact acknowledgment on its own line: '
+            + acknowledgment_token)
+
     status = ensure_browser_running(verify_auth=True)
     port = int(status["port"])
     target = _find_chatgpt_target(port, chat_url)
@@ -2073,7 +2087,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
             raise BrowserSubmissionUncertain('receipt binding changed before dispatch; no automatic replay')
         before_dispatch({'chat_url':bound_url,'conversation_id':conversation,'binding_identity':binding_identity(bound),
                          'payload_sha256':hashlib.sha256(message.encode()).hexdigest(),
-                         'purpose':'receipt_notification','state':'dispatch_started',
+                         'purpose':purpose,'state':'dispatch_started',
                          'acknowledgment_token':acknowledgment_token})
 
     dispatch_options={'before_dispatch':commit_dispatch} if before_dispatch is not None else {}

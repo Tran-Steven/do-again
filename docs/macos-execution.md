@@ -330,3 +330,34 @@ the actual operator identity and authenticated Root socket, restart without repl
 inert launchd process withdrawal. Both projects remained in maintenance at epoch 1 with
 production disabled and no unresolved executions. These results do not qualify live
 browser acknowledgment or autonomous development acceptance.
+
+
+CI wakeups and idle continuations reserve a deterministic causal event in the common
+browser outbox. Each reservation binds its original conversation and generation;
+changed bindings, changed payloads, or missing queued evidence block replay. Receipt
+batches and continuations dispatch separately through the same durable pre-Enter hook
+and causal acknowledgment protocol. Completed reservations cannot recreate an outbox
+item. Liveness decisions use their own lock, avoiding recursive delivery-lock acquisition.
+
+The sealed browser helper persists a terminal receipt before returning its result to the
+broker. Root verifies the original request, source, epoch, protected ancestry, ordinary
+file ownership and result before completing its execution journal. `reconcile-browser`
+accepts only an original request ID and reads that receipt without accessing Chrome or
+performing another effect. Missing, aliased, writable or conflicting evidence remains
+uncertain. Immutable worker admission repeats this read-only reconciliation for lost
+browser responses; other execution uncertainty continues to deny admission.
+
+Installed maintenance source `e909a4879a04bb9fb45a41f2e33fbcdd54c30605` passed
+21 native checks and six synthetic tasks per project, authenticated operator execution,
+restart without replay and real inert launchd withdrawal. Browser delivery remains fixture
+evidence only. Production-worker lifecycle, acceptance-verified task scheduling and live
+acceptance are still release gates; both projects remain in maintenance.
+
+
+A started journal row is not automatically a crash. Root tracks a newly reserved request
+only while its authenticated handler remains on the live dispatch stack, publishing that
+ownership before the started transaction commits. Ongoing worker admission permits
+that admitted operation to drain and defers browser dispatch; startup still requires a
+quiescent journal. Handler exit, exception or broker restart removes the in-memory proof.
+Replaying a historical started row cannot recreate it. Pause, source/epoch changes and
+unverified boundaries continue to deny admission regardless of live-handler evidence.

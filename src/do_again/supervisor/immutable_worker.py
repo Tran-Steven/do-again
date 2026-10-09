@@ -37,6 +37,7 @@ def validate_worker_context(
     interpreter: Path,
     uid: int,
     euid: int,
+    ongoing: bool = False,
 ) -> tuple[Path, Path, Path, Path]:
     """Pure admission decision; zero disk/network/process effects."""
     if project_name not in PROJECT_ACCOUNTS:
@@ -87,12 +88,17 @@ def validate_worker_context(
             or len(policy["allowed_operations"]) != len(WORKER_OPERATIONS)
             or set(policy["allowed_operations"]) != WORKER_OPERATIONS):
         raise OperatorError("installed worker policy does not match the admitted typed capabilities")
+    unresolved = status.get('unresolved_executions')
+    inflight = status.get('inflight_request_ids')
+    known_inflight = (ongoing and isinstance(unresolved,list) and unresolved
+        and isinstance(inflight,list) and all(isinstance(row,dict)
+            and isinstance(row.get('request_id'),str) and row['request_id'] in inflight for row in unresolved))
     if (status.get("source_sha") != config.get("source_sha")
             or status.get("operator_intent") != "active"
             or status.get("production_ready") is not True
             or status.get("enforcement_verified") is not True
             or status.get("enforcement_blocker") is not None
-            or status.get("unresolved_executions") != []):
+            or (unresolved != [] and not known_inflight)):
         raise OperatorError("production admission or native proof is incomplete")
     goal_revision = status.get("goal_revision")
     if (not isinstance(goal_revision, str) or not goal_revision.strip()
@@ -131,6 +137,19 @@ def validate_control_paths(control: Path, state: Path, uid: int) -> None:
             raise OperatorError('pre-existing operator control state is missing or unsafe')
 
 
+def read_admission_status(repo: Path) -> dict[str, Any]:
+    """Resolve lost browser-helper responses using protected terminal receipts only."""
+    status = broker_request(repo, {'operation':'status'})
+    pending = status.get('unresolved_executions')
+    if not isinstance(pending,list) or len(pending)>16:
+        raise OperatorError('unresolved admission evidence is invalid or exceeds its bound')
+    for record in pending:
+        if (str(record.get('request_id') or '').startswith('browser-')
+                and record['request_id'] not in status.get('inflight_request_ids', [])):
+            broker_request(repo, {'operation':'browser_reconcile','request_id':record['request_id']})
+    return broker_request(repo, {'operation':'status'}) if pending else status
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Immutable Do Again operator worker")
     parser.add_argument("--project", choices=sorted(PROJECT_ACCOUNTS), required=True)
@@ -157,7 +176,7 @@ def main(argv: list[str] | None = None) -> int:
     if not isinstance(project, dict) or not isinstance(project.get("repo"), str):
         raise OperatorError("project is not sealed into the installation")
     repo = Path(project["repo"])
-    status = broker_request(repo, {"operation": "status"})
+    status = read_admission_status(repo)
     if ((args.expected_source is not None and args.expected_source!=config.get("source_sha"))
             or (args.expected_epoch is not None and args.expected_epoch!=status.get("epoch"))):
         raise OperatorError("worker service source or authority epoch changed")
@@ -174,7 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     validate_control_paths(control,state,os.getuid())
     # Recheck the original authority after filesystem validation. A pause/resume
     # or changed goal during startup invalidates this worker admission.
-    latest = broker_request(repo, {'operation':'status'})
+    latest = read_admission_status(repo)
     validate_worker_context(args.project,config,latest,policy,
         installed_root=INSTALL_ROOT,module_path=Path(__file__),
         interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid())
@@ -198,10 +217,10 @@ def main(argv: list[str] | None = None) -> int:
     def admission_check():
         from .authority import AuthorityDenied
         try:
-            current = broker_request(repo,{'operation':'status'})
+            current = read_admission_status(repo)
             validate_worker_context(args.project,config,current,policy,
                 installed_root=INSTALL_ROOT,module_path=Path(__file__),
-                interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid())
+                interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid(),ongoing=True)
             if any(current.get(k) != status.get(k) for k in ('epoch','goal_revision')):
                 raise OperatorError('worker admission epoch or goal changed')
         except OperatorError as exc:
@@ -210,6 +229,11 @@ def main(argv: list[str] | None = None) -> int:
     transport=BrokerControlHistory(repo,control,status["epoch"])
     def browser_effect():
         import uuid
+        current = read_admission_status(repo)
+        if current.get('inflight_request_ids'):
+            # An admitted operation may drain. Do not reserve another browser
+            # effect while that writer holds the project execution journal.
+            return {'delivered':0,'liveness':'running'}
         return broker_request(repo,{'operation':'browser_tick','request_id':'browser-'+uuid.uuid4().hex,
                                     'epoch':status['epoch']})
     return daemon_main(argv,admission_check=admission_check,control_transport=transport,browser_effect=browser_effect)

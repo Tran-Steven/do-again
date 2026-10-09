@@ -14,6 +14,11 @@ from ..browser import runtime as browser
 from ..core.schema import atomic_json, parse_utc, OperatorError
 
 
+def _queue_continuation(state_dir, prompt, *, purpose, marker, binding):
+    from .daemon import _queue_continuation as enqueue
+    return enqueue(state_dir, prompt, purpose=purpose, marker=marker, binding=binding)
+
+
 def _settings(repo: Path) -> dict[str, Any]:
     path = repo / "do-again.toml"
     if not path.is_file():
@@ -401,6 +406,14 @@ def _pending_stale(control: Path, now: float, timeout: float = 7200.0) -> bool:
 
 
 def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None, reporter=None, settings=None) -> str:
+    # Decisions serialize separately from outbox effects; queueing must never
+    # recursively take the same non-reentrant delivery lock.
+    with browser._file_lock(state_dir / 'liveness.lock', timeout=5.0):
+        return _check_liveness_locked(repo, control, state_dir, ci_probe=ci_probe,
+                                      reporter=reporter, settings=settings)
+
+
+def _check_liveness_locked(repo: Path, control: Path, state_dir: Path, *, ci_probe=None, reporter=None, settings=None) -> str:
     config = settings if settings is not None else _settings(repo)
     report = reporter or _report_stall
     if not config["continuous"]:
@@ -464,7 +477,7 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
         atomic_json(path, value)
         try:
             # This only proves the browser submit step, never consumption.
-            browser.send_message(target, prompt, wait_for_response=False)
+            _queue_continuation(state_dir, prompt, purpose='ci_continuation', marker=str(value['ci_delivery_marker']), binding=record)
         except Exception as exc:
             # The browser may have clicked before disconnecting. Reconcile
             # the bound conversation; do NOT send again on restart.
@@ -472,7 +485,7 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
             value["ci_delivery_error"] = type(exc).__name__
             atomic_json(path, value)
             raise
-        value["ci_delivery_phase"] = "submitted_unverified"
+        value["ci_delivery_phase"] = "queued"
         value["state"] = "recovering"
         atomic_json(path, value)
         return str(value["state"])
@@ -573,12 +586,12 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
         value["state"] = "idle_delivery_uncertain"
         atomic_json(path, value)
         try:
-            browser.send_message(target, marker + ": " + prompt, wait_for_response=False)
+            _queue_continuation(state_dir, prompt, purpose='idle_continuation', marker=marker, binding=record)
         except Exception as exc:
             value["idle_resume_probe_error"] = type(exc).__name__
             atomic_json(path, value)
             raise
-        value["idle_resume_phase"] = "submitted_unverified"
+        value["idle_resume_phase"] = "queued"
         value["state"] = "recovering"
     elif action in {"report", "report_busy"}:
         value = report(repo, config, value, reason="busy" if action == "report_busy" else "idle")

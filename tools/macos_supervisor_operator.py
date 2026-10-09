@@ -7,11 +7,15 @@ from do_again.supervisor.macos_client import broker_request, operator_request, e
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('operation',choices=('status','probe','pause','maintenance','stop','resume','enroll-github','qualify-capabilities','qualify-worker','qualify-service','stage-worker','start-worker','withdraw-worker'))
+    parser.add_argument('operation',choices=('status','probe','pause','maintenance','stop','resume','enroll-github','qualify-capabilities','qualify-worker','qualify-service','stage-worker','start-worker','withdraw-worker','reconcile-browser'))
     parser.add_argument('--repo',type=Path,required=True)
     parser.add_argument("--epoch",type=int)
+    parser.add_argument("--request-id")
     args=parser.parse_args()
-    if args.operation in ('stage-worker','start-worker','withdraw-worker'):
+    if args.operation=='reconcile-browser':
+        if not args.request_id:parser.error('--request-id is required')
+        result=broker_request(args.repo,{'operation':'browser_reconcile','request_id':args.request_id})
+    elif args.operation in ('stage-worker','start-worker','withdraw-worker'):
         if args.operation=='start-worker' and args.epoch is None:parser.error('--epoch is required for start-worker')
         result=worker_service_request(args.repo,args.operation.replace('-','_'),epoch=args.epoch)
     elif args.operation == 'enroll-github':

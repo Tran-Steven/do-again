@@ -68,6 +68,16 @@ class WorkerAdmissionTests(unittest.TestCase):
             status={**self.status,**changes}
             with self.subTest(changes=changes),self.assertRaises(OperatorError):self.context(status=status)
 
+    def test_ongoing_admitted_operation_can_drain_but_startup_and_ambiguity_deny(self):
+        live={**self.status,'unresolved_executions':[{'request_id':'execution-original','state':'started'}],
+              'inflight_request_ids':['execution-original']}
+        self.context(status=live,ongoing=True)
+        with self.assertRaises(OperatorError):self.context(status=live)
+        with self.assertRaises(OperatorError):self.context(status={**live,'inflight_request_ids':[]},ongoing=True)
+        with self.assertRaises(OperatorError):self.context(status={**live,'operator_intent':'paused'},ongoing=True)
+        with self.assertRaises(OperatorError):
+            self.context(status={**live,'unresolved_executions':live['unresolved_executions']+[{'request_id':'ambiguous'}]},ongoing=True)
+
     def test_sealed_false_flag_missing_source_and_foreign_binding_do_not_admit(self):
         for changes in ({'production_ready':False},{'source_sha':None},{'source_sha':'not-a-sha'},
                         {'schema_version':2},{'projects':self.projects[:1]}):
@@ -166,3 +176,34 @@ class WorkerAdmissionTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class BrowserAdmissionRecoveryTests(unittest.TestCase):
+    def test_recovery_is_read_only_and_preserves_missing_evidence(self):
+        from do_again.supervisor import immutable_worker as worker
+        from unittest.mock import patch
+        repo=Path('/trusted/do-again')
+        first={'unresolved_executions':[{'request_id':'browser-original','state':'started'}]}
+        final={'unresolved_executions':[],'operator_intent':'active'}
+        with patch.object(worker,'broker_request',side_effect=[first,{'state':'completed','reconciled_read_only':True},final]) as rpc:
+            self.assertEqual(worker.read_admission_status(repo),final)
+            self.assertEqual([call.args[1]['operation'] for call in rpc.call_args_list],
+                ['status','browser_reconcile','status'])
+            self.assertEqual(rpc.call_args_list[1].args[1]['request_id'],'browser-original')
+        with patch.object(worker,'broker_request',side_effect=[first,{'state':'post_dispatch_uncertain'},first]):
+            self.assertEqual(worker.read_admission_status(repo)['unresolved_executions'],first['unresolved_executions'])
+
+    def test_execution_uncertainty_has_no_browser_reconciliation(self):
+        from do_again.supervisor import immutable_worker as worker
+        from unittest.mock import patch
+        status={'unresolved_executions':[{'request_id':'engineering-original'}]}
+        with patch.object(worker,'broker_request',return_value=status) as rpc:
+            self.assertEqual(worker.read_admission_status(Path('/trusted/do-again')),status)
+            self.assertEqual([call.args[1]['operation'] for call in rpc.call_args_list],['status','status'])
+
+    def test_active_browser_helper_is_not_reconciled_while_it_is_running(self):
+        status={'unresolved_executions':[{'request_id':'browser-original'}],
+                'inflight_request_ids':['browser-original']}
+        with patch.object(worker,'broker_request',return_value=status) as rpc:
+            self.assertEqual(worker.read_admission_status(Path('/trusted/do-again')),status)
+            self.assertEqual([call.args[1]['operation'] for call in rpc.call_args_list],['status','status'])

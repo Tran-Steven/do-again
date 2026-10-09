@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def main():
+def _tick():
     from ..service.daemon import _drain_browser_outbox, _pending_outbox
     repo,state,control=map(Path,sys.argv[1:4])
     ci=json.loads(sys.argv[4])
@@ -19,9 +19,8 @@ def main():
         outcome='waiting_for_human' if isinstance(exc,BrowserAuthRequired) else 'awaiting_ack'
         atomic_json(state/'attention.json',{'state':outcome,'reason':type(exc).__name__,
             'action':'Inspect the exact original conversation; do not replay uncertain messages'})
-        print(json.dumps({'state':'completed','delivered':0,'liveness':outcome,
-            'delivery_acknowledged':False,'outbox_preserved':True}),flush=True)
-        return
+        return {'state':'completed','delivered':0,'liveness':outcome,
+            'delivery_acknowledged':False,'outbox_preserved':True}
     from ..service.liveness import check_liveness
     from ..core.schema import atomic_json
     def attention(repo,config,value,reason='idle'):
@@ -35,4 +34,30 @@ def main():
         outcome=check_liveness(repo,control,state,ci_probe=lambda binding:ci,reporter=attention,
             settings={'continuous':True,'report_stalls':False,'issue_repo':'',
                       'idle_seconds':60,'recovery_seconds':300})
-    print(json.dumps({'state':'completed','delivered':delivered,'liveness':outcome}),flush=True)
+    return {'state':'completed','delivered':delivered,'liveness':outcome}
+
+
+def main():
+    # Fixed identity arguments are supplied by the root broker, never scripts.
+    from .macos_execution import REQUEST_ID
+    from .control_history import SHA
+    from ..core.schema import atomic_json
+    if len(sys.argv) != 9 or not REQUEST_ID.fullmatch(sys.argv[6]) or not SHA.fullmatch(sys.argv[7]):
+        raise ValueError('browser helper requires its original broker identity')
+    request_id, source, epoch = sys.argv[6], sys.argv[7], int(sys.argv[8])
+    if epoch < 1:
+        raise ValueError('browser helper epoch is invalid')
+    from ..browser.errors import BrowserAuthRequired, BrowserSubmissionUncertain
+    try:
+        result = _tick()
+    except (BrowserAuthRequired, BrowserSubmissionUncertain) as exc:
+        outcome='waiting_for_human' if isinstance(exc,BrowserAuthRequired) else 'awaiting_ack'
+        atomic_json(Path(sys.argv[2])/'attention.json',{'state':outcome,'reason':type(exc).__name__,
+            'action':'Inspect the original event and bound conversation; do not replay'})
+        result={'state':'completed','delivered':0,'liveness':outcome,
+                'delivery_acknowledged':False,'outbox_preserved':True}
+    # The fixed sealed helper has no effects after this durable terminal receipt.
+    # Loss of stdout can therefore be reconciled by the broker without CDP access.
+    atomic_json(Path(sys.argv[2]) / 'browser_tick_receipts' / (request_id + '.json'),
+        {'schema_version':1,'request_id':request_id,'source_sha':source,'epoch':epoch,'result':result})
+    print(json.dumps(result),flush=True)

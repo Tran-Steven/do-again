@@ -202,8 +202,9 @@ def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path
 
 
 class ExecutionLedger:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, on_reserve=None):
         self.path = path
+        self.on_reserve = on_reserve
         with closing(sqlite3.connect(path)) as db, db:
             db.execute('PRAGMA synchronous=FULL')
             db.execute('CREATE TABLE IF NOT EXISTS execution (project TEXT, request TEXT, fingerprint TEXT, '
@@ -264,6 +265,10 @@ class ExecutionLedger:
             db.execute('INSERT INTO execution VALUES(?,?,?,?,NULL)', (project, request, fingerprint, 'started'))
             if intent is not None:
                 db.execute('INSERT INTO capability_intent VALUES(?,?,?)',(project,request,json.dumps(intent)))
+            if self.on_reserve is not None:
+                # Publish trusted in-flight ownership before the transaction
+                # makes this started row visible to concurrent status readers.
+                self.on_reserve(project, request)
         return None
 
     def finish(self, project: str, request: str, result: dict[str, Any]) -> None:

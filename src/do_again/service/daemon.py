@@ -81,6 +81,37 @@ def _queue_receipt(state_dir: Path, receipt: dict[str, Any]) -> Path:
     return path
 
 
+def _queue_continuation(state_dir: Path, prompt: str, *, purpose: str, marker: str, binding: dict[str, Any]) -> Path:
+    """Trusted scheduler reservation; the common outbox performs the only send."""
+    if purpose not in {'ci_continuation', 'idle_continuation'} or not marker or not prompt:
+        raise BrowserError('invalid scoped continuation intent')
+    if not isinstance(binding,dict) or not browser_runtime._chat_id(str(binding.get('chat_url') or '')):
+        raise BrowserError('continuation requires an exact original conversation binding')
+    identity = hashlib.sha256((purpose + ':' + marker).encode()).hexdigest()
+    item = {'request_id': 'continuation-' + identity, 'kind': 'continuation',
+            'purpose': purpose, 'event_marker': marker, 'prompt': prompt,
+            'chat_url':binding['chat_url'],'binding_identity':browser_runtime.binding_identity(binding)}
+    with _file_lock(state_dir / 'browser_delivery.lock', timeout=5.0):
+        path = _browser_outbox_dir(state_dir) / (item['request_id'] + '.json')
+        reservation = state_dir / 'browser_reservations' / (item['request_id'] + '.json')
+        if reservation.exists():
+            reserved = _read_outbox(reservation)
+            if reserved.get('item') != item:
+                raise BrowserSubmissionUncertain('continuation reservation payload conflicts')
+            if reserved.get('state') == 'reconciled':
+                return reservation
+            if not path.exists():
+                raise BrowserSubmissionUncertain('continuation reservation lacks outbox evidence; no automatic replay')
+        if path.exists():
+            if _read_outbox(path) != item:
+                raise BrowserSubmissionUncertain('continuation identity already binds a different payload')
+            return path
+        atomic_json(reservation, {'item': item, 'state': 'prepared'})
+        result = _queue_receipt(state_dir, item)
+        atomic_json(reservation, {'item': item, 'state': 'queued'})
+        return result
+
+
 def _pending_outbox(state_dir: Path) -> list[Path]:
     outbox = _browser_outbox_dir(state_dir)
     if not outbox.is_dir():
@@ -133,6 +164,10 @@ def _acknowledge_uncertain_batch(state_dir: Path, paths: list[Path], state: dict
     atomic_json(_delivery_evidence_path(state_dir, state), dict(state, state='reconciled',
         message_visible=True, assistant_acknowledged=True, reconciled_at_utc=utc_now().isoformat()))
     for path in paths:
+        reservation = state_dir / 'browser_reservations' / path.name
+        if reservation.exists():
+            reserved = _read_outbox(reservation)
+            atomic_json(reservation, dict(reserved, state='reconciled', evidence=str(_delivery_evidence_path(state_dir, state))))
         path.unlink(missing_ok=True)
     _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
     _record_browser_state(state_dir, "queued" if _pending_outbox(state_dir) else "ready")
@@ -150,10 +185,7 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
             or any(evidence.get(key) != state.get(key) for key in
                 ('request_ids', 'binding_identity', 'payload_sha256', 'acknowledgment_token'))):
             raise BrowserSubmissionUncertain('Invalid terminal delivery evidence; manual inspection required')
-        for path in paths:
-            path.unlink(missing_ok=True)
-        _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
-        _record_browser_state(state_dir, 'queued' if _pending_outbox(state_dir) else 'ready')
+        _acknowledge_uncertain_batch(state_dir, paths, evidence)
         return len(paths)
     if any(not p.exists() for p in paths):
         raise BrowserSubmissionUncertain(
@@ -218,16 +250,31 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
         _record_browser_state(state_dir, "ready")
         return 0
 
-    batch_paths = paths[:20]
+    # A continuation reserves one event and never shares a receipt batch.
+    batch_paths = []
+    for candidate in paths[:20]:
+        item = _read_outbox(candidate)
+        if item.get('kind') == 'continuation':
+            if not batch_paths:
+                batch_paths.append(candidate)
+            break
+        batch_paths.append(candidate)
     receipts = [_read_outbox(path) for path in batch_paths]
     ids = [str(r.get("request_id") or "") for r in receipts]
+    continuation = receipts[0] if len(receipts) == 1 and receipts[0].get('kind') == 'continuation' else None
+    marker = str(continuation['event_marker']) if continuation else 'DO_AGAIN_RECEIPTS_READY request_ids=' + ','.join(ids)
+    purpose = str(continuation['purpose']) if continuation else 'receipt_notification'
     record = browser_runtime.project_record(repo)
+    if continuation and (continuation.get('chat_url')!=record.get('chat_url')
+                         or continuation.get('binding_identity')!=browser_runtime.binding_identity(record)):
+        raise BrowserSubmissionUncertain('queued continuation binding changed; no automatic replay')
     # Crash-safe intent: if the process dies during a browser click, a later
     # instance must reconcile rather than blindly send the same payload.
     atomic_json(_uncertain_delivery_path(state_dir), {
         "schema_version": 1,
         "request_ids": ids,
-        "batch_marker": "DO_AGAIN_RECEIPTS_READY request_ids=" + ",".join(ids),
+        "batch_marker": marker,
+        "purpose": purpose,
         "chat_url": str(record.get("chat_url") or ""),
         'binding_identity':browser_runtime.binding_identity(record),
         "first_seen_epoch": time.time(),
@@ -276,8 +323,7 @@ def _browser_monitor(
                 admission_check()
             delivered = browser_effect()["delivered"] if browser_effect is not None else _drain_browser_outbox(repo, state_dir)
             if browser_effect is None and not delivered and not _pending_outbox(state_dir):
-                with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
-                    check_liveness(repo, runtime_layout(repo).control_worktree, state_dir)
+                check_liveness(repo, runtime_layout(repo).control_worktree, state_dir)
             delay = 3.0 if delivered else 30.0
         except BrowserSubmissionUncertain as exc:
             _record_browser_state(state_dir, "submission_uncertain", error=str(exc))

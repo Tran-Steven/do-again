@@ -105,7 +105,7 @@ class LivenessIntegrationTests(unittest.TestCase):
             patch.object(liveness.browser, "_assistant_snapshot", return_value={"busy": False}),
             patch.object(liveness.browser, "_context_limit_warning", return_value=""),
             patch.object(liveness.browser, "_page_contains", return_value=False),
-            patch.object(liveness.browser, "send_message"),
+            patch.object(liveness, "_queue_continuation"),
         ]
 
     def _mock_browser(self):
@@ -158,7 +158,7 @@ class LivenessIntegrationTests(unittest.TestCase):
         mocks=self._mock_browser()
         send=mocks[-1]
         self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
-        self.assertIn("DO_AGAIN_LIVENESS_CONTINUE token=",send.call_args.args[1])
+        self.assertIn("DO_AGAIN_LIVENESS_CONTINUE token=",send.call_args.kwargs["marker"])
         mocks[5].return_value=True
         self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_handoff_observed")
         self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_handoff_observed")
@@ -334,7 +334,7 @@ class CiGoalLifecycleTests(unittest.TestCase):
             patch.object(liveness.browser, "ensure_browser_running", return_value={"port":9223}),
             patch.object(liveness.browser, "project_record", return_value={"chat_url":"https://chatgpt.com/c/x"}),
             patch.object(liveness.browser, "_find_chatgpt_target", return_value={"id":"target"}),
-            patch.object(liveness.browser, "send_message"),
+            patch.object(liveness, "_queue_continuation"),
         ]
         mocks=[p.start() for p in patches]
         for p in patches: self.addCleanup(p.stop)

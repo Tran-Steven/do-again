@@ -16,7 +16,7 @@ class BrowserRunnerTests(unittest.TestCase):
             with self.subTest(error=type(error).__name__), tempfile.TemporaryDirectory() as tmp:
                 state = Path(tmp)
                 output = io.StringIO()
-                with patch('sys.argv', ['runner', tmp, tmp, tmp, '{}', '123']), \
+                with patch('sys.argv', ['runner', tmp, tmp, tmp, '{}', '123', 'browser-fixture', 'a'*40, '1']), \
                      patch('do_again.service.daemon._drain_browser_outbox', side_effect=error) as drain, \
                      patch('do_again.service.liveness.check_liveness') as liveness, \
                      patch('sys.stdout', output):
@@ -28,11 +28,14 @@ class BrowserRunnerTests(unittest.TestCase):
                 self.assertFalse(result['delivery_acknowledged'])
                 self.assertTrue(result['outbox_preserved'])
                 self.assertEqual(json.loads((state / 'attention.json').read_text())['state'], expected)
+                receipt=json.loads((state/'browser_tick_receipts/browser-fixture.json').read_text())
+                self.assertEqual(receipt['result'],result)
+                self.assertEqual(receipt['source_sha'],'a'*40)
                 drain.assert_called_once()
                 liveness.assert_not_called()
 
     def test_unclassified_crash_does_not_fabricate_terminal_evidence(self):
-        with tempfile.TemporaryDirectory() as tmp, patch('sys.argv', ['runner', tmp, tmp, tmp, '{}', '123']), \
+        with tempfile.TemporaryDirectory() as tmp, patch('sys.argv', ['runner', tmp, tmp, tmp, '{}', '123', 'browser-fixture', 'a'*40, '1']), \
              patch('do_again.service.daemon._drain_browser_outbox', side_effect=RuntimeError('crash')), \
              patch('sys.stdout', io.StringIO()) as output:
             with self.assertRaises(RuntimeError):
