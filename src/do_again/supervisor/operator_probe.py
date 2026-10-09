@@ -94,6 +94,9 @@ def run_operator_loop(broker,private,root,control,state,policy,remote,rpc,guard,
         code=('import sys;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
               'from do_again.supervisor.qualification_agent import main;main()')
         def run(once):
+            if not once:
+                from .operator_service import run_operator_service
+                return run_operator_service(broker,root,binding,nonce,guard)
             with guard():
                 proc=subprocess.Popen([broker.config['python'],'-I','-S','-B','-c',code,str(binding),
                     *(['--once'] if once else [])],user=operator,group=group,extra_groups=[],
@@ -111,7 +114,7 @@ def run_operator_loop(broker,private,root,control,state,policy,remote,rpc,guard,
             if proc.returncode or len(stdout)>65536 or len(stderr)>65536:
                 raise ExecutionBlocked('operator Agent failed: '+stderr.decode(errors='replace')[-1024:])
             value=json.loads(stdout)
-            if value.get('controller_uid')!=operator or value.get('source_sha')!=broker.config['source_sha']:
+            if value.get('controller_uid')!=operator or value.get('source_sha')!=broker.config['source_sha'] or value.get('engine')!='sealed_daemon':
                 raise ExecutionBlocked('operator Agent source or identity evidence differs')
             return value
         try:
@@ -129,4 +132,6 @@ def run_operator_loop(broker,private,root,control,state,policy,remote,rpc,guard,
     return {'controller_uid':operator,'native_execution_uid':private.project.uid,'tasks':3,
         'authenticated_root_socket':True,'unattended_request_handoff':True,
         'handoff_seconds':handoffs,'restart_without_reexecution':True,
-        'scope':'synthetic_request_intake','browser_delivery':'not_measured'}
+        'scope':'synthetic_request_intake','browser_delivery':'not_measured','engine':'sealed_daemon',
+        'launchd_service':value['launchd_service'],'service_pid':value['service_pid'],
+        'service_withdrawn':value['service_withdrawn']}

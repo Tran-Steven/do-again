@@ -365,16 +365,24 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
     layout = runtime_layout(repo)
     browser_enabled = layout.browser_enabled
 
+    return _run_admitted_worker(args, repo, state_dir, browser_enabled,
+        admission_check=admission_check, control_transport=control_transport, browser_effect=browser_effect)
+
+
+def _run_admitted_worker(args, repo, state_dir, browser_enabled, *, admission_check=None,
+                         control_transport=None, browser_effect=None, executor=None, receipt_observer=None):
+    """Shared sealed engine; callers establish production or fixed fixture authority."""
     browser_monitor_stop = threading.Event()
     browser_work = threading.Event()
     browser_thread: threading.Thread | None = None
 
     def receipt_callback(receipt: dict[str, Any]) -> None:
-        if not browser_enabled:
-            return
-        _queue_receipt(state_dir, receipt)
-        _record_browser_state(state_dir, "queued")
-        browser_work.set()
+        if browser_enabled:
+            _queue_receipt(state_dir, receipt)
+            _record_browser_state(state_dir, "queued")
+            browser_work.set()
+        if receipt_observer is not None and receipt_observer(receipt):
+            agent.stop_requested = True
 
     agent = Agent(
         repo=repo,
@@ -383,7 +391,8 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
         remote=args.remote,
         policy_path=Path(args.policy),
         state_dir=state_dir,
-        receipt_callback=receipt_callback if browser_enabled else None,
+        receipt_callback=receipt_callback if browser_enabled or receipt_observer is not None else None,
+        executor=executor,
         admission_check=admission_check,
         control_transport=control_transport,
     )

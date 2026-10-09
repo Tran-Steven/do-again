@@ -28,7 +28,8 @@ def main():
     from .immutable_worker import read_worker_configuration
     from .macos_server import verify_installation
     from .macos_client import _request
-    from ..core.agent import Agent
+    from ..service.daemon import _run_admitted_worker
+    from argparse import Namespace
     from ..core.broker_executor import BrokerExecutor
     from ..core.control_transport import BrokerControlHistory
     if sys.platform!='darwin' or not (sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode):
@@ -56,11 +57,11 @@ def main():
         if str(row.get('request_id','')).startswith('operator-proof-'+value['nonce']+'-'):
             if row.get('state')!='succeeded':raise ExecutionBlocked('operator fixture task failed')
             done.add(row['request_id'])
-            if len(done)==3:agent.stop_requested=True
-    agent=Agent(repo=repo,control_worktree=paths['control'],branch='operator-control',
-        policy_path=paths['policy'],state_dir=paths['state'],admission_check=check,
-        receipt_callback=receipt,executor=BrokerExecutor(repo=repo,policy_path=paths['policy'],
+            return len(done)==3
+    args=Namespace(control_worktree=str(paths['control']),branch='operator-control',remote='origin',
+        policy=str(paths['policy']),once=len(sys.argv)>2 and sys.argv[2]=='--once')
+    result=_run_admitted_worker(args,repo,paths['state'],False,admission_check=check,
+        receipt_observer=receipt,executor=BrokerExecutor(repo=repo,policy_path=paths['policy'],
         state_dir=paths['state'],rpc=rpc),control_transport=BrokerControlHistory(repo,paths['control'],1,rpc=rpc))
-    result=agent.run(once=len(sys.argv)>2 and sys.argv[2]=='--once')
     if result:raise ExecutionBlocked('operator qualification Agent did not complete')
-    print(json.dumps({'controller_uid':os.getuid(),'tasks':len(done),'source_sha':config['source_sha']}),flush=True)
+    print(json.dumps({'controller_uid':os.getuid(),'tasks':len(done),'source_sha':config['source_sha'],'engine':'sealed_daemon'}),flush=True)
