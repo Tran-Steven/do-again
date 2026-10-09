@@ -56,14 +56,16 @@ class BrokerExecutor:
             if not isinstance(value, str) or '\x00' in value:
                 raise OperatorError('path must be a string')
             path = Path(value)
-            if path.is_absolute():
+            if path.anchor:
+                if not path.is_absolute():
+                    raise OperatorError('rooted path is outside the project')
                 try:
                     path = path.resolve().relative_to(self.repo)
                 except ValueError as exc:
                     raise OperatorError('path is outside the project') from exc
             if '..' in path.parts:
                 raise OperatorError('path escapes the assigned worktree')
-            return str(path)
+            return path.as_posix()
 
         values = args.get('argv', [])
         if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
