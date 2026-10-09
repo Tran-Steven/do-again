@@ -63,8 +63,10 @@ class WorkerServiceTests(unittest.TestCase):
         def scoped_stat(path,*args,**kwargs):
             actual=original_stat(path,*args,**kwargs)
             uid=0 if path==marker or path!=mirror else 501
-            return SimpleNamespace(st_uid=uid,st_nlink=actual.st_nlink,
-                                   st_mode=actual.st_mode&~0o022)
+            # Model the macOS permission policy explicitly; Windows chmod
+            # cannot establish POSIX 0700 and remains unsupported in production.
+            mode=(actual.st_mode&~0o777)|0o700 if path==mirror else actual.st_mode&~0o022
+            return SimpleNamespace(st_uid=uid,st_nlink=actual.st_nlink,st_mode=mode)
         with patch.object(type(marker),'stat',new=scoped_stat),              patch.object(service,'private_root_file',side_effect=ExecutionBlocked('operator ancestors are intentionally not root-only')):
             service.provision_mirror(self.broker)
             os.link(marker,mirror/'alias')
