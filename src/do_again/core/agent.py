@@ -41,12 +41,14 @@ class Agent:
         remote: str = "origin",
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         executor: Any | None = None,
+        admission_check: Callable[[], Any] | None = None,
     ):
         self.repo = repo.resolve()
         self.control_worktree = control_worktree.resolve()
         self.branch = branch
         self.remote = remote
         self.receipt_callback = receipt_callback
+        self.admission_check = admission_check
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
@@ -73,6 +75,8 @@ class Agent:
         self.poll_seconds = max(1.0, float(self.policy.get("poll_seconds", 3)))
 
     def git(self, *args: str, timeout: float = 60) -> subprocess.CompletedProcess[str]:
+        if self.admission_check is not None:
+            self.admission_check()
         return subprocess.run(
             ["git", "-C", str(self.control_worktree), *args],
             text=True,
@@ -904,6 +908,8 @@ class Agent:
             print(f"do-again initial status publish failed: {exc}", file=sys.stderr, flush=True)
         while not self.stop_requested:
             try:
+                if self.admission_check is not None:
+                    self.admission_check()
                 self.sync()
                 did_work = False
                 for path in self.request_paths():
@@ -916,6 +922,11 @@ class Agent:
                 if not did_work:
                     time.sleep(self.poll_seconds)
             except Exception as exc:
+                from ..supervisor.authority import AuthorityDenied
+                if isinstance(exc, AuthorityDenied):
+                    # Authority loss is an operator handoff, not a recoverable
+                    # polling error. Do not publish remote status after pause.
+                    return 0
                 print(f"do-again loop error: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 if once:
                     return 1

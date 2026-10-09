@@ -3,9 +3,12 @@ import copy
 import json
 import os
 import tempfile
+import threading
+import sys
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from do_again.core.schema import OperatorError
 from do_again.supervisor import immutable_worker as worker
@@ -15,6 +18,8 @@ from do_again.supervisor.macos_execution import EXECUTION_ROOT
 
 class WorkerAdmissionTests(unittest.TestCase):
     def setUp(self):
+        self.flags=SimpleNamespace(**{k:getattr(sys.flags,k) for k in dir(sys.flags) if not k.startswith('_') and isinstance(getattr(sys.flags,k),int)})
+        self.flags.isolated=self.flags.no_site=self.flags.dont_write_bytecode=1
         self.root=worker.INSTALL_ROOT
         self.home=Path.home()
         self.policy=json.loads((Path(__file__).resolve().parents[1]/'src/do_again/worker_policy.json').read_text())
@@ -23,7 +28,7 @@ class WorkerAdmissionTests(unittest.TestCase):
             repo=self.home/name;key=project_identity(repo)
             self.projects.append({'repo':str(repo),'key':key,'uid':401+index,'gid':401+index,
                 'account':worker.PROJECT_ACCOUNTS[name], 'worktree':str(EXECUTION_ROOT/key/'worktree')})
-        self.config={'schema_version':1,'operator_uid':501,'operator_home':str(self.home),
+        self.config={'schema_version':1,'operator_uid':501,'operator_gid':20,'operator_home':str(self.home),
             'source_sha':'a'*40,'production_ready':True,'projects':self.projects,
             'python':str(self.root/'current/runtimes/python/bin/python3')}
         self.status={'source_sha':'a'*40,'operator_intent':'active','production_ready':True,
@@ -103,10 +108,53 @@ class WorkerAdmissionTests(unittest.TestCase):
             config.assert_not_called()
 
     @unittest.skipUnless(hasattr(os,'getuid'),'POSIX identity mock')
+    def test_host_python_import_environment_rejects_before_configuration(self):
+        with patch.object(worker.sys,'platform','darwin'), \
+             patch.object(worker.sys,'flags',Mock(isolated=0,no_site=0,dont_write_bytecode=0)), \
+             patch.object(worker,'read_worker_configuration') as config:
+            with self.assertRaises(OperatorError):worker.main(['--project','do-again'])
+            config.assert_not_called()
+
+    def test_revoked_admission_prevents_control_git_process(self):
+        from do_again.core.agent import Agent
+        from do_again.supervisor.authority import AuthorityDenied
+        agent=object.__new__(Agent)
+        agent.admission_check=Mock(side_effect=AuthorityDenied('paused'))
+        with patch('do_again.core.agent.subprocess.run') as process:
+            with self.assertRaises(AuthorityDenied):agent.git('push','origin','HEAD:operator-control')
+            process.assert_not_called()
+
+    def test_agent_exits_on_pause_without_sync_retry_or_remote_status(self):
+        from do_again.core.agent import Agent
+        from do_again.supervisor.authority import AuthorityDenied
+        with tempfile.TemporaryDirectory() as root:
+            agent=object.__new__(Agent);agent.executor=object();agent.ledger_dir=Path(root)/'ledger'
+            agent.stop_requested=False;agent.publish_status=Mock();agent.sync=Mock()
+            agent.admission_check=Mock(side_effect=AuthorityDenied('paused'))
+            with patch('do_again.core.agent.time.sleep') as retry:
+                self.assertEqual(agent.run(),0)
+                agent.sync.assert_not_called();retry.assert_not_called()
+            # Only the pre-loop status attempt, never a post-pause remote status.
+            agent.publish_status.assert_called_once_with('ready')
+
+    def test_browser_monitor_pause_never_delivers_or_restarts(self):
+        from do_again.service.daemon import _browser_monitor
+        from do_again.supervisor.authority import AuthorityDenied
+        with tempfile.TemporaryDirectory() as root:
+            stop=threading.Event()
+            with patch('do_again.service.daemon._drain_browser_outbox') as delivery:
+                _browser_monitor(repo=Path(root),state_dir=Path(root),stop_event=stop,
+                    work_event=threading.Event(),admission_check=Mock(side_effect=AuthorityDenied('paused')))
+                delivery.assert_not_called();self.assertTrue(stop.is_set())
+            self.assertEqual(json.loads((Path(root)/'browser_status.json').read_text())['state'],'paused')
+
+    @unittest.skipUnless(hasattr(os,'getuid'),'POSIX identity mock')
     def test_pause_during_startup_prevents_daemon_creation(self):
         paused={**self.status,'operator_intent':'paused','epoch':3}
         with patch.object(worker.sys,'platform','darwin'),patch.object(worker.os,'getuid',return_value=501), \
              patch.object(worker.os,'geteuid',return_value=501),patch.object(worker,'read_worker_configuration',return_value=self.config), \
+             patch.object(worker.os,'getgid',return_value=20),patch.object(worker.os,'getegid',return_value=20), \
+             patch.object(worker.sys,'flags',self.flags), \
              patch('do_again.supervisor.macos_server.verify_installation'), \
              patch.object(worker,'broker_request',side_effect=[self.status,paused]), \
              patch.object(Path,'read_text',return_value=json.dumps(self.policy)), \

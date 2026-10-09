@@ -140,7 +140,11 @@ def main(argv: list[str] | None = None) -> int:
         raise OperatorError("installed worker requires verified macOS confinement")
     if not hasattr(os, "getuid") or not hasattr(os, "geteuid"):
         raise OperatorError("operator identity is unavailable")
+    if not (sys.flags.isolated and sys.flags.no_site and sys.flags.dont_write_bytecode):
+        raise OperatorError('worker requires isolated Python without host site imports or bytecode writes')
     config = read_worker_configuration()
+    if (os.getgid() != config.get('operator_gid') or os.getegid() != os.getgid()):
+        raise OperatorError('worker operator group differs from the sealed identity')
     from .macos_server import verify_installation
     verify_installation(config)
     project = next(
@@ -184,7 +188,18 @@ def main(argv: list[str] | None = None) -> int:
         argv.append("--once")
     # Daemon repeats admission before browser/Git effects. All model-selected
     # commands are routed through the authenticated broker executor.
-    return daemon_main(argv)
+    def admission_check():
+        from .authority import AuthorityDenied
+        try:
+            current = broker_request(repo,{'operation':'status'})
+            validate_worker_context(args.project,config,current,policy,
+                installed_root=INSTALL_ROOT,module_path=Path(__file__),
+                interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid())
+            if any(current.get(k) != status.get(k) for k in ('epoch','goal_revision')):
+                raise OperatorError('worker admission epoch or goal changed')
+        except OperatorError as exc:
+            raise AuthorityDenied(str(exc)) from exc
+    return daemon_main(argv,admission_check=admission_check)
 
 
 if __name__ == "__main__":

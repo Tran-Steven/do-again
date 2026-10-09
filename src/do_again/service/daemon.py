@@ -9,7 +9,7 @@ import time
 import sys
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..browser import (
     BrowserAuthRequired,
@@ -271,9 +271,12 @@ def _browser_monitor(
     state_dir: Path,
     stop_event: threading.Event,
     work_event: threading.Event,
+    admission_check: Callable[[], Any] | None = None,
 ) -> None:
     while not stop_event.is_set():
         try:
+            if admission_check is not None:
+                admission_check()
             delivered = _drain_browser_outbox(repo, state_dir)
             if not delivered and not _pending_outbox(state_dir):
                 with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
@@ -292,6 +295,11 @@ def _browser_monitor(
             _record_browser_state(state_dir, "recovering", error=str(exc))
             delay = 15.0
         except Exception as exc:
+            from ..supervisor.authority import AuthorityDenied
+            if isinstance(exc,AuthorityDenied):
+                _record_browser_state(state_dir,'paused',error=str(exc))
+                stop_event.set()
+                return
             _record_browser_state(
                 state_dir,
                 "recovering",
@@ -303,11 +311,13 @@ def _browser_monitor(
         work_event.clear()
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | None = None) -> int:
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
     from ..supervisor.admission import require_active
     require_active(repo)
+    if admission_check is not None:
+        admission_check()
     state_dir = Path(args.state_dir).resolve()
     layout = runtime_layout(repo)
     browser_enabled = layout.browser_enabled
@@ -331,9 +341,12 @@ def main(argv: list[str] | None = None) -> int:
         policy_path=Path(args.policy),
         state_dir=state_dir,
         receipt_callback=receipt_callback if browser_enabled else None,
+        admission_check=admission_check,
     )
 
     if browser_enabled:
+        if admission_check is not None:
+            admission_check()
         activate_project(repo)
         _record_browser_state(state_dir, "starting")
         try:
@@ -362,6 +375,7 @@ def main(argv: list[str] | None = None) -> int:
                 "state_dir": state_dir,
                 "stop_event": browser_monitor_stop,
                 "work_event": browser_work,
+                "admission_check": admission_check,
             },
             name="do-again-browser-monitor",
             daemon=True,
@@ -383,6 +397,8 @@ def main(argv: list[str] | None = None) -> int:
         result = agent.run(once=args.once)
         if browser_enabled and args.once and _pending_outbox(state_dir):
             try:
+                if admission_check is not None:
+                    admission_check()
                 _drain_browser_outbox(repo, state_dir)
             except Exception:
                 pass
@@ -394,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
             browser_thread.join(timeout=2.0)
         if browser_enabled:
             try:
+                if admission_check is not None:
+                    admission_check()
                 deactivate_project(repo)
                 stop_if_unused()
             except Exception:
