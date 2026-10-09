@@ -16,13 +16,13 @@ from do_again.supervisor.github import GitHubRepository
 
 class Remote:
     def __init__(self):
-        self.head='a'*40;self.tree='b'*40;self.entries={};self.blobs={};self.writes=[];self.lose_patch=False
+        self.control_branch='operator-control';self.head='a'*40;self.tree='b'*40;self.entries={};self.blobs={};self.writes=[];self.lose_patch=False
         self.commits={self.head:{'sha':self.head,'tree':{'sha':self.tree},'parents':[],'message':'baseline'}}
         self.trees={self.tree:{}}
     def request(self,method,endpoint,payload=None):
         if method!='GET':self.writes.append((method,endpoint,copy.deepcopy(payload)))
         if method=='GET':
-            if endpoint=='git/ref/heads/operator-control':return {'object':{'sha':self.head}}
+            if endpoint=='git/ref/heads/'+self.control_branch:return {'object':{'sha':self.head}}
             kind,sha=endpoint.split('/')[1:3];sha=sha.split('?')[0]
             if kind=='commits':return self.commits[sha]
             if kind=='trees':return {'sha':sha,'truncated':False,'tree':[{'path':p,'sha':s,'mode':'100644','type':'blob'} for p,s in self.trees[sha].items()]}
@@ -36,7 +36,7 @@ class Remote:
         if endpoint=='git/commits':
             sha=hashlib.sha1(canonical_json(payload)).hexdigest()
             self.commits[sha]=dict(payload,sha=sha,tree={'sha':payload['tree']},parents=[{'sha':p} for p in payload['parents']]);return {'sha':sha}
-        if endpoint=='git/refs/heads/operator-control':
+        if endpoint=='git/refs/heads/'+self.control_branch:
             assert payload['force'] is False;self.head=payload['sha']
             if self.lose_patch:raise ExecutionBlocked('lost response')
             return {'object':{'sha':self.head}}
@@ -110,6 +110,54 @@ class ControlHistoryTests(unittest.TestCase):
         publish_control(self.broker,self.packet)
         with self.assertRaises(ExecutionBlocked):
             publish_control(self.broker,{**self.packet,'request_id':'control-other-20261009','value':{'owner':'other'}})
+
+    def test_canary_control_is_published_and_reconciled_on_original_branch_only(self):
+        self.remote.control_branch='do-again/canary-'+('c'*24)+'/control'
+        self.remote.lose_patch=True
+        with self.assertRaises(ExecutionBlocked):publish_control(self.broker,self.packet)
+        writes=copy.deepcopy(self.remote.writes)
+        self.assertEqual(writes[-1][1],'git/refs/heads/'+self.remote.control_branch)
+        self.remote.control_branch='operator-control'
+        with self.assertRaises(ExecutionBlocked):
+            reconcile_control(self.broker,{'operation':'control_reconcile','request_id':self.packet['request_id']})
+        self.assertEqual(self.remote.writes,writes)
+        self.assertEqual(len(self.broker.ledger.pending('original')),1)
+        self.remote.control_branch='do-again/canary-'+('c'*24)+'/control'
+        self.assertTrue(reconcile_control(self.broker,{'operation':'control_reconcile',
+            'request_id':self.packet['request_id']})['reconciled_read_only'])
+        self.assertEqual(self.remote.writes,writes)
+
+    def test_sync_cache_is_bound_to_repository_and_control_branch(self):
+        packet={'operation':'control_sync','epoch':2,'known':{}}
+        first=sync_control(self.broker,packet)
+        self.remote.control_branch='do-again/canary-'+('c'*24)+'/control'
+        self.remote.head='d'*40
+        self.remote.commits[self.remote.head]=dict(self.remote.commits['a'*40],sha=self.remote.head)
+        second=sync_control(self.broker,packet)
+        self.assertNotEqual(first['head'],second['head'])
+        self.assertEqual(second['head'],self.remote.head)
+
+    def test_canary_api_cannot_read_or_write_legacy_or_other_canary_branch(self):
+        branch='do-again/canary-'+('c'*24)+'/control'
+        api=GitHubRepository('Tran-Steven/do-again','x'*32,control=True,control_branch=branch)
+        with patch('do_again.supervisor.github.https_bytes',return_value=(200,b'{}')) as network:
+            api.request('GET','git/ref/heads/'+branch)
+            api.request('PATCH','git/refs/heads/'+branch,{'sha':'a'*40,'force':False})
+            self.assertEqual(network.call_count,2)
+            for other in ('operator-control','main','do-again/canary-'+('d'*24)+'/control'):
+                for method,endpoint,payload in (
+                    ('GET','git/ref/heads/'+other,None),
+                    ('PATCH','git/refs/heads/'+other,{'sha':'a'*40,'force':False})):
+                    with self.subTest(other=other,method=method),self.assertRaises(ExecutionBlocked):
+                        api.request(method,endpoint,payload)
+            with self.assertRaises(ExecutionBlocked):
+                api.request('PATCH','git/refs/heads/'+branch,{'sha':'a'*40,'force':True})
+            self.assertEqual(network.call_count,2)
+        for invalid in ('main','do-again/canary-x/control',branch+'/../main',None):
+            with self.subTest(branch=invalid),self.assertRaises(ExecutionBlocked):
+                GitHubRepository('Tran-Steven/do-again','x'*32,control=True,control_branch=invalid)
+        with self.assertRaises(ExecutionBlocked):
+            GitHubRepository('Tran-Steven/do-again','x'*32,control_branch=branch)
 
     def test_control_api_cannot_mutate_main_or_force_any_branch(self):
         api=GitHubRepository('Tran-Steven/do-again','x'*32,control=True)

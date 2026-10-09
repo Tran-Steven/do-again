@@ -11,13 +11,12 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from ..core.schema import canonical_json
-from .github import GitHubRepository
+from .github import GitHubRepository, validate_control_branch
 from .macos_execution import ExecutionBlocked, REQUEST_ID
 from .publication import read_credential
 
 PATH = re.compile(r'automation/do_again/(?:agent_status\.json|(?:requests|receipts|claims|cancellations|invalid)/[A-Za-z0-9._-]{1,170}\.json|conflicts/[A-Za-z0-9._-]{1,160}/[0-9a-f]{16}\.json)\Z')
 SHA = re.compile('[0-9a-f]{40}\\Z')
-REF = 'git/ref/heads/operator-control'
 MAX_JSON = 1024*1024
 
 
@@ -38,7 +37,8 @@ def api_for(broker):
     expected={'_doagain_da':'Tran-Steven/do-again','_doagain_jp':'Tran-Steven/jobpipe'}
     if project.get('github_repository') != expected.get(broker.project.account):
         raise ExecutionBlocked('control repository binding is excluded')
-    return GitHubRepository(project['github_repository'],read_credential(broker),control=True)
+    return GitHubRepository(project['github_repository'],read_credential(broker),control=True,
+        control_branch=project.get('control_branch','operator-control'))
 
 
 def gate(broker,epoch):
@@ -49,8 +49,12 @@ def gate(broker,epoch):
         raise ExecutionBlocked('control history admission is closed')
 
 
+def control_branch(api):
+    return validate_control_branch(getattr(api,'control_branch','operator-control'))
+
+
 def snapshot(api):
-    ref=api.request('GET',REF)
+    ref=api.request('GET','git/ref/heads/'+control_branch(api))
     if not ref or not SHA.fullmatch(ref['object']['sha']):
         raise ExecutionBlocked('approved control branch is unavailable')
     head=ref['object']['sha'];commit=api.request('GET','git/commits/'+head)
@@ -101,10 +105,11 @@ def sync_control(broker,packet,*,api=None):
         verify_installation(broker.config)
         api=api or api_for(broker)
         cached=getattr(broker,'control_cache',None)
-        if cached is None or time.monotonic()-cached[0]>10:
+        binding=(getattr(api,'repository',None),control_branch(api))
+        if cached is None or len(cached)!=4 or cached[3]!=binding or time.monotonic()-cached[0]>10:
             head,commit,entries=snapshot(api)
-            broker.control_cache=(time.monotonic(),head,entries)
-        else:_,head,entries=cached
+            broker.control_cache=(time.monotonic(),head,entries,binding)
+        else:_,head,entries,_=cached
         changed=[path for path,sha in entries.items() if known.get(path)!=sha]
         files={};used=0
         for path in sorted(changed)[:16]:
@@ -128,7 +133,10 @@ def reconcile_control(broker,packet,*,api=None):
         intent=broker.ledger.intent(broker.project.key,packet['request_id'])
         if not intent or intent.get('operation')!='control_publish':
             raise ExecutionBlocked('original control publication is unavailable')
-        api=api or api_for(broker);head,commit,entries=snapshot(api)
+        api=api or api_for(broker)
+        if control_branch(api)!=intent.get('control_branch','operator-control'):
+            raise ExecutionBlocked('original control branch changed; reconciliation is blocked')
+        head,commit,entries=snapshot(api)
         if (commit.get('message')!=intent['message'] or
                 [p['sha'] for p in commit['parents']]!=[intent['base']]
                 or entries.get(intent['path'])!=intent['blob']):
@@ -168,7 +176,7 @@ def publish_control(broker,packet,*,api=None):
             stamp=datetime.now(timezone.utc).replace(microsecond=0).isoformat()
             message='Do Again control '+packet['request_id']
             broker.ledger.reserve(broker.project.key,packet['request_id'],fingerprint,
-                intent={'operation':'control_publish','base':base,'path':packet['path'],'blob':sha,'message':message})
+                intent={'operation':'control_publish','base':base,'path':packet['path'],'blob':sha,'message':message,'control_branch':control_branch(api)})
         @contextmanager
         def effect():
             with broker.admission():
@@ -190,10 +198,10 @@ def publish_control(broker,packet,*,api=None):
             head=created.get('sha','')
             if not SHA.fullmatch(head):raise ExecutionBlocked('invalid control commit identity')
         with effect():
-            current=api.request('GET',REF)
+            current=api.request('GET','git/ref/heads/'+control_branch(api))
             if current['object']['sha']!=base:raise ExecutionBlocked('control branch changed before publication')
-            api.request('PATCH','git/refs/heads/operator-control',{'sha':head,'force':False})
-            observed=api.request('GET',REF)
+            api.request('PATCH','git/refs/heads/'+control_branch(api),{'sha':head,'force':False})
+            observed=api.request('GET','git/ref/heads/'+control_branch(api))
             if observed['object']['sha']!=head:raise ExecutionBlocked('control reference outcome is uncertain')
         observed_head,observed_commit,observed_entries=snapshot(api)
         if (observed_head!=head or observed_commit.get('message')!=message

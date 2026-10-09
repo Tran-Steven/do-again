@@ -361,3 +361,22 @@ that admitted operation to drain and defers browser dispatch; startup still requ
 quiescent journal. Handler exit, exception or broker restart removes the in-memory proof.
 Replaying a historical started row cannot recreate it. Pause, source/epoch changes and
 unverified boundaries continue to deny admission regardless of live-handler evidence.
+
+### Separate live-canary control history
+
+Control Git capabilities can bind to one sealed branch: `operator-control` by
+default, or `do-again/canary-<24 lowercase hex digits>/control` for a disposable
+canary. The branch comes from immutable supervisor project configuration, never
+from an execution request. A canary capability cannot read or update the legacy
+control ref, another canary ref, or main; force updates and ref creation remain
+denied. Control caches and uncertain publication intents retain their exact
+branch binding. Changing that binding blocks reconciliation rather than accepting
+evidence from a different branch. Legacy intents retain the original
+`operator-control` binding.
+
+This capability does not grant canary execution authority or open production.
+The installed maintenance fixture still disables browser delivery and uses fixed
+requests. A real live canary additionally requires a sealed disposable target,
+a dedicated conversation binding, and separate bounded authority before any
+worker or browser effect. Fixture task handoffs and manually published PRs are
+not live autonomous acceptance evidence.

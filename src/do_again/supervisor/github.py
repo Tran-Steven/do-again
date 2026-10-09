@@ -10,12 +10,25 @@ from .macos_execution import ExecutionBlocked
 from .network import https_bytes
 
 
+def validate_control_branch(branch: str) -> str:
+    """Only the legacy branch or an isolated canary namespace can be sealed."""
+    if not isinstance(branch, str) or not re.fullmatch(
+            r'operator-control|do-again/canary-[0-9a-f]{24}/control', branch):
+        raise ExecutionBlocked('control branch is outside the sealed namespace')
+    return branch
+
+
 class GitHubRepository:
-    def __init__(self, repository: str, token: str, *, control: bool = False):
+    def __init__(self, repository: str, token: str, *, control: bool = False,
+                 control_branch: str = "operator-control"):
         if repository not in {'Tran-Steven/do-again','Tran-Steven/jobpipe'}:
             raise ExecutionBlocked('repository publication scope is excluded')
         if not isinstance(token,str) or not re.fullmatch('[A-Za-z0-9_]{20,255}',token):
             raise ExecutionBlocked('repository credential is unavailable')
+        validate_control_branch(control_branch)
+        if not control and control_branch != "operator-control":
+            raise ExecutionBlocked("control branch cannot expand publication authority")
+        self.control_branch = control_branch
         self.repository = repository
         self._token = token
         self.control = control
@@ -34,9 +47,9 @@ class GitHubRepository:
         write = method=='POST' and endpoint in {'git/blobs','git/trees','git/commits','git/refs','pulls'}
         update = method=='PATCH' and bool(re.fullmatch('git/refs/heads/'+branch+'|pulls/[1-9][0-9]*',endpoint))
         if self.control:
-            read = bool(re.fullmatch(r'actions/runs/[1-9][0-9]*|git/(?:commits|blobs|trees)/[0-9a-f]{40}|git/trees/[0-9a-f]{40}\?recursive=1|git/ref/heads/operator-control',endpoint))
+            read = bool(re.fullmatch(r'actions/runs/[1-9][0-9]*|git/(?:commits|blobs|trees)/[0-9a-f]{40}|git/trees/[0-9a-f]{40}\?recursive=1',endpoint) or endpoint == 'git/ref/heads/' + self.control_branch)
             write = method=='POST' and endpoint in {'git/blobs','git/trees','git/commits'}
-            update = (method=='PATCH' and endpoint=='git/refs/heads/operator-control'
+            update = (method=='PATCH' and endpoint=='git/refs/heads/'+self.control_branch
                       and isinstance(payload,dict) and set(payload)=={'sha','force'}
                       and payload['force'] is False and isinstance(payload['sha'],str)
                       and SHA.fullmatch(payload['sha']))

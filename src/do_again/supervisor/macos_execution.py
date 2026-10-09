@@ -108,6 +108,8 @@ def load_configuration(path: Path) -> dict[str, Any]:
     if operator.pw_gid != config['operator_gid'] or operator.pw_dir != config['operator_home']:
         raise ExecutionBlocked('operator identity changed')
     for item in projects:
+        from .github import validate_control_branch
+        validate_control_branch(item.get('control_branch', 'operator-control'))
         project = project_from_dict(item)
         project.validate(config['operator_uid'])
         account = pwd.getpwuid(project.uid)
