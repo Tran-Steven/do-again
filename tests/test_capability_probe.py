@@ -22,6 +22,7 @@ class CapabilityProbeTests(unittest.TestCase):
         with patch('do_again.supervisor.capability_probe.sys.platform','win32'):
             with self.assertRaises(ExecutionBlocked):qualification_gate(None)
 
+    @unittest.skipUnless(hasattr(__import__('os'), 'geteuid'), 'native identity requires POSIX')
     def test_pause_production_unverified_or_owned_process_blocks_qualification(self):
         broker=SimpleNamespace(config={'production_ready':False},project=SimpleNamespace(repo=Path('/repo'),uid=401,worktree=Path('/worktree')),
             registry=SimpleNamespace(status=lambda repo:{'intent':'maintenance'}),_verified=lambda:True)
