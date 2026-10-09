@@ -88,16 +88,23 @@ def seal_git(payload: Path) -> str:
     if not binary.is_absolute() or not approved:
         raise ValueError('Git must come from the approved Apple developer tools')
     for path in (binary,*binary.parents):
-        if path.is_symlink() or path.stat().st_uid!=0 or path.stat().st_mode & 0o002:
-            raise ValueError('Git toolchain is aliased or not root-controlled')
+        if path.is_symlink():
+            raise ValueError('Git toolchain contains a path alias')
     if not binary.is_file() or binary.stat().st_nlink!=1:
         raise ValueError('Git executable is not an unaliased regular file')
-    subprocess.run(['/usr/bin/codesign','--verify','--strict','-R','=anchor apple',str(binary)],
-                   check=True,capture_output=True)
     target=payload/'runtimes/git/bin/git'
     target.parent.mkdir(parents=True)
     shutil.copyfile(binary,target)
     target.chmod(0o755)
+    # Verify the copied bytes, eliminating a source-change race. Apple identity
+    # is authoritative even on hosted runners whose Xcode directory is user-owned.
+    try:
+        subprocess.run(['/usr/bin/codesign','--verify','--strict','-R',
+                        '=anchor apple and identifier \"com.apple.git\"',str(target)],
+                       check=True,capture_output=True)
+    except BaseException:
+        target.unlink(missing_ok=True)
+        raise
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
