@@ -114,6 +114,16 @@ class GitCapabilityTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):
             copy_git_data(self.repo / '.git', self.root / 'budget', byte_budget=1)
 
+    def test_packed_replace_references_are_removed_without_losing_head(self):
+        self.run_git('-C', str(self.repo), 'pack-refs', '--all', '--prune')
+        packed = self.repo / '.git/packed-refs'
+        with packed.open('a') as stream:
+            stream.write(f'{self.head} refs/replace/{self.head}\n')
+        tx = self.transaction()
+        tx.prepare(self.repo / '.git')
+        self.assertNotIn('refs/replace/', (tx.metadata / 'packed-refs').read_text())
+        tx.check_head(self.head)
+
     def test_native_probe_missing_git_fails_closed_without_launch(self):
         from do_again.supervisor.macos_probe import verify_native_git
         from unittest.mock import Mock, patch

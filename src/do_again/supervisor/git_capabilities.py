@@ -81,6 +81,27 @@ def _data_file(relative: str) -> bool:
     return bool(REF.fullmatch(relative) and '..' not in relative and '//' not in relative)
 
 
+def _packed_refs(content: bytes) -> bytes:
+    kept = [b'# pack-refs with: peeled fully-peeled sorted \n']
+    admitted = False
+    for line in content.splitlines():
+        if line.startswith(b'#'):
+            continue
+        if line.startswith(b'^'):
+            if not SHA.fullmatch(line[1:].decode('ascii')):
+                raise ExecutionBlocked('invalid packed reference peel')
+            if admitted:
+                kept.append(line + b'\n')
+            continue
+        fields = line.decode('ascii').split()
+        if len(fields) != 2 or not SHA.fullmatch(fields[0]):
+            raise ExecutionBlocked('invalid packed reference')
+        admitted = bool(REF.fullmatch(fields[1]) and '..' not in fields[1] and '//' not in fields[1])
+        if admitted:
+            kept.append(line + b'\n')
+    return b''.join(kept)
+
+
 def copy_git_data(source: Path, destination: Path, *, byte_budget: int = 512 * 1024 * 1024) -> None:
     """Copy inert Git data, without executing or retaining repository configuration.
 
@@ -110,6 +131,8 @@ def copy_git_data(source: Path, destination: Path, *, byte_budget: int = 512 * 1
                     continue
                 content = _read(path, remaining)
                 remaining -= len(content)
+                if relative == 'packed-refs':
+                    content = _packed_refs(content)
                 target = destination / relative
                 target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 target.write_bytes(content)
