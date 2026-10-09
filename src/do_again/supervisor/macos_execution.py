@@ -144,7 +144,8 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
                 elif p.is_file() and p.stat().st_nlink != 1:
                     raise ExecutionBlocked('hardlink alias in write root')
     reads = (*roots, Path('/System'), Path('/usr/lib'), Path('/usr/share'),
-             Path('/bin'), Path('/usr/bin'), INSTALL_ROOT / 'current/runtimes')
+             Path('/bin'), Path('/usr/bin'), INSTALL_ROOT / 'current/runtimes',
+             INSTALL_ROOT / 'current/package')
     subpaths = lambda paths: ' '.join(f'(subpath {json.dumps(str(p))})' for p in paths)
     runner = INSTALL_ROOT / 'current/package/do_again/supervisor/execution_runner.py'
     protected_git = json.dumps(str(project.worktree / '.git'))

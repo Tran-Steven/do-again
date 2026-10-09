@@ -51,11 +51,17 @@ def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
         targets = {'other_sentinel':str(other_sentinel), 'sentinel': str(sentinel), 'service': target,
                    'socket': str(SOCKET_ROOT / f'{project.key[:24]}.sock'),
                    'runner':str(Path(__file__).with_name('execution_runner.py')), 'operator_pid': os.getpid(), 'uid': project.uid, 'gid': project.gid,
+                   'package':str(Path(__file__).resolve().parents[2]),
                    'allowed': str(project.worktree / ('.native-proof-' + nonce)), 'scratch': str(scratch)}
         script = '''import errno,json,os,socket,subprocess,time
 from pathlib import Path
 T=TARGETS
 result={}
+import sys
+sys.path.insert(0,T['package'])
+from do_again.supervisor.wheels import validate_wheel
+from do_again.supervisor.git_export import export_commit
+result['immutable_module_import']=callable(validate_wheel) and callable(export_commit)
 def denied(name, action):
     try: action()
     except OSError as e: result[name]=e.errno in (errno.EPERM,errno.EACCES)
