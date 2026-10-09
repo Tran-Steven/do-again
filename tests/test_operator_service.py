@@ -97,6 +97,7 @@ class OperatorServiceTests(unittest.TestCase):
             calls.append(args[0])
             return SimpleNamespace(stdout=' pid = 123\n')
         with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service._verify_observed_process_withdrawn') as cleanup, \
              patch('do_again.supervisor.operator_service.time.sleep'), \
              patch('do_again.supervisor.worker_service.service_present',return_value=False), \
              patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
@@ -106,6 +107,7 @@ class OperatorServiceTests(unittest.TestCase):
                     self.broker,self.root,self.binding,self.nonce,nullcontext)
         self.assertEqual(calls,['bootstrap','kickstart','print','print','bootout'])
         self.assertEqual(json.loads((self.root/'operator-service.json').read_text())['phase'],'dispatch_started')
+        cleanup.assert_called_once_with(123,(10,20))
 
     def test_unexpected_uid_fails_without_wait_or_second_start(self):
         calls=[]
@@ -113,6 +115,7 @@ class OperatorServiceTests(unittest.TestCase):
             calls.append(args[0])
             return SimpleNamespace(stdout=' pid = 123\n')
         with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service._verify_observed_process_withdrawn') as cleanup, \
              patch('do_again.supervisor.operator_service.time.sleep') as sleep, \
              patch('do_again.supervisor.worker_service.service_present',return_value=False), \
              patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
@@ -122,6 +125,7 @@ class OperatorServiceTests(unittest.TestCase):
                     self.broker,self.root,self.binding,self.nonce,nullcontext)
             sleep.assert_not_called()
         self.assertEqual(calls,['bootstrap','kickstart','print','bootout'])
+        cleanup.assert_called_once_with(123,(10,20))
 
     def test_root_xpcproxy_timeout_fails_closed(self):
         calls=[]
@@ -129,6 +133,7 @@ class OperatorServiceTests(unittest.TestCase):
             calls.append(args[0])
             return SimpleNamespace(stdout=' pid = 123\n')
         with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service._verify_observed_process_withdrawn') as cleanup, \
              patch('do_again.supervisor.operator_service.time.monotonic',side_effect=iter(range(1000))), \
              patch('do_again.supervisor.operator_service.time.sleep') as sleep, \
              patch('do_again.supervisor.worker_service.service_present',return_value=False), \
@@ -141,6 +146,7 @@ class OperatorServiceTests(unittest.TestCase):
         self.assertEqual(calls[:2],['bootstrap','kickstart'])
         self.assertEqual(calls[-1],'bootout')
         self.assertNotIn('kickstart',calls[2:])
+        cleanup.assert_called_once_with(123,(10,20))
 
     def test_launchd_pid_change_after_root_probe_fails_closed(self):
         calls=[]
@@ -149,6 +155,7 @@ class OperatorServiceTests(unittest.TestCase):
             calls.append(args[0])
             return SimpleNamespace(stdout=(' pid = %s\n' % next(pid_values)) if args[0]=='print' else '')
         with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service._verify_observed_process_withdrawn') as cleanup, \
              patch('do_again.supervisor.operator_service.time.sleep'), \
              patch('do_again.supervisor.worker_service.service_present',return_value=False), \
              patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
@@ -157,3 +164,20 @@ class OperatorServiceTests(unittest.TestCase):
                 operator_service.run_operator_service(
                     self.broker,self.root,self.binding,self.nonce,nullcontext)
         self.assertEqual(calls,['bootstrap','kickstart','print','print','bootout'])
+        cleanup.assert_called_once_with(123,(10,20))
+
+    def test_uid_transition_does_not_count_as_process_withdrawal(self):
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.sleep') as sleep:
+            processes.return_value.identity.side_effect=[(501,10,20,1),None]
+            operator_service._verify_observed_process_withdrawn(123,(10,20))
+            self.assertEqual(processes.return_value.identity.call_count,2)
+            sleep.assert_called_once_with(0.1)
+
+    def test_surviving_birth_identity_blocks_withdrawal(self):
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.monotonic',side_effect=iter(range(1000))), \
+             patch('do_again.supervisor.operator_service.time.sleep'):
+            processes.return_value.identity.return_value=(501,10,20,1)
+            with self.assertRaisesRegex(ExecutionBlocked,'persists after service withdrawal'):
+                operator_service._verify_observed_process_withdrawn(123,(10,20))
