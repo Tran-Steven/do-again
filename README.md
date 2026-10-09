@@ -1,5 +1,12 @@
 # Do Again
 
+[![PyPI](https://img.shields.io/pypi/v/do-again?label=PyPI)](https://pypi.org/project/do-again/)
+[![npm](https://img.shields.io/npm/v/do-again?label=npm)](https://www.npmjs.com/package/do-again)
+[![CI](https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml/badge.svg)](https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/do-again)](https://pypi.org/project/do-again/)
+[![License](https://img.shields.io/github/license/Tran-Steven/do-again)](https://github.com/Tran-Steven/do-again/blob/main/LICENSE)
+[![npm downloads](https://img.shields.io/npm/dw/do-again)](https://www.npmjs.com/package/do-again)
+
 Do Again is a developer-alpha local execution bridge for AI coding workflows. An agent writes a scoped request to a dedicated Git control branch, a local policy-controlled runner executes it, and a durable receipt comes back through Git. Optional browser automation connects that loop to a dedicated ChatGPT conversation without embedding an inference API key in the project.
 
 ## Architecture
