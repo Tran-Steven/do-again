@@ -1,23 +1,28 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
+import shutil
 import socket
 import subprocess
 import sys
 import time
 import traceback
-from datetime import timezone
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from .executor import LocalExecutor
+from ..platforms.process import pid_alive
+from .broker_executor import BrokerExecutor
 from .schema import (
     OperatorError,
     atomic_json,
     read_json,
+    parse_utc,
     request_fingerprint,
     utc_now,
     validate_request,
@@ -33,14 +38,19 @@ class Agent:
         branch: str,
         policy_path: Path,
         state_dir: Path,
+        remote: str = "origin",
+        receipt_callback: Callable[[dict[str, Any]], None] | None = None,
+        executor: Any | None = None,
     ):
         self.repo = repo.resolve()
         self.control_worktree = control_worktree.resolve()
         self.branch = branch
+        self.remote = remote
+        self.receipt_callback = receipt_callback
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
-        self.executor = LocalExecutor(
+        self.executor = executor if executor is not None else BrokerExecutor(
             repo=self.repo,
             policy_path=self.policy_path,
             state_dir=self.state_dir,
@@ -51,10 +61,15 @@ class Agent:
         self.receipts_dir = (
             self.control_worktree / "automation/do_again/receipts"
         )
+        self.invalid_dir = self.control_worktree / "automation/do_again/invalid"
+        self.conflicts_dir = self.control_worktree / "automation/do_again/conflicts"
+        self.claims_dir = self.control_worktree / "automation/do_again/claims"
+        self.cancellations_dir = self.control_worktree / "automation/do_again/cancellations"
         self.ledger_dir = self.state_dir / "ledger"
+        self.locks_dir = self.state_dir / "locks"
         self.stop_requested = False
         self.started = utc_now()
-        self.instance_id = f"{socket.gethostname()}:{os.getpid()}:{int(self.started.timestamp())}"
+        self.instance_id = f"{socket.gethostname()}:{os.getpid()}:{int(self.started.timestamp())}:{uuid.uuid4().hex[:12]}"
         self.poll_seconds = max(1.0, float(self.policy.get("poll_seconds", 3)))
 
     def git(self, *args: str, timeout: float = 60) -> subprocess.CompletedProcess[str]:
@@ -65,26 +80,120 @@ class Agent:
             timeout=timeout,
         )
 
+    def _recover_stale_index_lock(self, error: str) -> bool:
+        """Repair only a demonstrably orphaned Git worktree lock.
+
+        Git's 'index.lock' error can persist after a killed/restarted process,
+        permanently blocking Do Again while its liveness monitor keeps retrying.
+        If ownership cannot be established, fail closed.
+        """
+        if not all(part in error.lower() for part in ("index.lock", "file exists")):
+            return False
+        if sys.platform not in {"darwin", "linux"} or not shutil.which("lsof"):
+            return False
+        location = self.git("rev-parse", "--git-path", "index.lock", timeout=8)
+        if location.returncode != 0 or not location.stdout.strip():
+            return False
+        lock = Path(location.stdout.strip())
+        if not lock.is_absolute():
+            lock = self.control_worktree / lock
+        lock = lock.resolve()
+        try:
+            st = lock.stat()
+        except FileNotFoundError:
+            return False
+        if st.st_size != 0 or time.time() - st.st_mtime < 600:
+            return False
+        git_dir = self.git("rev-parse", "--absolute-git-dir", timeout=8)
+        if git_dir.returncode != 0:
+            return False
+        expected = Path(git_dir.stdout.strip()).resolve() / "index.lock"
+        if lock != expected:
+            return False
+        try:
+            opened = subprocess.run(
+                ["lsof", "-n", "--", str(lock)],
+                capture_output=True, text=True, timeout=8,
+            )
+            if opened.returncode != 1 or opened.stdout.strip():
+                return False
+            processes = subprocess.run(
+                ["ps", "-axo", "pid=,ppid=,command="],
+                capture_output=True, text=True, timeout=8,
+            )
+            if processes.returncode != 0:
+                return False
+            for line in processes.stdout.splitlines():
+                fields = line.strip().split(None, 2)
+                if len(fields) != 3:
+                    continue
+                cmd = fields[2]
+                binary = Path(cmd.split(None, 1)[0]).name
+                if (binary == "git" or binary.startswith("git-")) and (
+                    str(self.control_worktree) in cmd or str(self.repo) in cmd
+                ):
+                    return False
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        # Re-stat immediately before unlinking, rejecting any changed owner.
+        try:
+            current = lock.stat()
+            if (current.st_ino, current.st_mtime_ns, current.st_size) != (
+                st.st_ino, st.st_mtime_ns, st.st_size
+            ):
+                return False
+            lock.unlink()
+        except OSError:
+            return False
+        atomic_json(self.state_dir / "stale_git_lock_recovery.json", {
+            "schema_version": 1,
+            "state": "recovered",
+            "kind": "orphaned_control_index_lock",
+            "at_utc": utc_now().isoformat(),
+            "control_worktree": str(self.control_worktree),
+        })
+        return True
+
     def require_git(self, *args: str, timeout: float = 60) -> str:
         proc = self.git(*args, timeout=timeout)
         if proc.returncode != 0:
-            raise OperatorError(
-                f"git {' '.join(args)} failed rc={proc.returncode}: "
-                f"{(proc.stderr or proc.stdout).strip()}"
-            )
+            if self._recover_stale_index_lock(proc.stderr or proc.stdout):
+                # Exactly one retry. Never retry a Git command following an
+                # ambiguous timeout or if the prior attempt may have committed.
+                proc = self.git(*args, timeout=timeout)
+            if proc.returncode != 0:
+                raise OperatorError(
+                    f"git {' '.join(args)} failed rc={proc.returncode}: "
+                    f"{(proc.stderr or proc.stdout).strip()}"
+                )
         return proc.stdout
 
     def sync(self) -> None:
         status = self.require_git("status", "--porcelain")
         if status.strip():
             raise OperatorError("operator control worktree is dirty")
-        self.require_git("fetch", "--quiet", "origin", self.branch)
-        self.require_git("rebase", f"origin/{self.branch}")
-        push = self.git("push", "origin", f"HEAD:{self.branch}", timeout=90)
+        remote_ref = f"refs/heads/{self.branch}"
+        remote = self.require_git("ls-remote", "--heads", self.remote, self.branch)
+        matches = [
+            line.split("\t", 1)[0]
+            for line in remote.splitlines()
+            if line.endswith(f"\t{remote_ref}")
+        ]
+        if len(matches) != 1:
+            raise OperatorError(f"control branch {self.branch!r} is missing from remote {self.remote!r}")
+        local_head = self.require_git("rev-parse", "HEAD").strip()
+        if matches[0] == local_head:
+            return
+        self.require_git("fetch", "--quiet", self.remote, self.branch)
+        self.require_git("rebase", "FETCH_HEAD")
+        fetched_head = self.require_git("rev-parse", "FETCH_HEAD").strip()
+        if self.require_git("rev-parse", "HEAD").strip() == fetched_head:
+            return
+        push = self.git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
         if push.returncode != 0:
-            self.require_git("fetch", "--quiet", "origin", self.branch)
-            self.require_git("rebase", f"origin/{self.branch}")
-            self.require_git("push", "origin", f"HEAD:{self.branch}", timeout=90)
+            self.require_git("fetch", "--quiet", self.remote, self.branch)
+            self.require_git("rebase", "FETCH_HEAD")
+            self.require_git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
 
     def publish_json(self, relative: Path, value: dict[str, Any], message: str) -> None:
         for attempt in range(4):
@@ -101,7 +210,7 @@ class Agent:
                             f"git commit failed rc={commit.returncode}: "
                             f"{(commit.stderr or commit.stdout).strip()}"
                         )
-                self.require_git("push", "origin", f"HEAD:{self.branch}", timeout=90)
+                self.require_git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
                 return
             except Exception:
                 if attempt == 3:
@@ -118,6 +227,7 @@ class Agent:
             "started_at_utc": self.started.astimezone(timezone.utc).isoformat(),
             "updated_at_utc": utc_now().isoformat(),
             "control_branch": self.branch,
+            "remote": self.remote,
             "repo": str(self.repo),
             "control_worktree": str(self.control_worktree),
             **extra,
@@ -139,6 +249,293 @@ class Agent:
     def receipt_exists(self, request_id: str) -> bool:
         return (self.control_worktree / self.receipt_relative(request_id)).is_file()
 
+    def receipt_payload(self, request_id: str) -> dict[str, Any] | None:
+        path = self.control_worktree / self.receipt_relative(request_id)
+        if not path.is_file():
+            return None
+        try:
+            value = read_json(path)
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def claim_relative(self, request_id: str) -> Path:
+        return Path(f"automation/do_again/claims/{request_id}.json")
+
+    def claim_payload(self, request_id: str) -> dict[str, Any] | None:
+        path = self.control_worktree / self.claim_relative(request_id)
+        if not path.is_file():
+            return None
+        try:
+            value = read_json(path)
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def cancellation_relative(self, request_id: str) -> Path:
+        return Path(f"automation/do_again/cancellations/{request_id}.json")
+
+    def cancellation_payload(self, request_id: str) -> dict[str, Any] | None:
+        path = self.control_worktree / self.cancellation_relative(request_id)
+        if not path.is_file():
+            return None
+        try:
+            value = read_json(path)
+        except Exception:
+            return None
+        return value if isinstance(value, dict) else None
+
+    def acquire_remote_claim(self, request: dict[str, Any]) -> bool:
+        if isinstance(self.executor, BrokerExecutor):
+            from ..supervisor.admission import require_active
+            require_active(self.repo)
+        request_id = str(request["request_id"])
+        fingerprint = request_fingerprint(request)
+        relative = self.claim_relative(request_id)
+
+        for attempt in range(5):
+            self.sync()
+            existing = self.claim_payload(request_id)
+            if existing is not None:
+                existing_fingerprint = str(
+                    existing.get("request_fingerprint") or ""
+                )
+                if existing_fingerprint != fingerprint:
+                    self.publish_conflict(
+                        request=request,
+                        reason="request_id conflicts with a durable remote claim",
+                        existing_fingerprint=existing_fingerprint or None,
+                    )
+                    return False
+                return existing.get("agent_instance_id") == self.instance_id
+
+            payload = {
+                "schema_version": 1,
+                "request_id": request_id,
+                "request_fingerprint": fingerprint,
+                "agent_instance_id": self.instance_id,
+                "host": socket.gethostname(),
+                "pid": os.getpid(),
+                "claimed_at_utc": utc_now().isoformat(),
+            }
+            target = self.control_worktree / relative
+            atomic_json(target, payload)
+            self.require_git("add", str(relative))
+            commit = self.git(
+                "commit",
+                "-m",
+                f"Do Again claim {request_id}",
+                timeout=60,
+            )
+            if commit.returncode != 0:
+                combined = f"{commit.stdout}\n{commit.stderr}".lower()
+                if "nothing to commit" not in combined:
+                    raise OperatorError(
+                        f"git commit failed rc={commit.returncode}: "
+                        f"{(commit.stderr or commit.stdout).strip()}"
+                    )
+
+            push = self.git(
+                "push",
+                self.remote,
+                f"HEAD:{self.branch}",
+                timeout=90,
+            )
+            if push.returncode == 0:
+                return True
+
+            # Another agent may have won the race. Discard only our unpushed
+            # claim commit and inspect the authoritative remote branch.
+            self.require_git("fetch", "--quiet", self.remote, self.branch)
+            self.require_git("reset", "--hard", "FETCH_HEAD")
+            time.sleep(0.1 * (attempt + 1))
+
+        raise OperatorError(
+            f"unable to acquire durable remote claim for request {request_id}"
+        )
+
+    def conflict_relative(self, request_id: str, fingerprint: str) -> Path:
+        return Path(
+            f"automation/do_again/conflicts/{request_id}/{fingerprint[:16]}.json"
+        )
+
+    def publish_conflict(
+        self,
+        *,
+        request: dict[str, Any],
+        reason: str,
+        existing_fingerprint: str | None,
+    ) -> bool:
+        """Publish one conflict per distinct cause, not once per polling tick."""
+        fingerprint = request_fingerprint(request)
+        request_id = str(request.get("request_id") or "")
+        relative = self.conflict_relative(request_id, fingerprint)
+        old = self.control_worktree / relative
+
+        def same_published_conflict() -> bool:
+            try:
+                existing = read_json(old) if old.is_file() else None
+            except (OSError, json.JSONDecodeError):
+                return False
+            return (
+                isinstance(existing, dict)
+                and existing.get("request_fingerprint") == fingerprint
+                and existing.get("existing_fingerprint") == existing_fingerprint
+                and existing.get("reason") == reason
+            )
+
+        # The common case must be a local no-op: 100+ polling passes must
+        # not perform repeated remote requests or generate Git commits.
+        if same_published_conflict():
+            return False
+        # Fetch authoritative control state once when a conflict is first
+        # encountered or its root fingerprint/reason changed.
+        self.sync()
+        if same_published_conflict():
+            return False
+        payload = {
+            "schema_version": 1,
+            "state": "blocked_request_id_reuse",
+            "request_id": request_id,
+            "request_fingerprint": fingerprint,
+            "existing_fingerprint": existing_fingerprint,
+            "reason": reason,
+            "observed_at_utc": utc_now().isoformat(),
+            "agent_instance_id": self.instance_id,
+        }
+        self.publish_json(
+            relative, payload,
+            f"Do Again conflict {request_id}",
+        )
+        atomic_json(
+            self.state_dir / "stale_request_blocked.json",
+            {
+                "request_id": request_id,
+                "request_fingerprint": fingerprint,
+                "existing_fingerprint": existing_fingerprint,
+                "reason": reason,
+                "recorded_at_utc": payload["observed_at_utc"],
+            },
+        )
+        return True
+
+    def invalid_relative(self, path: Path) -> Path:
+        return Path(f"automation/do_again/invalid/{path.name}.json")
+
+    def publish_invalid_request(self, path: Path, error: Exception | str) -> bool:
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return False
+        digest = hashlib.sha256(data).hexdigest()
+        relative = self.invalid_relative(path)
+        existing_path = self.control_worktree / relative
+        if existing_path.is_file():
+            try:
+                existing = read_json(existing_path)
+            except Exception:
+                existing = None
+            if isinstance(existing, dict) and existing.get("sha256") == digest:
+                return False
+        payload = {
+            "schema_version": 1,
+            "state": "invalid_request",
+            "request_file": path.name,
+            "sha256": digest,
+            "size_bytes": len(data),
+            "error": (
+                f"{type(error).__name__}: {error}"
+                if isinstance(error, Exception)
+                else str(error)
+            ),
+            "observed_at_utc": utc_now().isoformat(),
+            "agent_instance_id": self.instance_id,
+        }
+        self.publish_json(relative, payload, f"Do Again invalid request {path.name}")
+        return True
+
+    def request_lock_path(self, request_id: str) -> Path:
+        return self.locks_dir / f"{request_id}.lock"
+
+    @staticmethod
+    def _pid_alive(pid: int) -> bool:
+        return pid_alive(pid)
+
+    def acquire_request_lock(self, request_id: str) -> bool:
+        self.locks_dir.mkdir(parents=True, exist_ok=True)
+        lock = self.request_lock_path(request_id)
+        for _ in range(2):
+            try:
+                lock.mkdir()
+            except FileExistsError:
+                owner_path = lock / "owner.json"
+                owner: dict[str, Any] | None = None
+                try:
+                    value = read_json(owner_path)
+                    owner = value if isinstance(value, dict) else None
+                except Exception:
+                    owner = None
+
+                stale = False
+                if owner:
+                    owner_host = str(owner.get("host") or "")
+                    try:
+                        owner_pid = int(owner.get("pid") or 0)
+                    except (TypeError, ValueError):
+                        owner_pid = 0
+                    if owner_host == socket.gethostname():
+                        stale = not self._pid_alive(owner_pid)
+                    else:
+                        try:
+                            age = max(0.0, time.time() - lock.stat().st_mtime)
+                        except OSError:
+                            age = 0.0
+                        stale = age > float(
+                            self.policy.get("request_lock_stale_seconds", 7200)
+                        )
+                else:
+                    try:
+                        age = max(0.0, time.time() - lock.stat().st_mtime)
+                    except OSError:
+                        age = 0.0
+                    stale = age > 30.0
+
+                if not stale:
+                    return False
+                try:
+                    owner_path.unlink()
+                except FileNotFoundError:
+                    pass
+                try:
+                    lock.rmdir()
+                except OSError:
+                    return False
+                continue
+
+            atomic_json(
+                lock / "owner.json",
+                {
+                    "instance_id": self.instance_id,
+                    "host": socket.gethostname(),
+                    "pid": os.getpid(),
+                    "request_id": request_id,
+                    "acquired_at_utc": utc_now().isoformat(),
+                },
+            )
+            return True
+        return False
+
+    def release_request_lock(self, request_id: str) -> None:
+        lock = self.request_lock_path(request_id)
+        try:
+            (lock / "owner.json").unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            lock.rmdir()
+        except (FileNotFoundError, OSError):
+            pass
+
     def local_ledger(self, request_id: str) -> dict[str, Any] | None:
         path = self.ledger_path(request_id)
         if not path.is_file():
@@ -148,6 +545,46 @@ class Agent:
 
     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:
         atomic_json(self.ledger_path(request_id), value)
+
+    def record_operator_progress(
+        self,
+        request: dict[str, Any],
+        *,
+        request_id: str,
+        fingerprint: str,
+    ) -> None:
+        continuation = request.get("continuation")
+        if not isinstance(continuation, dict):
+            return
+        acknowledged = list(continuation.get("acknowledged_receipts", []))
+        missing = [value for value in acknowledged if not self.receipt_exists(value)]
+        if missing:
+            raise OperatorError(
+                "continuation acknowledges receipts that are not durably published: "
+                + ", ".join(missing)
+            )
+        atomic_json(
+            self.state_dir / "operator_progress.json",
+            {
+                "schema_version": 1,
+                "request_id": request_id,
+                "request_fingerprint": fingerprint,
+                "acknowledged_receipts": acknowledged,
+                "goal_state": continuation.get("goal_state", "in_progress"),
+                "goal_id": continuation.get("goal_id"),
+                "summary": continuation.get("summary"),
+                "recorded_at_utc": utc_now().isoformat(),
+            },
+        )
+
+    @staticmethod
+    def _request_matches_fingerprint(request: dict[str, Any], fingerprint: str) -> bool:
+        if request_fingerprint(request) == fingerprint:
+            return True
+        legacy = dict(request)
+        for field in ("args", "expected", "limits"):
+            legacy.setdefault(field, {})
+        return request_fingerprint(legacy) == fingerprint
 
     def make_receipt(
         self,
@@ -159,7 +596,7 @@ class Agent:
         error: str | None = None,
         traceback_text: str | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": 1,
             "request_id": request.get("request_id"),
             "request_fingerprint": request_fingerprint(request),
@@ -173,6 +610,10 @@ class Agent:
             "error": error,
             "traceback": traceback_text,
         }
+        continuation = request.get("continuation")
+        if isinstance(continuation, dict):
+            payload["operator_progress"] = continuation
+        return payload
 
     def result_succeeded(self, payload: dict[str, Any]) -> bool:
         result = payload.get("result")
@@ -199,6 +640,21 @@ class Agent:
             f"Do Again receipt {request_id}: {receipt['state']}",
         )
 
+    def notify_receipt(self, receipt: dict[str, Any]) -> None:
+        if self.receipt_callback is None:
+            return
+        try:
+            self.receipt_callback(receipt)
+        except Exception as exc:
+            atomic_json(
+                self.state_dir / "receipt_callback_error.json",
+                {
+                    "request_id": receipt.get("request_id"),
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "recorded_at_utc": utc_now().isoformat(),
+                },
+            )
+
     def schedule_self_restart(self) -> None:
         label = str(
             self.policy.get("agent_launchd_label", "io.github.tran-steven.do-again")
@@ -220,125 +676,222 @@ class Agent:
         try:
             raw = read_json(path)
         except Exception as exc:
-            return False
+            return self.publish_invalid_request(path, exc)
         if not isinstance(raw, dict):
-            return False
+            return self.publish_invalid_request(path, "request must be an object")
+
         request_id = str(raw.get("request_id") or "")
         if not request_id or path.stem != request_id:
-            return False
-        if self.receipt_exists(request_id):
+            return self.publish_invalid_request(
+                path,
+                "request_id is missing or does not match the request filename",
+            )
+
+        fingerprint = request_fingerprint(raw)
+        existing_receipt = self.receipt_payload(request_id)
+        if existing_receipt is not None:
+            existing_fingerprint = str(
+                existing_receipt.get("request_fingerprint") or ""
+            )
+            if self._request_matches_fingerprint(raw, existing_fingerprint):
+                return False
+            return self.publish_conflict(
+                request=raw,
+                reason="request_id already has a receipt for different request content",
+                existing_fingerprint=existing_fingerprint or None,
+            )
+
+        if not self.acquire_request_lock(request_id):
             return False
 
-        ledger = self.local_ledger(request_id)
-        if ledger:
-            ledger_state = ledger.get("state")
-            stored_receipt = ledger.get("receipt")
-            if ledger_state == "terminal" and isinstance(stored_receipt, dict):
-                self.publish_receipt(stored_receipt)
-                return True
-            if ledger_state == "started":
-                started_at = str(ledger.get("started_at_utc") or utc_now().isoformat())
+        try:
+            existing_receipt = self.receipt_payload(request_id)
+            if existing_receipt is not None:
+                existing_fingerprint = str(
+                    existing_receipt.get("request_fingerprint") or ""
+                )
+                if self._request_matches_fingerprint(raw, existing_fingerprint):
+                    return False
+                return self.publish_conflict(
+                    request=raw,
+                    reason="request_id already has a receipt for different request content",
+                    existing_fingerprint=existing_fingerprint or None,
+                )
+
+            ledger = self.local_ledger(request_id)
+            if ledger:
+                ledger_fingerprint = str(
+                    ledger.get("request_fingerprint") or ""
+                )
+                if ledger_fingerprint and not self._request_matches_fingerprint(raw, ledger_fingerprint):
+                    return self.publish_conflict(
+                        request=raw,
+                        reason="request_id conflicts with durable local ledger content",
+                        existing_fingerprint=ledger_fingerprint,
+                    )
+
+                ledger_state = ledger.get("state")
+                stored_receipt = ledger.get("receipt")
+                if ledger_state == "terminal" and isinstance(stored_receipt, dict):
+                    self.publish_receipt(stored_receipt)
+                    return True
+                if ledger_state == "started":
+                    started_at = str(
+                        ledger.get("started_at_utc") or utc_now().isoformat()
+                    )
+                    receipt = self.make_receipt(
+                        request=raw,
+                        state="blocked_ambiguous_replay",
+                        started_at=started_at,
+                        error=(
+                            "A prior agent instance began this request but did not "
+                            "durably record its completion. Refusing automatic replay."
+                        ),
+                    )
+                    self.write_ledger(
+                        request_id,
+                        {
+                            "state": "terminal",
+                            "request_fingerprint": fingerprint,
+                            "receipt": receipt,
+                        },
+                    )
+                    self.publish_receipt(receipt)
+                    self.notify_receipt(receipt)
+                    return True
+
+            cancellation = self.cancellation_payload(request_id)
+            if cancellation is not None:
                 receipt = self.make_receipt(
                     request=raw,
-                    state="blocked_ambiguous_replay",
-                    started_at=started_at,
-                    error=(
-                        "A prior agent instance began this request but did not durably record "
-                        "its completion. Refusing automatic replay."
-                    ),
+                    state="cancelled",
+                    started_at=str(cancellation.get("cancelled_at_utc") or utc_now().isoformat()),
+                    error=str(cancellation.get("reason") or "cancelled before execution"),
                 )
                 self.write_ledger(
                     request_id,
                     {
                         "state": "terminal",
-                        "request_fingerprint": request_fingerprint(raw),
+                        "request_fingerprint": fingerprint,
                         "receipt": receipt,
                     },
                 )
                 self.publish_receipt(receipt)
+                self.notify_receipt(receipt)
                 return True
 
-        started_at = utc_now().isoformat()
-        try:
-            request = validate_request(
-                raw,
-                max_ttl_seconds=int(self.policy.get("max_request_ttl_seconds", 3600)),
-            )
+            if not self.acquire_remote_claim(raw):
+                return False
+
+            started_at = utc_now().isoformat()
+            try:
+                validate_request(
+                    raw,
+                    max_ttl_seconds=int(
+                        self.policy.get("max_request_ttl_seconds", 3600)
+                    ),
+                    max_future_skew_seconds=int(
+                        self.policy.get("max_future_skew_seconds", 300)
+                    ),
+                )
+                self.record_operator_progress(
+                    raw,
+                    request_id=request_id,
+                    fingerprint=fingerprint,
+                )
+                self.write_ledger(
+                    request_id,
+                    {
+                        "state": "started",
+                        "request_fingerprint": fingerprint,
+                        "started_at_utc": started_at,
+                        "agent_instance_id": self.instance_id,
+                    },
+                )
+                payload = self.executor.execute(raw)
+                receipt_state = (
+                    "succeeded" if self.result_succeeded(payload) else "failed"
+                )
+                receipt = self.make_receipt(
+                    request=raw,
+                    state=receipt_state,
+                    started_at=started_at,
+                    result=payload,
+                )
+            except OperatorError as exc:
+                receipt = self.make_receipt(
+                    request=raw,
+                    state="blocked",
+                    started_at=started_at,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            except Exception as exc:
+                receipt = self.make_receipt(
+                    request=raw,
+                    state="error",
+                    started_at=started_at,
+                    error=f"{type(exc).__name__}: {exc}",
+                    traceback_text=traceback.format_exc()[-12000:],
+                )
+
             self.write_ledger(
                 request_id,
                 {
-                    "state": "started",
-                    "request_fingerprint": request_fingerprint(request),
-                    "started_at_utc": started_at,
-                    "agent_instance_id": self.instance_id,
+                    "state": "terminal",
+                    "request_fingerprint": fingerprint,
+                    "receipt": receipt,
                 },
             )
-            payload = self.executor.execute(request)
-            receipt_state = "succeeded" if self.result_succeeded(payload) else "failed"
-            receipt = self.make_receipt(
-                request=request,
-                state=receipt_state,
-                started_at=started_at,
-                result=payload,
-            )
-        except OperatorError as exc:
-            receipt = self.make_receipt(
-                request=raw,
-                state="blocked",
-                started_at=started_at,
-                error=f"{type(exc).__name__}: {exc}",
-            )
-        except Exception as exc:
-            receipt = self.make_receipt(
-                request=raw,
-                state="error",
-                started_at=started_at,
-                error=f"{type(exc).__name__}: {exc}",
-                traceback_text=traceback.format_exc()[-12000:],
-            )
-
-        self.write_ledger(
-            request_id,
-            {
-                "state": "terminal",
-                "request_fingerprint": request_fingerprint(raw),
-                "receipt": receipt,
-            },
-        )
-        self.publish_receipt(receipt)
-        try:
-            self.publish_status(
-                "ready",
-                last_request_id=request_id,
-                last_request_state=receipt["state"],
-            )
-        except Exception:
-            pass
-        payload_result = receipt.get("result")
-        if (
-            receipt.get("state") == "succeeded"
-            and isinstance(payload_result, dict)
-            and isinstance(payload_result.get("result"), dict)
-            and payload_result["result"].get("restart_after_receipt") is True
-        ):
-            self.schedule_self_restart()
-        return True
+            self.publish_receipt(receipt)
+            self.notify_receipt(receipt)
+            try:
+                self.publish_status(
+                    "ready",
+                    last_request_id=request_id,
+                    last_request_state=receipt["state"],
+                )
+            except Exception:
+                pass
+            payload_result = receipt.get("result")
+            if (
+                receipt.get("state") == "succeeded"
+                and isinstance(payload_result, dict)
+                and isinstance(payload_result.get("result"), dict)
+                and payload_result["result"].get("restart_after_receipt") is True
+            ):
+                self.schedule_self_restart()
+            return True
+        finally:
+            self.release_request_lock(request_id)
 
     def request_paths(self) -> list[Path]:
         self.requests_dir.mkdir(parents=True, exist_ok=True)
         self.receipts_dir.mkdir(parents=True, exist_ok=True)
+        self.invalid_dir.mkdir(parents=True, exist_ok=True)
+        self.conflicts_dir.mkdir(parents=True, exist_ok=True)
+        self.claims_dir.mkdir(parents=True, exist_ok=True)
+        self.cancellations_dir.mkdir(parents=True, exist_ok=True)
         values = []
+        far_future = datetime.max.replace(tzinfo=timezone.utc)
         for path in self.requests_dir.glob("*.json"):
             try:
                 value = read_json(path)
+                issued_raw = (
+                    str(value.get("issued_at_utc") or "")
+                    if isinstance(value, dict)
+                    else ""
+                )
+                issued = parse_utc(issued_raw) if issued_raw else far_future
             except Exception:
-                continue
-            issued = str(value.get("issued_at_utc") or "") if isinstance(value, dict) else ""
+                issued = far_future
             values.append((issued, path.name, path))
         values.sort()
         return [path for _, _, path in values]
 
     def run(self, once: bool = False) -> int:
+        if isinstance(self.executor, BrokerExecutor):
+            from ..supervisor.admission import require_active
+            require_active(self.repo)
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
         try:
             self.publish_status("ready")
@@ -374,6 +927,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--control-worktree", required=True)
     parser.add_argument("--branch", default="operator-control")
+    parser.add_argument("--remote", default="origin")
     parser.add_argument("--policy", required=True)
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--once", action="store_true")
@@ -386,6 +940,7 @@ def main() -> int:
         repo=Path(args.repo),
         control_worktree=Path(args.control_worktree),
         branch=args.branch,
+        remote=args.remote,
         policy_path=Path(args.policy),
         state_dir=Path(args.state_dir),
     )

@@ -5,13 +5,15 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from do_again.core.executor import LocalExecutor
-from do_again.core.schema import OperatorError, atomic_json, utc_now, validate_request
+from do_again.core.schema import OperatorError, atomic_json, request_fingerprint, utc_now, validate_request
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -165,6 +167,181 @@ class ExecutorTests(unittest.TestCase):
         result = self.executor.execute(request)["result"]
         self.assertEqual(result["returncode"], 0)
         self.assertIn('["a", "b"]', result["stdout"])
+
+    def test_future_issued_request_is_rejected(self):
+        request = self.request("status")
+        request["issued_at_utc"] = (utc_now() + timedelta(days=30)).isoformat()
+        request["expires_at_utc"] = (
+            utc_now() + timedelta(days=30, minutes=30)
+        ).isoformat()
+        with self.assertRaisesRegex(OperatorError, "future"):
+            validate_request(request, max_ttl_seconds=3600)
+
+    def test_request_paths_are_ordered_by_actual_timestamp(self):
+        agent_module = load_agent_module()
+        control = self.root / "control-order"
+        request_dir = control / "automation/do_again/requests"
+        request_dir.mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
+        first = {
+            "request_id": "order-request-a",
+            "issued_at_utc": "2026-10-07T10:00:00+02:00",
+        }
+        second = {
+            "request_id": "order-request-b",
+            "issued_at_utc": "2026-10-07T09:00:00+00:00",
+        }
+        atomic_json(request_dir / "order-request-a.json", first)
+        atomic_json(request_dir / "order-request-b.json", second)
+        agent = agent_module.Agent(
+            repo=self.repo,
+            control_worktree=control,
+            branch="operator-control",
+            policy_path=self.policy,
+            state_dir=self.root / "order-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "order-state"),
+        )
+        self.assertEqual(
+            [path.stem for path in agent.request_paths()],
+            ["order-request-a", "order-request-b"],
+        )
+
+    def test_malformed_request_remains_observable(self):
+        agent_module = load_agent_module()
+        control = self.root / "control-invalid"
+        request_dir = control / "automation/do_again/requests"
+        request_dir.mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
+        path = request_dir / "malformed-request-0001.json"
+        path.write_text("{not json", encoding="utf-8")
+        agent = agent_module.Agent(
+            repo=self.repo,
+            control_worktree=control,
+            branch="operator-control",
+            policy_path=self.policy,
+            state_dir=self.root / "invalid-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "invalid-state"),
+        )
+        self.assertIn(path.resolve(), [value.resolve() for value in agent.request_paths()])
+        with patch.object(
+            agent,
+            "publish_invalid_request",
+            return_value=True,
+        ) as publish_invalid:
+            self.assertTrue(agent.process_path(path))
+        publish_invalid.assert_called_once()
+
+    def test_existing_receipt_request_id_reuse_publishes_conflict(self):
+        agent_module = load_agent_module()
+        control = self.root / "control-reuse"
+        request_dir = control / "automation/do_again/requests"
+        receipt_dir = control / "automation/do_again/receipts"
+        request_dir.mkdir(parents=True)
+        receipt_dir.mkdir(parents=True)
+        request = self.request("status")
+        request_path = request_dir / f"{request['request_id']}.json"
+        atomic_json(request_path, request)
+        atomic_json(
+            receipt_dir / f"{request['request_id']}.json",
+            {
+                "request_id": request["request_id"],
+                "request_fingerprint": "different",
+                "state": "succeeded",
+            },
+        )
+        agent = agent_module.Agent(
+            repo=self.repo,
+            control_worktree=control,
+            branch="operator-control",
+            policy_path=self.policy,
+            state_dir=self.root / "reuse-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "reuse-state"),
+        )
+        conflicts = []
+        agent.publish_conflict = lambda **kwargs: (conflicts.append(kwargs) or True)
+        self.assertTrue(agent.process_path(request_path))
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]["existing_fingerprint"], "different")
+
+    def test_ledger_fingerprint_reuse_publishes_conflict(self):
+        agent_module = load_agent_module()
+        control = self.root / "control-ledger-reuse"
+        request_dir = control / "automation/do_again/requests"
+        request_dir.mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
+        request = self.request("status")
+        request_path = request_dir / f"{request['request_id']}.json"
+        atomic_json(request_path, request)
+        agent = agent_module.Agent(
+            repo=self.repo,
+            control_worktree=control,
+            branch="operator-control",
+            policy_path=self.policy,
+            state_dir=self.root / "ledger-reuse-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "ledger-reuse-state"),
+        )
+        atomic_json(
+            agent.ledger_path(request["request_id"]),
+            {
+                "state": "terminal",
+                "request_fingerprint": "different",
+                "receipt": {
+                    "request_id": request["request_id"],
+                    "request_fingerprint": "different",
+                    "state": "succeeded",
+                },
+            },
+        )
+        conflicts = []
+        agent.publish_conflict = lambda **kwargs: (conflicts.append(kwargs) or True)
+        self.assertTrue(agent.process_path(request_path))
+        self.assertEqual(len(conflicts), 1)
+
+    def test_same_state_concurrent_agents_execute_once(self):
+        agent_module = load_agent_module()
+        control = self.root / "control-concurrent"
+        request_dir = control / "automation/do_again/requests"
+        request_dir.mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
+        request = self.request("status")
+        request_path = request_dir / f"{request['request_id']}.json"
+        atomic_json(request_path, request)
+        state = self.root / "concurrent-state"
+        agents = [
+            agent_module.Agent(
+                repo=self.repo,
+                control_worktree=control,
+                branch="operator-control",
+                policy_path=self.policy,
+                state_dir=state,
+                executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=state),
+            )
+            for _ in range(2)
+        ]
+        executions = []
+        execution_lock = threading.Lock()
+
+        def execute(_request):
+            with execution_lock:
+                executions.append(1)
+            time.sleep(0.2)
+            return {"result": {"returncode": 0}}
+
+        for agent in agents:
+            agent.executor.execute = execute
+            agent.publish_receipt = lambda receipt: None
+            agent.publish_status = lambda *args, **kwargs: None
+            agent.acquire_remote_claim = lambda request: True
+
+        threads = [
+            threading.Thread(target=agent.process_path, args=(request_path,))
+            for agent in agents
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(len(executions), 1)
 
     def test_scratch_python_executes_and_records_hash(self):
         request = self.request(
@@ -637,12 +814,12 @@ class ExecutorTests(unittest.TestCase):
     def test_successful_self_update_schedules_restart_after_receipt(self):
         agent_module = load_agent_module()
         control = self.root / "control-restart"
-        (control / "automation/mac_operator/requests").mkdir(parents=True)
-        (control / "automation/mac_operator/receipts").mkdir(parents=True)
+        (control / "automation/do_again/requests").mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
         request = self.request("self_update")
         request_path = (
             control
-            / "automation/mac_operator/requests"
+            / "automation/do_again/requests"
             / f"{request['request_id']}.json"
         )
         atomic_json(request_path, request)
@@ -652,6 +829,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "agent-restart-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "agent-restart-state"),
         )
         payload = {
             "operation": "self_update",
@@ -664,6 +842,7 @@ class ExecutorTests(unittest.TestCase):
         agent.publish_receipt = published.append
         agent.publish_status = lambda *args, **kwargs: None
         with patch.object(agent.executor, "execute", return_value=payload), \
+             patch.object(agent, "acquire_remote_claim", return_value=True), \
              patch.object(agent, "schedule_self_restart") as restart:
             self.assertTrue(agent.process_path(request_path))
         self.assertEqual(published[0]["state"], "succeeded")
@@ -672,12 +851,12 @@ class ExecutorTests(unittest.TestCase):
     def test_ambiguous_started_request_is_not_replayed(self):
         agent_module = load_agent_module()
         control = self.root / "control"
-        (control / "automation/mac_operator/requests").mkdir(parents=True)
-        (control / "automation/mac_operator/receipts").mkdir(parents=True)
+        (control / "automation/do_again/requests").mkdir(parents=True)
+        (control / "automation/do_again/receipts").mkdir(parents=True)
         request = self.request("status")
         request_path = (
             control
-            / "automation/mac_operator/requests"
+            / "automation/do_again/requests"
             / f"{request['request_id']}.json"
         )
         atomic_json(request_path, request)
@@ -687,13 +866,14 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "agent-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "agent-state"),
         )
         atomic_json(
             agent.ledger_path(request["request_id"]),
             {
                 "state": "started",
                 "started_at_utc": utc_now().isoformat(),
-                "request_fingerprint": "x",
+                "request_fingerprint": request_fingerprint(request),
             },
         )
         receipts = []

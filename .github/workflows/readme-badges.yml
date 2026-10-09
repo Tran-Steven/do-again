@@ -1,0 +1,41 @@
+name: README badges
+
+on:
+  pull_request:
+    paths:
+      - README.md
+      - .github/workflows/readme-badges.yml
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - .github/workflows/readme-badges.yml
+
+permissions:
+  contents: read
+
+jobs:
+  badges:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Verify package badges
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          readme = Path("README.md").read_text()
+          header = readme.split("\n## ", 1)[0]
+          required = {
+              "PyPI": "https://img.shields.io/pypi/v/do-again",
+              "npm": "https://img.shields.io/npm/v/do-again",
+              "CI": "https://github.com/Tran-Steven/do-again/actions/workflows/ci.yml/badge.svg",
+              "Python": "https://img.shields.io/pypi/pyversions/do-again",
+              "License": "https://img.shields.io/github/license/Tran-Steven/do-again",
+              "npm downloads": "https://img.shields.io/npm/dw/do-again",
+          }
+          missing = [name for name, url in required.items() if url not in header]
+          if missing:
+              raise SystemExit("Missing README badges: " + ", ".join(missing))
+          print("All six README badges are present")
+          PY

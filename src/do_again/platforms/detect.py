@@ -12,5 +12,5 @@ def detect_platform() -> PlatformInfo:
     if name == "linux":
         return PlatformInfo(name="linux", service_manager="systemd", supported=True)
     if name == "windows":
-        return PlatformInfo(name="windows", service_manager="windows-service", supported=True)
+        return PlatformInfo(name="windows", service_manager="task-scheduler", supported=True)
     return PlatformInfo(name=name or "unknown", service_manager="unknown", supported=False)

@@ -1,0 +1,45 @@
+{
+  "name": "do-again",
+  "version": "0.3.0",
+  "description": "Policy-controlled local execution for AI coding agents",
+  "license": "MIT",
+  "author": "Steven Tran",
+  "type": "commonjs",
+  "bin": {
+    "do-again": "bin/do-again.js"
+  },
+  "files": [
+    "bin/",
+    "src/do_again/**/*.py",
+    "README.md",
+    "LICENSE",
+    "src/do_again/default_policy.json",
+    "ROADMAP.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tran-Steven/do-again.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tran-Steven/do-again/issues"
+  },
+  "homepage": "https://github.com/Tran-Steven/do-again#readme",
+  "keywords": [
+    "ai-agents",
+    "coding-agents",
+    "automation",
+    "developer-tools",
+    "python",
+    "local-execution"
+  ],
+  "scripts": {
+    "test": "node --test npm-tests/*.test.js",
+    "prepack": "npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
