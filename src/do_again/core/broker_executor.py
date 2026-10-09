@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .schema import OperatorError, read_json, request_fingerprint
+from .schema import OperatorError, REQUEST_ID_RE, read_json, request_fingerprint
 from ..supervisor.macos_client import broker_request
 
 
@@ -43,6 +43,12 @@ class BrokerExecutor:
         args = request.get('args', {})
         if args.get('env'):
             raise OperatorError('script-supplied environment is not admitted')
+        if request['operation'] == 'git_publication_reconcile':
+            original = args.get('original_request_id')
+            if (set(args) != {'original_request_id'} or not isinstance(original, str)
+                    or not REQUEST_ID_RE.fullmatch(original)):
+                raise OperatorError('publication reconciliation requires one original request identity')
+            return {'operation':'git_publication_reconcile','request_id':original}
         if request['operation'] == 'git_publish':
             if set(args) != {'title','body'}:
                 raise OperatorError('publication accepts pull request content only')

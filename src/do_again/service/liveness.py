@@ -206,11 +206,20 @@ def _latest_goal(control: Path) -> dict[str, Any]:
 
 
 def _github_actions_run(ci: dict[str, Any]) -> dict[str, Any]:
-    repository = str(ci.get("repository") or "")
+    repository = ci.get("repository")
     run_id = ci.get("run_id")
-    expected_head = str(ci.get("head_sha") or "").lower()
-    if not repository or not isinstance(run_id, int) or run_id <= 0 or not expected_head:
+    head_sha = ci.get("head_sha")
+    if (
+        not isinstance(repository, str)
+        or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}", repository)
+        or any(part in {".", ".."} for part in repository.split("/"))
+        or type(run_id) is not int
+        or run_id <= 0
+        or not isinstance(head_sha, str)
+        or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha)
+    ):
         return {"state": "invalid", "error": "invalid durable CI wait metadata"}
+    expected_head = head_sha.lower()
     try:
         proc = subprocess.run(
             [
@@ -230,6 +239,8 @@ def _github_actions_run(ci: dict[str, Any]) -> dict[str, Any]:
     try:
         value = json.loads(proc.stdout)
     except json.JSONDecodeError:
+        return {"state": "unavailable", "error": "github_actions_invalid_response"}
+    if not isinstance(value, dict):
         return {"state": "unavailable", "error": "github_actions_invalid_response"}
     actual_head = str(value.get("head_sha") or "").lower()
     if actual_head != expected_head:
