@@ -267,3 +267,16 @@ has no broker, repository, browser or network operations; it never opens
 production admission. Interrupted qualification preserves its original intent
 and cannot automatically start again. This qualifies native service mechanics,
 not production worker startup, runtime rollback or unattended development.
+
+The administrator installer supports `--recover-source <full-commit>` for a
+previous immutable package. Both packages must declare the same maintenance-only
+recovery contract, authority/effect schema and fenced worker admission. Project
+scope, identities, goal revision and dependency capabilities must match. A
+missing, ambiguous, incompatible or pre-contract target blocks recovery. Recovery
+uses the current authority and effect database; it never copies a historical
+database over newer effects. Pending effects, live execution and loaded worker
+services block the same locked cutover used for installation, including when the
+supervisor itself is offline. The retained runtime and transition phase are
+recorded before package renames. Interrupted selection stays in maintenance and
+requires explicit administrator reconciliation rather than automatic replay.
+Source regressions do not establish native installed rollback qualification.

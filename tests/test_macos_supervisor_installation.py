@@ -29,6 +29,58 @@ class InstallationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.module.runtime_executables(invalid,current)
 
+    def recovery_fixture(self):
+        from do_again.supervisor.authority import AuthorityRegistry
+        from do_again.supervisor.macos_execution import ExecutionLedger
+        self.root=self.root.resolve()
+        current=self.root/'current';candidate=self.root/'previous-fixture'
+        current.mkdir();candidate.mkdir()
+        database=self.root/'effects.sqlite'
+        registry=AuthorityRegistry(database);registry.initialize()
+        ledger=ExecutionLedger(database)
+        ledger.reserve('fixture','completed','fingerprint')
+        ledger.finish('fixture','completed',{'status':'succeeded'})
+        config={'source_sha':'a'*40,'production_ready':False,
+                'recovery_contract':self.module.RECOVERY_CONTRACT,
+                'authority_path':str(database),'operator_uid':501,'operator_gid':20,
+                'operator_home':'/fixture','dependency_artifacts':{},'projects':[]}
+        (current/'config.json').write_text(json.dumps(config))
+        (candidate/'config.json').write_text(json.dumps({**config,'source_sha':'b'*40}))
+        return current,candidate,database,ledger
+
+    def test_recovery_preserves_newer_effects_and_requires_exact_compatible_source(self):
+        current,candidate,database,ledger=self.recovery_fixture()
+        original=database.read_bytes()
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage',
+                side_effect=lambda path: {'source_sha':json.loads((path/'config.json').read_text())['source_sha']}):
+            self.assertEqual(self.module.recovery_candidate('b'*40),candidate)
+            self.assertEqual(database.read_bytes(),original)
+            self.assertEqual(ledger.lookup('fixture','completed','fingerprint')['status'],'succeeded')
+            for source in ('main','b'*7,'c'*40):
+                with self.assertRaises(RuntimeError):self.module.recovery_candidate(source)
+            duplicate=self.root/'previous-duplicate';duplicate.mkdir()
+            (duplicate/'config.json').write_bytes((candidate/'config.json').read_bytes())
+            with self.assertRaisesRegex(RuntimeError,'ambiguous'):self.module.recovery_candidate('b'*40)
+            (duplicate/'config.json').unlink();duplicate.rmdir()
+            config=json.loads((candidate/'config.json').read_text());config.pop('recovery_contract')
+            (candidate/'config.json').write_text(json.dumps(config))
+            with self.assertRaisesRegex(RuntimeError,'contract'):self.module.recovery_candidate('b'*40)
+
+    def test_recovery_rejects_pending_effect_changed_scope_and_new_schema(self):
+        import sqlite3
+        current,candidate,database,ledger=self.recovery_fixture()
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage',
+                side_effect=lambda path: {'source_sha':json.loads((path/'config.json').read_text())['source_sha']}):
+            config=json.loads((candidate/'config.json').read_text())
+            (candidate/'config.json').write_text(json.dumps({**config,'operator_uid':502}))
+            with self.assertRaisesRegex(RuntimeError,'scope'):self.module.recovery_candidate('b'*40)
+            (candidate/'config.json').write_text(json.dumps(config))
+            with sqlite3.connect(database) as db:db.execute('PRAGMA user_version=2')
+            with self.assertRaisesRegex(RuntimeError,'schema'):self.module.recovery_candidate('b'*40)
+            with sqlite3.connect(database) as db:db.execute('PRAGMA user_version=1')
+            ledger.reserve('fixture','uncertain','fingerprint')
+            with self.assertRaisesRegex(RuntimeError,'unresolved'):self.module.recovery_candidate('b'*40)
+
     def test_account_collision_requires_trusted_provenance_without_mutation(self):
         project={'account':'_doagain_da','uid':400,'gid':400}
         with patch.object(self.module.pwd,'getpwnam',return_value=Mock()),patch.object(self.module,'run') as run:
@@ -121,8 +173,9 @@ class InstallationTests(unittest.TestCase):
         path=self.root/'authority.sqlite';ExecutionLedger(path).reserve('test','request-ambiguous','fingerprint')
         registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
         with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'),patch.object(self.module,'run') as run:
-            with self.assertRaisesRegex(RuntimeError,'ambiguous'):
-                with self.module.preview_cutover(config,registry,True):self.fail('unsafe cutover admitted')
+            for live in (True,False):
+                with self.subTest(supervisor_running=live),self.assertRaisesRegex(RuntimeError,'ambiguous'):
+                    with self.module.preview_cutover(config,registry,live):self.fail('unsafe cutover admitted')
             run.assert_not_called()
 
     def test_worker_cutover_requires_absence_and_preserves_ambiguous_deployment(self):

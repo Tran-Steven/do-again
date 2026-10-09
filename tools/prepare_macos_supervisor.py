@@ -184,6 +184,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             'authority_path':'/Library/Application Support/DoAgainSupervisor/state/supervisor.sqlite',
             'legacy_authority_path':str(Path(identity.pw_dir)/'.do_again/supervisor/authority.sqlite'),
             'production_ready':False,
+            'recovery_contract':{'authority_schema':1,'effect_schema':1,
+                                 'worker_admission':'fenced-v1','mode':'maintenance-only'},
             'projects':projects}
     sys.path.insert(0,str(source/'src'))
     config['dependency_artifacts']={}

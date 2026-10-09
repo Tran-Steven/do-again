@@ -1,7 +1,7 @@
 """Root-stage installer. Called only after a sealed bundle is authenticated."""
 from __future__ import annotations
 import argparse
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, closing
 import sqlite3
 import grp
 import hashlib
@@ -9,6 +9,7 @@ import json
 import os
 import plistlib
 import pwd
+import re
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,8 @@ EXEC=Path('/private/var/do-again-execution')
 LABEL='io.github.tran-steven.do-again.supervisor'
 PLIST=Path('/Library/LaunchDaemons')/(LABEL+'.plist')
 WORKER_AGENTS=Path('/Library/LaunchAgents')
+RECOVERY_CONTRACT={'authority_schema':1,'effect_schema':1,
+                   'worker_admission':'fenced-v1','mode':'maintenance-only'}
 
 
 def run(args, **kwargs):
@@ -186,7 +189,7 @@ def preview_cutover(config, registry, live):
     cutover. Production helpers require the later guarded rollout procedure.
     """
     with ExitStack() as fences:
-        if live:
+        if (ROOT/'current').exists():
             import fcntl
             old=json.loads((ROOT/'current/config.json').read_text())
             verify_stage(ROOT/'current')
@@ -212,9 +215,10 @@ def preview_cutover(config, registry, live):
             if any(inventory.owned(p['uid']) for p in config['projects']):
                 raise RuntimeError('dedicated execution still active; cutover deferred')
             verify_worker_quiescence(config)
-            run(['/bin/launchctl','bootout','system/'+LABEL])
-            stopped=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
-            if stopped.returncode!=113:raise RuntimeError('helper stop is uncertain; cutover deferred')
+            if live:
+                run(['/bin/launchctl','bootout','system/'+LABEL])
+                stopped=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
+                if stopped.returncode!=113:raise RuntimeError('helper stop is uncertain; cutover deferred')
         yield
 
 
@@ -226,7 +230,44 @@ def runtime_executables(config, current):
     return tuple(expected.values())
 
 
-def install(stage):
+def recovery_candidate(source_sha):
+    """Select an exact immutable package; never restore a historical effect DB."""
+    if not re.fullmatch('[0-9a-f]{40}',source_sha):
+        raise RuntimeError('recovery requires an exact approved source commit')
+    current=ROOT/'current'
+    verify_stage(current)
+    active=json.loads((current/'config.json').read_text())
+    if active.get('production_ready') is not False or active.get('recovery_contract')!=RECOVERY_CONTRACT:
+        raise RuntimeError('current runtime lacks the compatible maintenance recovery contract')
+    candidates=[]
+    for path in ROOT.glob('previous-*'):
+        # A malformed retained package blocks recovery instead of being silently
+        # adopted or discarded. Retained packages and journals remain untouched.
+        manifest=verify_stage(path)
+        if manifest.get('source_sha')==source_sha:candidates.append(path)
+    if len(candidates)!=1:raise RuntimeError('recovery source is absent or ambiguous')
+    candidate=candidates[0];config=json.loads((candidate/'config.json').read_text())
+    if (config.get('source_sha')!=source_sha or config.get('production_ready') is not False
+            or config.get('recovery_contract')!=RECOVERY_CONTRACT):
+        raise RuntimeError('target runtime lacks the compatible maintenance recovery contract')
+    fixed=('authority_path','operator_uid','operator_gid','operator_home','dependency_artifacts','projects')
+    if any(config.get(key)!=active.get(key) for key in fixed):
+        raise RuntimeError('recovery cannot change project scope, credentials or capabilities')
+    database=Path(active['authority_path'])
+    with closing(sqlite3.connect(database.as_uri()+'?mode=ro',uri=True)) as db:
+        if db.execute('PRAGMA user_version').fetchone()[0]!=RECOVERY_CONTRACT['authority_schema']:
+            raise RuntimeError('effect journal schema is incompatible with recovery')
+        columns={'execution':['project','request','fingerprint','state','result'],
+                 'capability_intent':['project','request','payload']}
+        for table,expected in columns.items():
+            if [row[1] for row in db.execute('PRAGMA table_info('+table+')')]!=expected:
+                raise RuntimeError('effect journal schema is incompatible with recovery')
+        if db.execute("SELECT 1 FROM execution WHERE state='started' LIMIT 1").fetchone():
+            raise RuntimeError('unresolved execution blocks runtime recovery')
+    return candidate
+
+
+def install(stage, *, recovery=False):
     if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
     os.umask(0o077)
     manifest=verify_stage(stage)
@@ -247,6 +288,11 @@ def install(stage):
     if authority.is_symlink() or authority.stat().st_uid!=config['operator_uid'] or authority.stat().st_mode&0o077:
         raise RuntimeError('operator authority journal is not privately owned')
     current=ROOT/'current'
+    transition=journal.get('runtime_transition',{})
+    if existing_installation and not current.exists():
+        raise RuntimeError('interrupted runtime selection requires administrator reconciliation; journals retained')
+    if transition and transition.get('phase')!='complete' and not recovery:
+        raise RuntimeError('interrupted runtime cutover requires explicit recovery; no automatic retry')
     live=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
     if live.returncode not in (0,113):raise RuntimeError('cannot establish supervisor service quiescence')
     if current.exists() and not existing_installation:
@@ -276,11 +322,16 @@ def install(stage):
     runtimes=runtime_executables(config,current)
     for project in config['projects']:create_account(project,journal_path,journal)
     with preview_cutover(config,registry,live.returncode==0):
+        previous=ROOT/('previous-'+uuid.uuid4().hex)
+        journal['runtime_transition']={'operation':'recovery' if recovery else 'install',
+            'from_source':journal.get('source_sha'),'to_source':config['source_sha'],
+            'retained_path':str(previous),'phase':'cutover_started'}
+        atomic(journal_path,journal)
         if current.exists():
             # Retain earlier immutable package. Effect journals always remain newer.
-            previous=ROOT/('previous-'+uuid.uuid4().hex)
             os.rename(current,previous)
         os.rename(stage,current)
+        journal['runtime_transition']['phase']='runtime_selected';atomic(journal_path,journal)
         for runtime in runtimes:runtime.chmod(0o755)
         if not registry.path.exists():
             registry.initialize()
@@ -301,10 +352,16 @@ def install(stage):
         os.chown(temporary,0,0);os.replace(temporary,PLIST)
         run(['/bin/launchctl','bootstrap','system',str(PLIST)])
         journal['source_sha']=config['source_sha'];journal['status']='installed_maintenance'
+        journal['runtime_transition']['phase']='complete'
         atomic(journal_path,journal)
         print('SUPERVISOR_INSTALLED_MAINTENANCE')
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--stage',type=Path,required=True)
-    args=parser.parse_args();install(args.stage.resolve())
+    parser=argparse.ArgumentParser();choice=parser.add_mutually_exclusive_group(required=True)
+    choice.add_argument('--stage',type=Path);choice.add_argument('--recover-source')
+    args=parser.parse_args()
+    if args.recover_source:
+        if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
+        install(recovery_candidate(args.recover_source),recovery=True)
+    else:install(args.stage.resolve())
