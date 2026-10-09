@@ -108,7 +108,7 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None):
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if git(source,'status','--porcelain'):raise ValueError('commit and validate supervisor source before preparation')
@@ -176,6 +176,24 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             'production_ready':False,
             'projects':projects}
     sys.path.insert(0,str(source/'src'))
+    config['dependency_artifacts']={}
+    if dependency_lock is not None:
+        lock=Path(dependency_lock).resolve(strict=True)
+        if (Path(dependency_lock).is_symlink() or lock.stat().st_uid!=uid
+                or lock.stat().st_nlink!=1 or lock.stat().st_mode&0o022):
+            raise ValueError('dependency approval lock must be privately controlled by the operator')
+        approvals=json.loads(lock.read_text())
+        if not isinstance(approvals,dict) or set(approvals)-{'do-again','jobpipe'}:
+            raise ValueError('dependency approval scope is not authorized')
+        from do_again.supervisor.dependencies import approved_artifact
+        for project in projects:
+            name='do-again' if project['account']=='_doagain_da' else 'jobpipe'
+            entries=approvals.get(name,[])
+            if not isinstance(entries,list) or len(entries)>64:
+                raise ValueError('dependency approval lock exceeds project limits')
+            config['dependency_artifacts'][project['key']]=entries
+            for artifact in entries:
+                approved_artifact(config,project['key'],artifact['id'])
     from do_again.supervisor.authority import AuthorityRegistry
     legacy=AuthorityRegistry(Path(config['legacy_authority_path']))
     for project in projects:
@@ -234,5 +252,7 @@ if __name__=='__main__':
     parser.add_argument('--do-again-repo',type=Path,required=True)
     parser.add_argument('--jobpipe-repo',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--dependency-lock',type=Path)
     args=parser.parse_args()
-    print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output),indent=2))
+    print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
+                             dependency_lock=args.dependency_lock),indent=2))

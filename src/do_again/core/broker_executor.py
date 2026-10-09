@@ -43,6 +43,14 @@ class BrokerExecutor:
         args = request.get('args', {})
         if args.get('env'):
             raise OperatorError('script-supplied environment is not admitted')
+        if request['operation'] == 'dependency_install':
+            if set(args) != {'artifact_id'}:
+                raise OperatorError('dependencies accept an approved artifact identity only')
+            return {'operation':'dependency_install','request_id':request['request_id'],
+                    'artifact_id':args['artifact_id'],
+                    'expected_head':status.get('authority',{}).get('repo_head'),
+                    'expected_epoch':status.get('epoch'),
+                    'request_fingerprint':request_fingerprint(request)}
         if request['operation'] == 'git_commit':
             if set(args) != {'paths', 'message'}:
                 raise OperatorError('Git accepts exact file paths and a message only')
