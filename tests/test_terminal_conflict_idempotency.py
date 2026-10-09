@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from do_again.core.executor import LocalExecutor
+
 import json
 import subprocess
 import tempfile
@@ -89,6 +91,7 @@ class TerminalConflictRegressionTests(unittest.TestCase):
                 return Agent(
                     repo=repo, control_worktree=control, branch="operator-control",
                     policy_path=policy, state_dir=state,
+                    executor=LocalExecutor(repo=repo, policy_path=policy, state_dir=state),
                 )
 
             agent = new_agent()
@@ -123,6 +126,7 @@ class TerminalConflictRegressionTests(unittest.TestCase):
             agent = Agent(
                 repo=repo, control_worktree=root / "control", branch="operator-control",
                 policy_path=policy, state_dir=root / "state",
+                executor=LocalExecutor(repo=repo, policy_path=policy, state_dir=root / "state"),
             )
             control = agent.control_worktree
             control.mkdir()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from do_again.core.executor import LocalExecutor
+
 import json
 import os
 import tempfile
@@ -13,6 +15,11 @@ from do_again.core.agent import Agent
 
 class StagedRuntimeRolloutTests(unittest.TestCase):
     def setUp(self):
+        # Exercise legacy cutover mechanics only in isolated temporary fixtures.
+        from unittest.mock import patch
+        admission = patch("do_again.supervisor.admission.reject_legacy_runtime")
+        admission.start()
+        self.addCleanup(admission.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -41,7 +48,7 @@ class StagedRuntimeRolloutTests(unittest.TestCase):
         policy.write_text('{"allowed_operations": []}')
         agent = Agent(repo=self.repo, control_worktree=self.layout.control_worktree,
                       branch="operator-control", policy_path=policy,
-                      state_dir=self.layout.state_dir)
+                      state_dir=self.layout.state_dir, executor=LocalExecutor(repo=self.repo, policy_path=policy, state_dir=self.layout.state_dir), )
         agent.write_ledger(request_id, {"state": state})
 
     def test_offline_upgrade_stages_stopped_runtime_preserving_pending_request(self):

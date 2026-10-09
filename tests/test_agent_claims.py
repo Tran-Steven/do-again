@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from do_again.core.executor import LocalExecutor
+
 import json
 import subprocess
 import tempfile
@@ -107,6 +109,7 @@ class DistributedClaimTests(unittest.TestCase):
                     remote="origin",
                     policy_path=policy,
                     state_dir=root / f"state-{index}",
+                    executor=LocalExecutor(repo=repo, policy_path=policy, state_dir=root / f"state-{index}"),
                 )
                 for index, control in enumerate(controls)
             ]

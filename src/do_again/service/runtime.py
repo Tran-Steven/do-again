@@ -26,6 +26,8 @@ from ..browser import (
     stop_if_unused,
 )
 from ..core.agent import Agent
+from ..core.schema import OperatorError
+from ..supervisor.admission import reject_legacy_runtime
 from ..platforms.detect import detect_platform
 from ..platforms.linux import service_definition_path as linux_service_definition_path
 from ..platforms.macos import service_definition_path as macos_service_definition_path
@@ -250,6 +252,10 @@ def _copy_runtime(layout: RuntimeLayout) -> None:
 
 
 def prepare_runtime(repo: Path) -> RuntimeLayout:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     layout = runtime_layout(repo)
     layout.state_dir.mkdir(parents=True, exist_ok=True)
     layout.stdout_log.parent.mkdir(parents=True, exist_ok=True)
@@ -405,6 +411,10 @@ def _macos_status(repo: Path, layout: RuntimeLayout) -> dict[str, Any]:
 
 
 def _install_macos(repo: Path) -> dict[str, Any]:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     existing = runtime_layout(repo)
     if _macos_loaded(existing):
         proc = _launchctl("bootout", f"{_domain()}/{existing.label}", check=False)
@@ -437,6 +447,10 @@ def _stop_macos(repo: Path) -> dict[str, Any]:
 
 
 def _restart_macos(repo: Path) -> dict[str, Any]:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     layout = runtime_layout(repo)
     plist = macos_service_definition_path(layout.label)
     if not plist.is_file():
@@ -553,6 +567,10 @@ def _require_systemctl() -> None:
 
 
 def _install_linux(repo: Path) -> dict[str, Any]:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     _require_systemctl()
     existing = runtime_layout(repo)
     if _linux_running(existing):
@@ -585,6 +603,10 @@ def _stop_linux(repo: Path) -> dict[str, Any]:
 
 
 def _restart_linux(repo: Path) -> dict[str, Any]:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     _require_systemctl()
     layout = runtime_layout(repo)
     unit = linux_service_definition_path(layout.label)
@@ -687,6 +709,10 @@ def _require_schtasks() -> None:
 
 
 def _install_windows(repo: Path) -> dict[str, Any]:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     _require_schtasks()
     existing = runtime_layout(repo)
     if _windows_task_exists(existing):
@@ -727,6 +753,10 @@ def _stop_windows(repo: Path) -> dict[str, Any]:
 
 
 def _restart_windows(repo: Path) -> dict[str, Any]:
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     _require_schtasks()
     layout = runtime_layout(repo)
     if not _windows_task_exists(layout):
@@ -770,6 +800,10 @@ def service_status(path: str | Path = ".") -> dict[str, Any]:
 
 def install_service(path: str | Path = ".") -> dict[str, Any]:
     repo = find_repo(path)
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     platform_name = _require_supported_background_platform()
     if platform_name == "macos":
         return _install_macos(repo)
@@ -790,6 +824,10 @@ def stop_service(path: str | Path = ".") -> dict[str, Any]:
 
 def restart_service(path: str | Path = ".") -> dict[str, Any]:
     repo = find_repo(path)
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     platform_name = _require_supported_background_platform()
     if platform_name == "macos":
         return _restart_macos(repo)
@@ -810,6 +848,10 @@ def uninstall_service(path: str | Path = ".") -> dict[str, Any]:
 
 def run_foreground(path: str | Path = ".", *, once: bool = False) -> int:
     repo = find_repo(path)
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        raise ServiceError(str(exc)) from exc
     if service_status(repo)["running"]:
         raise ServiceError("background service is already running; stop it before using foreground mode")
     layout = prepare_runtime(repo)

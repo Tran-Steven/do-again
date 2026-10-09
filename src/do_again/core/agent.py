@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..platforms.process import pid_alive
-from .executor import LocalExecutor
+from .broker_executor import BrokerExecutor
 from .schema import (
     OperatorError,
     atomic_json,
@@ -40,6 +40,7 @@ class Agent:
         state_dir: Path,
         remote: str = "origin",
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
+        executor: Any | None = None,
     ):
         self.repo = repo.resolve()
         self.control_worktree = control_worktree.resolve()
@@ -49,7 +50,7 @@ class Agent:
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
-        self.executor = LocalExecutor(
+        self.executor = executor if executor is not None else BrokerExecutor(
             repo=self.repo,
             policy_path=self.policy_path,
             state_dir=self.state_dir,
@@ -285,6 +286,9 @@ class Agent:
         return value if isinstance(value, dict) else None
 
     def acquire_remote_claim(self, request: dict[str, Any]) -> bool:
+        if isinstance(self.executor, BrokerExecutor):
+            from ..supervisor.admission import require_active
+            require_active(self.repo)
         request_id = str(request["request_id"])
         fingerprint = request_fingerprint(request)
         relative = self.claim_relative(request_id)
@@ -885,6 +889,9 @@ class Agent:
         return [path for _, _, path in values]
 
     def run(self, once: bool = False) -> int:
+        if isinstance(self.executor, BrokerExecutor):
+            from ..supervisor.admission import require_active
+            require_active(self.repo)
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
         try:
             self.publish_status("ready")

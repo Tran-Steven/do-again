@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from do_again.core.agent import Agent
+from do_again.core.executor import LocalExecutor
 from do_again.core.schema import OperatorError, atomic_json, request_fingerprint, utc_now, validate_request
 
 
@@ -27,7 +28,7 @@ class RequestFingerprintTests(unittest.TestCase):
         self.agents = []
 
     def agent(self):
-        agent = Agent(repo=self.repo, control_worktree=self.control, branch="operator-control", policy_path=self.policy, state_dir=self.state)
+        agent = Agent(repo=self.repo, control_worktree=self.control, branch="operator-control", policy_path=self.policy, state_dir=self.state, executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.state), )
         agent.publish_json = lambda relative, value, message: atomic_json(self.control / relative, value)
         # This fixture models the control store with local JSON rather than Git.
         # Explicitly mock synchronization when exercising conflict publishing.

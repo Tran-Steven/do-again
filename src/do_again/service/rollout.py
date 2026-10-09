@@ -333,6 +333,14 @@ def staged_upgrade(
     if not apply or effective_blockers:
         return result
 
+    from ..supervisor.admission import reject_legacy_runtime
+    from ..core.schema import OperatorError
+    try:
+        reject_legacy_runtime(repo)
+    except OperatorError as exc:
+        result.update(deferred=True, effective_blockers=[*effective_blockers, {"kind":"production_admission", "detail":str(exc)}])
+        return result
+
     transaction_id = f"upgrade-{uuid.uuid4().hex[:16]}"
     tx_path = layout.state_dir / "runtime_upgrade.json"
     stage_package, expected_hash = _stage_source(layout, transaction_id)

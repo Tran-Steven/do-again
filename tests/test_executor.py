@@ -199,6 +199,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "order-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "order-state"),
         )
         self.assertEqual(
             [path.stem for path in agent.request_paths()],
@@ -219,6 +220,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "invalid-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "invalid-state"),
         )
         self.assertIn(path.resolve(), [value.resolve() for value in agent.request_paths()])
         with patch.object(
@@ -253,6 +255,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "reuse-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "reuse-state"),
         )
         conflicts = []
         agent.publish_conflict = lambda **kwargs: (conflicts.append(kwargs) or True)
@@ -275,6 +278,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "ledger-reuse-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "ledger-reuse-state"),
         )
         atomic_json(
             agent.ledger_path(request["request_id"]),
@@ -310,6 +314,7 @@ class ExecutorTests(unittest.TestCase):
                 branch="operator-control",
                 policy_path=self.policy,
                 state_dir=state,
+                executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=state),
             )
             for _ in range(2)
         ]
@@ -824,6 +829,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "agent-restart-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "agent-restart-state"),
         )
         payload = {
             "operation": "self_update",
@@ -860,6 +866,7 @@ class ExecutorTests(unittest.TestCase):
             branch="operator-control",
             policy_path=self.policy,
             state_dir=self.root / "agent-state",
+            executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=self.root / "agent-state"),
         )
         atomic_json(
             agent.ledger_path(request["request_id"]),
