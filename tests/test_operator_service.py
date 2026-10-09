@@ -20,7 +20,7 @@ class OperatorServiceTests(unittest.TestCase):
             'operator_home':str(self.root),'python':'/sealed/python','source_sha':'b'*40},project=SimpleNamespace(key='c'*64))
         for target,kwargs in [('do_again.supervisor.operator_service.sys.platform',{'new':'darwin'}),
                 ('do_again.supervisor.operator_service.os.geteuid',{'return_value':0,'create':True}),
-                ('do_again.supervisor.operator_service.os.chown',{}),
+                ('do_again.supervisor.operator_service.os.chown',{'create':True}),
                 ('do_again.supervisor.operator_service.MacOSProcesses',{})]:
             p=patch(target,**kwargs);mock=p.start();self.addCleanup(p.stop)
             if target.endswith('MacOSProcesses'):mock.return_value.identity.return_value=(501,1,2,1)
