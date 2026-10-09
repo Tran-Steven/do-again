@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -946,6 +947,33 @@ return lines.some((line, index) =>
 })()"""
     )
     return bool(cdp.evaluate(target, expression, timeout=10.0))
+
+
+def receipt_acknowledgment(target: cdp.Target, marker: str, token: str) -> dict[str, bool]:
+    """Read only: acknowledgment must follow the exact original user turn."""
+    if not marker or not re.fullmatch(r"DO_AGAIN_RECEIPT_ACK token=[0-9a-f]{32}", token):
+        return {"visible": False, "acknowledged": False}
+    expression = "(() => {" + _MESSAGE_NODES_JS + r"""
+const marker = MARKER, token = TOKEN;
+const users = messageNodes('user');
+const originals = users.filter(el => {
+  const text = String(el.innerText || el.textContent || '');
+  return text.includes(marker) && text.includes(token);
+});
+const assistants = messageNodes('assistant');
+const acknowledged = originals.some(user => assistants.some(assistant =>
+  !!(user.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+  String(assistant.innerText || assistant.textContent || '').split('\n').some(line => line.trim() === token)
+));
+const stop = document.querySelector('[data-testid="stop-button"],button[aria-label="Stop generating"]');
+return {visible: originals.length === 1, acknowledged: originals.length === 1 && acknowledged && !(stop && !stop.disabled)};
+})()"""
+    expression = expression.replace('MARKER', json.dumps(marker)).replace('TOKEN', json.dumps(token))
+    result = cdp.evaluate(target, expression, timeout=10.0)
+    if not isinstance(result, dict):
+        return {"visible": False, "acknowledged": False}
+    return {"visible": result.get('visible') is True,
+            "acknowledged": result.get('visible') is True and result.get('acknowledged') is True}
 
 
 def _context_limit_warning(target: cdp.Target) -> str:
@@ -1993,6 +2021,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
         )
 
     batch_marker = "DO_AGAIN_RECEIPTS_READY request_ids=" + ",".join(ids)
+    acknowledgment_token = "DO_AGAIN_RECEIPT_ACK token=" + uuid.uuid4().hex
     newline = chr(10)
     message = (
         batch_marker
@@ -2002,6 +2031,8 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
         + "Do Again request only if more local work is needed:"
         + newline
         + newline.join(rows)
+        + newline + "After inspecting the receipts, include this exact acknowledgment on its own line: "
+        + acknowledgment_token
     )
 
     status = ensure_browser_running(verify_auth=True)
@@ -2042,7 +2073,8 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
             raise BrowserSubmissionUncertain('receipt binding changed before dispatch; no automatic replay')
         before_dispatch({'chat_url':bound_url,'conversation_id':conversation,'binding_identity':binding_identity(bound),
                          'payload_sha256':hashlib.sha256(message.encode()).hexdigest(),
-                         'purpose':'receipt_notification','state':'dispatch_started'})
+                         'purpose':'receipt_notification','state':'dispatch_started',
+                         'acknowledgment_token':acknowledgment_token})
 
     dispatch_options={'before_dispatch':commit_dispatch} if before_dispatch is not None else {}
 

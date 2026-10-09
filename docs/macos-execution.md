@@ -308,3 +308,25 @@ uncertain and prevents the gesture. These source regressions do not establish
 live browser delivery or assistant acknowledgment; those gates remain open.
 Conversation target lookup compares the entire conversation ID, including when
 the page has a query string. A shared ID prefix cannot authorize a different chat.
+
+
+Receipt visibility and acknowledgment are separate observations. New receipt messages
+carry a fresh acknowledgment token committed with the actual binding and payload before
+Enter. Read-only reconciliation requires the batch marker and token in one original user
+turn, followed by a completed assistant turn containing the exact acknowledgment line.
+Visibility alone retains the outbox and escalates after five minutes. Historical uncertain
+messages without that causal token require manual reconciliation; no replacement probe
+or receipt is sent. Terminal delivery evidence is durably retained before outbox cleanup,
+so restart can finish interrupted cleanup without another browser effect. Acknowledgment
+proves receipt consumption only, not useful engineering work.
+
+The legacy watchdog records receipt completion as execution activity. New receipt IDs
+cannot reset useful-progress time, continuation uncertainty, or the retry budget. The
+acceptance-verified task scheduler remains a release prerequisite.
+
+Installed maintenance source `2cd480fcd6e354636f0e2b1ce94792676a4282bc` passed
+21 native checks and six synthetic tasks for each project, including three tasks through
+the actual operator identity and authenticated Root socket, restart without replay, and
+inert launchd process withdrawal. Both projects remained in maintenance at epoch 1 with
+production disabled and no unresolved executions. These results do not qualify live
+browser acknowledgment or autonomous development acceptance.

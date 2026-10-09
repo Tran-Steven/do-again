@@ -68,6 +68,8 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
             daemon._drain_browser_outbox_locked(self.repo, self.state)
         b = self._enqueue("req-b")
         contain.return_value = True
+        ack = patch.object(browser, "receipt_acknowledgment", return_value={"visible":True,"acknowledged":True})
+        ack.start(); self.addCleanup(ack.stop)
         self.assertEqual(daemon._drain_browser_outbox_locked(self.repo, self.state), 1)
         self.assertFalse(a.exists())
         self.assertTrue(b.exists())
@@ -122,6 +124,8 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
         self.assertTrue(daemon._uncertain_delivery_path(self.state).exists())
         self.assertEqual(notify.call_count,1)
         contain.return_value=True
+        ack = patch.object(browser, "receipt_acknowledgment", return_value={"visible":True,"acknowledged":True})
+        ack.start(); self.addCleanup(ack.stop)
         self.assertEqual(daemon._drain_browser_outbox_locked(self.repo,self.state),1)
         self.assertFalse(a.exists())
         notify.assert_called_once()
@@ -171,9 +175,12 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
                 with self.assertRaises(BrowserSubmissionUncertain):
                     daemon._drain_browser_outbox_locked(self.repo,self.state)
             send.assert_not_called()
-        self.assertTrue(original.exists());self.assertTrue(self._uncertain()['assistant_acknowledged'])
+        self.assertTrue(original.exists());self.assertTrue(self._uncertain()['historical_probe_acknowledged'])
+        self.assertFalse(self._uncertain().get('assistant_acknowledged', False))
         contains.return_value=True
-        self.assertEqual(daemon._drain_browser_outbox_locked(self.repo,self.state),1)
+        with self.assertRaises(BrowserSubmissionUncertain):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        self.assertTrue(original.exists())
         notify.assert_called_once()
 
     def test_no_browser_message_cannot_clear_outbox(self):

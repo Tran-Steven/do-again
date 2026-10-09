@@ -112,12 +112,26 @@ def _read_uncertain_delivery(state_dir: Path) -> dict[str, Any]:
         value = json.loads(_uncertain_delivery_path(state_dir).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
-    if not isinstance(value, dict) or not isinstance(value.get("request_ids"), list):
+    if (not isinstance(value, dict) or not isinstance(value.get("request_ids"), list)
+        or not value['request_ids']
+        or any(not isinstance(rid, str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,160}', rid)
+               or rid in {'.', '..'} for rid in value['request_ids'])
+        or len(set(value['request_ids'])) != len(value['request_ids'])):
         raise BrowserError("invalid durable browser submission uncertainty record")
     return value
 
 
-def _acknowledge_uncertain_batch(state_dir: Path, paths: list[Path]) -> None:
+def _delivery_evidence_path(state_dir: Path, state: dict[str, Any]) -> Path:
+    identity = hashlib.sha256(json.dumps({key: state.get(key) for key in
+        ('request_ids', 'binding_identity', 'payload_sha256', 'acknowledgment_token')},
+        sort_keys=True).encode()).hexdigest()
+    return state_dir / 'browser_delivery_evidence' / (identity + '.json')
+
+
+def _acknowledge_uncertain_batch(state_dir: Path, paths: list[Path], state: dict[str, Any]) -> None:
+    # Commit terminal evidence first; a crash during deletion resumes cleanup only.
+    atomic_json(_delivery_evidence_path(state_dir, state), dict(state, state='reconciled',
+        message_visible=True, assistant_acknowledged=True, reconciled_at_utc=utc_now().isoformat()))
     for path in paths:
         path.unlink(missing_ok=True)
     _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
@@ -128,6 +142,19 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
     """A possibly-sent message must never be automatically submitted twice."""
     ids = [str(x) for x in state["request_ids"]]
     paths = [_browser_outbox_dir(state_dir) / f"{rid}.json" for rid in ids]
+    evidence_path = _delivery_evidence_path(state_dir, state)
+    if evidence_path.exists():
+        evidence = json.loads(evidence_path.read_text(encoding='utf-8'))
+        if (evidence.get('state') != 'reconciled' or evidence.get('assistant_acknowledged') is not True
+            or evidence.get('message_visible') is not True
+            or any(evidence.get(key) != state.get(key) for key in
+                ('request_ids', 'binding_identity', 'payload_sha256', 'acknowledgment_token'))):
+            raise BrowserSubmissionUncertain('Invalid terminal delivery evidence; manual inspection required')
+        for path in paths:
+            path.unlink(missing_ok=True)
+        _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
+        _record_browser_state(state_dir, 'queued' if _pending_outbox(state_dir) else 'ready')
+        return len(paths)
     if any(not p.exists() for p in paths):
         raise BrowserSubmissionUncertain(
             "Uncertain browser delivery was modified outside reconciliation; inspect the bound chat and outbox"
@@ -143,9 +170,17 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
     session = ensure_browser_running(verify_auth=True)
     target = browser_runtime._find_chatgpt_target(int(session["port"]), chat_url)
     if target is not None and browser_runtime._page_contains(target, str(state["batch_marker"])):
-        # Exact original user-message evidence; never resubmit it.
-        _acknowledge_uncertain_batch(state_dir, paths)
-        return len(paths)
+        # Visibility is not acknowledgment. Legacy uncertain batches without a
+        # causally bound token remain blocked; historical probe replies cannot clear them.
+        state = dict(state, state='visible', message_visible=True)
+        token = str(state.get('acknowledgment_token') or '')
+        observation = browser_runtime.receipt_acknowledgment(target, str(state['batch_marker']), token)
+        if observation.get('visible') and observation.get('acknowledged'):
+            state = dict(state, state='acknowledged', assistant_acknowledged=True)
+            atomic_json(_uncertain_delivery_path(state_dir), state)
+            _acknowledge_uncertain_batch(state_dir, paths, state)
+            return len(paths)
+        atomic_json(_uncertain_delivery_path(state_dir), state)
     age = time.time() - float(state.get("first_seen_epoch", time.time()))
     ack_token = str(state.get("ack_probe_token") or "")
     if ack_token and target is not None:
@@ -153,7 +188,7 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
         # acknowledgment is separate from visibility of the original message.
         snapshot = browser_runtime._assistant_snapshot(target)
         if str(snapshot.get("latest") or "").strip() == ack_token:
-            state = dict(state, assistant_acknowledged=True)
+            state = dict(state, historical_probe_acknowledged=True)
             atomic_json(_uncertain_delivery_path(state_dir), state)
     if age >= 300:
         incident = state_dir / "incidents" / "browser-submission-unacknowledged.json"
@@ -211,7 +246,9 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
                 "Browser submitted receipt batch but its user-message marker is not yet verified"
             )
     except BrowserError as exc:
-        if isinstance(exc, BrowserAuthRequired) or "ChatGPT is still generating; retry delivery later" in str(exc):
+        if (_read_uncertain_delivery(state_dir).get('state') == 'preparing'
+            and (isinstance(exc, BrowserAuthRequired)
+                 or "ChatGPT is still generating; retry delivery later" in str(exc))):
             # These known pre-submit checks guarantee the page was not clicked.
             _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
             _record_browser_state(state_dir, "recovering", error=str(exc))
@@ -220,18 +257,8 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
             return 0
         raise
 
-    _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
-    delivered = 0
-    for path in batch_paths:
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-        delivered += 1
-
-    remaining = len(_pending_outbox(state_dir))
-    _record_browser_state(state_dir, "queued" if remaining else "ready")
-    return delivered
+    # The adapter's already-visible result proves no assistant acknowledgment.
+    return _reconcile_uncertain_delivery(repo, state_dir, _read_uncertain_delivery(state_dir))
 
 
 def _browser_monitor(

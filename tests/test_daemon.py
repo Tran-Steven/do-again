@@ -97,7 +97,10 @@ class BrowserOutboxTests(unittest.TestCase):
 
             with (
                 patch("do_again.service.daemon.activate_project"),
-                patch("do_again.service.daemon.ensure_browser_running"),
+                patch("do_again.service.daemon.ensure_browser_running", return_value={"port": 9224}),
+                patch("do_again.browser.runtime._find_chatgpt_target", return_value=object()),
+                patch("do_again.browser.runtime._page_contains", return_value=True),
+                patch("do_again.browser.runtime.receipt_acknowledgment", return_value={"visible": True, "acknowledged": True}),
                 patch(
                     "do_again.service.daemon.notify_receipts",
                     side_effect=BrowserError("ChatGPT is still generating; retry delivery later"),
@@ -125,7 +128,10 @@ class BrowserOutboxTests(unittest.TestCase):
 
             with (
                 patch("do_again.service.daemon.activate_project"),
-                patch("do_again.service.daemon.ensure_browser_running"),
+                patch("do_again.service.daemon.ensure_browser_running", return_value={"port": 9224}),
+                patch("do_again.browser.runtime._find_chatgpt_target", return_value=object()),
+                patch("do_again.browser.runtime._page_contains", return_value=True),
+                patch("do_again.browser.runtime.receipt_acknowledgment", return_value={"visible": True, "acknowledged": True}),
                 patch(
                     "do_again.service.daemon.notify_receipts",
                     return_value={"response": "already_delivered"},
@@ -170,8 +176,11 @@ class BrowserOutboxTests(unittest.TestCase):
                 {"request_id": "req-ok", "state": "succeeded"},
             )
             with (
-                patch("do_again.service.daemon.ensure_browser_running"),
+                patch("do_again.service.daemon.ensure_browser_running", return_value={"port":9224}),
                 patch("do_again.service.daemon.activate_project"),
+                patch("do_again.browser.runtime._find_chatgpt_target", return_value=object()),
+                patch("do_again.browser.runtime._page_contains", return_value=True),
+                patch("do_again.browser.runtime.receipt_acknowledgment", return_value={"visible":True,"acknowledged":True}),
                 patch(
                     "do_again.service.daemon.notify_receipts",
                     return_value={"response": "already_delivered"},

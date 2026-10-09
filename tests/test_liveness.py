@@ -55,15 +55,17 @@ class LivenessDecisionTests(unittest.TestCase):
         self.assertEqual(value["state"], "stalled_generating")
         self.assertEqual(action, "report_busy")
 
-    def test_progress_resets_retry_budget(self):
+    def test_new_receipt_does_not_reset_useful_progress_or_retry_budget(self):
         old = {"receipt_id": "r1", "progress_at": 100, "attempts": 2, "last_resume_at": 180}
         value, action = liveness._decision(
             old, receipt_id="r2", receipt_time=220, pending=False,
             busy=False, now=240, idle_seconds=60, recovery_seconds=60,
         )
-        self.assertEqual(action, "wait")
-        self.assertEqual(value["attempts"], 0)
-        self.assertEqual(value["state"], "idle_grace")
+        self.assertEqual(action, "report")
+        self.assertEqual(value["attempts"], 2)
+        self.assertEqual(value["progress_at"], 100)
+        self.assertEqual(value["last_execution_at"], 220)
+        self.assertEqual(value["state"], "stalled_idle_handoff")
 
     def test_pending_or_generating_never_prompts(self):
         old = {"receipt_id": "r1", "progress_at": 100, "attempts": 1}
@@ -163,14 +165,15 @@ class LivenessIntegrationTests(unittest.TestCase):
         send.assert_called_once()
         self.assertEqual(json.loads((self.state/"liveness.json").read_text())["idle_resume_phase"],"observed")
 
-    def test_new_receipt_clears_legacy_idle_marker(self):
+    def test_new_receipt_preserves_idle_delivery_evidence(self):
         mocks=self._mock_browser()
         liveness.check_liveness(self.repo,self.control,self.state)
         (self.receipts/"r2.json").write_text('{"request_id":"r2"}')
-        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_grace")
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
         row=json.loads((self.state/"liveness.json").read_text())
-        self.assertEqual(row["attempts"],0)
-        self.assertNotIn("idle_resume_marker",row)
+        self.assertEqual(row["attempts"],1)
+        self.assertIn("idle_resume_marker",row)
+        self.assertEqual(row["last_receipt_id"], "r2")
         mocks[-1].assert_called_once()
 
     def test_preupgrade_unverified_resume_fails_closed(self):
@@ -195,14 +198,15 @@ class LivenessIntegrationTests(unittest.TestCase):
         (requests / "r2.json").write_text("{}")
         self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "working")
 
-    def test_new_receipt_resets_stall(self):
+    def test_new_receipt_does_not_reset_stall(self):
         mocks = self._mock_browser()
         liveness.check_liveness(self.repo, self.control, self.state)
         receipt = self.receipts / "r2.json"
         receipt.write_text('{"request_id": "r2"}')
-        self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "idle_grace")
+        self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "recovering")
         state = json.loads((self.state / "liveness.json").read_text())
-        self.assertEqual(state["attempts"], 0)
+        self.assertEqual(state["attempts"], 1)
+        self.assertEqual(state["last_receipt_id"], "r2")
         mocks[-1].assert_called_once()
 
     def test_stale_unfinished_request_is_classified_as_stall(self):

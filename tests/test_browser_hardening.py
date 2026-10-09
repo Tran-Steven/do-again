@@ -272,7 +272,7 @@ class BrowserHardeningTests(unittest.TestCase):
             except Exception as exc:
                 errors.append(exc)
 
-        with patch.object(daemon, "activate_project"), patch.object(daemon, "ensure_browser_running"), patch.object(daemon, "notify_receipts", return_value={"response":"already_delivered"}) as send:
+        with patch.object(daemon, "activate_project"), patch.object(daemon, "ensure_browser_running", return_value={"port":9224}), patch.object(browser, "_find_chatgpt_target", return_value=object()), patch.object(browser, "_page_contains", return_value=True), patch.object(browser, "receipt_acknowledgment", return_value={"visible":True,"acknowledged":True}), patch.object(daemon, "notify_receipts", return_value={"response":"already_delivered"}) as send:
             threads = [threading.Thread(target=worker) for _ in range(2)]
             for thread in threads:
                 thread.start()

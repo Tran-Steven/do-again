@@ -81,14 +81,14 @@ def _decision(
 ) -> tuple[dict[str, Any], str]:
     value = dict(state)
     if receipt_id != str(value.get("receipt_id", "")):
-        value = {
-            "receipt_id": receipt_id,
-            "progress_at": receipt_time or now,
-            "attempts": 0,
-            "state": "working",
-        }
+        # Execution completion is activity, not acceptance-verified progress.
+        # Preserve continuation uncertainty and retry budget across no-op,
+        # failed, or newly imported receipts.
+        value.update(receipt_id=receipt_id, last_execution_at=receipt_time,
+                     state="working")
     if "progress_at" not in value:
-        value["progress_at"] = now
+        # Initial watchdog baseline; subsequent receipts never advance it.
+        value["progress_at"] = receipt_time or now
     if pending:
         value["state"] = "working"
         return value, "wait"
@@ -408,6 +408,7 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
     path = state_dir / "liveness.json"
     value = _read_state(path)
     receipt_id, receipt_time, pending = _activity(control)
+    value.update(last_receipt_id=receipt_id, last_execution_at=receipt_time)
     # In-flight local execution has priority over any external CI event.
     # Never wake the agent to mutate the repo while a claimed request runs.
     # A claimed execution must not be interrupted by a CI wake-up, but an
@@ -488,7 +489,7 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
         return str(new_state["state"])
     # Escalation must not depend on a healthy browser/CDP connection. An
     # unknown send can remain invisible to all DOM probes indefinitely.
-    if receipt_id == str(value.get("receipt_id") or ""):
+    if value.get("idle_resume_marker") or int(value.get("attempts", 0)):
         marker = str(value.get("idle_resume_marker") or "")
         age = time.time() - float(value.get("idle_resume_at") or time.time())
         if marker and age >= config["recovery_seconds"]:
@@ -516,7 +517,7 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
     # A prior intent can have been accepted despite an unknown CDP result.
     # Read only the exact bound conversation, never submit again on restart.
     marker = str(value.get("idle_resume_marker") or "")
-    if marker and receipt_id == str(value.get("receipt_id") or ""):
+    if marker:
         try:
             if browser._page_contains(target, marker):
                 value["idle_resume_phase"] = "observed"
@@ -534,7 +535,7 @@ def check_liveness(repo: Path, control: Path, state_dir: Path, *, ci_probe=None,
                               else "recovering")
         atomic_json(path, value)
         return str(value["state"])
-    if int(value.get("attempts", 0)) and not marker and receipt_id == str(value.get("receipt_id") or ""):
+    if int(value.get("attempts", 0)) and not marker:
         # Legacy in-flight sends predate durable markers. Their delivery is
         # indeterminate; do not issue a duplicate on upgrade.
         value["state"] = "stalled_legacy_continuation_unverified"
