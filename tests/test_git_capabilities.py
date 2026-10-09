@@ -114,6 +114,14 @@ class GitCapabilityTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):
             copy_git_data(self.repo / '.git', self.root / 'budget', byte_budget=1)
 
+    def test_native_probe_missing_git_fails_closed_without_launch(self):
+        from do_again.supervisor.macos_probe import verify_native_git
+        from unittest.mock import Mock, patch
+        with patch('do_again.supervisor.macos_probe.capture') as capture:
+            with self.assertRaises(ExecutionBlocked):
+                verify_native_git({}, Mock(executables=()), self.root, self.root, 'fixture', start_guard=Mock())
+            capture.assert_not_called()
+
     def test_candidate_configuration_and_binding_drift_block_sealing(self):
         tx = self.transaction()
         tx.prepare(self.repo / '.git')

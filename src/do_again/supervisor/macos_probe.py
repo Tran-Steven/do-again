@@ -119,7 +119,9 @@ print(json.dumps(result),flush=True)
         from .macos_execution import MacOSProcesses
         if MacOSProcesses().owned(project.uid):
             raise ExecutionBlocked('detached execution descendants survived proof')
-        return {'verified': True, 'checks': sorted(result), 'detached_descendants_drained': True,
+        git_evidence = verify_native_git(config, project, scratch, cache, nonce, start_guard=start_guard)
+        result['git_transaction'] = True
+        return {'verified': True, 'git': git_evidence, 'checks': sorted(result), 'detached_descendants_drained': True,
                 'execution_uid': project.uid, 'fixture': label}
     finally:
         (project.worktree / ('.native-proof-' + nonce)).unlink(missing_ok=True)
@@ -127,3 +129,54 @@ print(json.dumps(result),flush=True)
         launchctl('bootout', target)
         # Preserve proof work and failures for inspection; no synthetic chat,
         # real application, other project, or user browser is mutated.
+
+
+def verify_native_git(config: dict, project, scratch: Path, cache: Path, nonce: str, *, start_guard) -> dict:
+    """Real local edit-to-commit proof in scratch; assigned engineering Git is untouched."""
+    from .git_capabilities import CONFIG, GitTransaction
+    from .macos_execution import MacOSProcesses
+    git = Path(config.get('git', ''))
+    expected_git = Path('/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git')
+    if git != expected_git or git not in project.executables:
+        raise ExecutionBlocked('attested native Git capability is not installed')
+    fixture = scratch / 'git-fixture'
+    fixture.mkdir(mode=0o700)
+    os.chown(fixture, project.uid, project.gid)
+    selected, excluded = fixture / 'selected.txt', fixture / 'excluded.txt'
+    for path in (selected, excluded):
+        path.write_text('before\n');os.chown(path, project.uid, project.gid)
+    sequence = 0
+    def run(argv):
+        nonlocal sequence
+        sequence += 1
+        packet = {'operation':'execute', 'request_id':f'native-git-{nonce}-{sequence}',
+                  'argv':argv, 'cwd':'.', 'timeout':20}
+        outcome = capture(launch_spec(project, packet, scratch, cache), 20, start_guard=start_guard)
+        if outcome['returncode'] or outcome['timed_out'] or outcome.get('stdout_truncated') or outcome.get('stderr_truncated'):
+            raise BoundaryProbeBlocked('native Git transaction proof failed',
+                                       {'phase':'native_git','step':sequence,'outcome':outcome})
+        return outcome['stdout'].strip()
+    run([str(git), 'init', '--template=', str(fixture)])
+    (fixture / '.git/config').write_bytes(CONFIG)
+    run([str(git), '-C', str(fixture), 'add', '--', 'selected.txt', 'excluded.txt'])
+    run([str(git), '-C', str(fixture), 'commit', '--no-verify', '--no-gpg-sign', '-m', 'synthetic baseline'])
+    before = run([str(git), '-C', str(fixture), 'rev-parse', '--verify', 'HEAD'])
+    selected.write_text('after\n');excluded.write_text('excluded change\n')
+    tx = GitTransaction(git, fixture, scratch / 'git-candidate', before, 'do-again/native-proof')
+    tx.prepare(fixture / '.git')
+    for path in (tx.metadata, *tx.metadata.rglob('*')):
+        os.chown(path, project.uid, project.gid)
+    head = ''
+    for command in tx.commit_commands(['selected.txt'], 'synthetic selected change'):
+        head = run(command)
+    tx.validate_candidate(head, scratch / 'git-sealed')
+    changed = run(tx._command('diff-tree', '--no-commit-id', '--name-only', '-r', head))
+    parent = run(tx._command('rev-parse', f'{head}^'))
+    original = run([str(git), '-C', str(fixture), 'rev-parse', '--verify', 'HEAD'])
+    if changed != 'selected.txt' or parent != before or original != before:
+        raise ExecutionBlocked('native Git proof changed an unreserved path or authority')
+    if MacOSProcesses().owned(project.uid):
+        raise ExecutionBlocked('native Git descendants survived the transaction proof')
+    return {'verified':True, 'base_sha':before, 'candidate_sha':head,
+            'exact_paths':['selected.txt'], 'authoritative_metadata_unchanged':True,
+            'execution_uid':project.uid, 'commands':sequence}

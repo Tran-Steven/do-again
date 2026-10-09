@@ -23,6 +23,12 @@ CONFIG = b'''[core]
  hooksPath = /dev/null
  fsmonitor = false
  autocrlf = false
+[gc]
+ auto = 0
+[maintenance]
+ auto = false
+[protocol]
+ allow = never
 [commit]
  gpgSign = false
 [user]
@@ -37,6 +43,8 @@ REF = re.compile(r'refs/(heads|tags)/[A-Za-z0-9._/-]+')
 
 
 def _read(path: Path, limit: int) -> bytes:
+    if any(ancestor.is_symlink() for ancestor in path.parents):
+        raise ExecutionBlocked('Git metadata ancestor is aliased')
     flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
     try:
         fd = os.open(path, flags)

@@ -78,6 +78,29 @@ def snapshot_bundle(repo: Path, sha: str, destination: Path) -> None:
         git(staging,'bundle','create',str(destination),'refs/heads/snapshot')
 
 
+def seal_git(payload: Path) -> str:
+    """Copy the Apple-signed Git binary; no developer-tool launcher at execution."""
+    binary=Path(subprocess.check_output(['/usr/bin/xcrun','--find','git'],text=True).strip()).resolve(strict=True)
+    approved=(binary==Path('/Library/Developer/CommandLineTools/usr/bin/git') or
+              (len(binary.parts)==8 and binary.parts[1]=='Applications'
+               and re.fullmatch(r'Xcode(?:_[A-Za-z0-9.]+)?\.app',binary.parts[2])
+               and binary.parts[3:]==('Contents','Developer','usr','bin','git')))
+    if not binary.is_absolute() or not approved:
+        raise ValueError('Git must come from the approved Apple developer tools')
+    for path in (binary,*binary.parents):
+        if path.is_symlink() or path.stat().st_uid!=0 or path.stat().st_mode & 0o002:
+            raise ValueError('Git toolchain is aliased or not root-controlled')
+    if not binary.is_file() or binary.stat().st_nlink!=1:
+        raise ValueError('Git executable is not an unaliased regular file')
+    subprocess.run(['/usr/bin/codesign','--verify','--strict','-R','=anchor apple',str(binary)],
+                   check=True,capture_output=True)
+    target=payload/'runtimes/git/bin/git'
+    target.parent.mkdir(parents=True)
+    shutil.copyfile(binary,target)
+    target.chmod(0o755)
+    return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
+
+
 def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None):
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
@@ -122,6 +145,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     (payload/'bootstrap.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_bootstrap.py']))
     (payload/'install.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_install.py']))
     runtime=seal_runtime(payload)
+    native_git=seal_git(payload)
     (payload/'snapshots').mkdir()
     projects=[]
     for index,(repo,canonical,name,account,ref) in enumerate((
@@ -136,10 +160,10 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         projects.append({'repo':str(canonical),'key':key,'uid':ids[index],'gid':ids[index],
                          'account':account,'worktree':f'/private/var/do-again-execution/{key}/worktree',
                          'executables':[runtime,'/bin/bash','/bin/sh','/bin/zsh',
-                                        '/usr/bin/git','/usr/bin/make','/usr/bin/true','/bin/launchctl'],
+                                        native_git,'/usr/bin/make','/usr/bin/true','/bin/launchctl'],
                          'source_sha':sha,'bundle':bundle})
     config={'schema_version':1,'source_sha':source_sha,'operator_uid':uid,'operator_gid':gid,
-            'operator_home':identity.pw_dir,'python':runtime,
+            'operator_home':identity.pw_dir,'python':runtime,'git':native_git,
             'authority_path':'/Library/Application Support/DoAgainSupervisor/state/supervisor.sqlite',
             'legacy_authority_path':str(Path(identity.pw_dir)/'.do_again/supervisor/authority.sqlite'),
             'production_ready':False,

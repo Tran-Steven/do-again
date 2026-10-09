@@ -392,6 +392,11 @@ Candidate metadata is validated and copied to a fresh sealed directory before
 any future authoritative promotion. Git must execute through the native
 confinement boundary, never as the root supervisor.
 
+The macOS bundle preparer seals an Apple-signed Git executable alongside Python.
+Installation qualification now requires a real confined edit-to-commit transaction
+in synthetic scratch space, including exact-path and unchanged-authority checks.
+A missing native Git binary blocks qualification without host-tool fallback.
+
 These primitives are not yet exposed by the installed broker. Guarded metadata
 promotion, durable effect admission, repository publication, approved dependency
 retrieval and immutable worker integration remain release blockers. Their fixture

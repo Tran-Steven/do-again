@@ -55,6 +55,18 @@ class InstallationTests(unittest.TestCase):
                 module.prepare(self.root,self.root,self.root,self.root/'output')
             runtime.assert_not_called();self.assertFalse((self.root/'output').exists())
 
+    @unittest.skipUnless(sys.platform=='darwin','Apple-signed Git packaging is macOS-only')
+    def test_sealed_git_runs_without_developer_tool_launcher(self):
+        import subprocess
+        spec=importlib.util.spec_from_file_location('git_preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        sealed=module.seal_git(self.root)
+        binary=self.root/'runtimes/git/bin/git'
+        self.assertTrue(sealed.endswith('/current/runtimes/git/bin/git'))
+        self.assertTrue(binary.is_file());self.assertFalse(binary.is_symlink())
+        version=subprocess.check_output([str(binary),'--version'],env={'PATH':'/nonexistent','HOME':str(self.root)},text=True)
+        self.assertTrue(version.startswith('git version'))
+
     def test_remote_tracking_bundle_materializes_exact_commit(self):
         import subprocess
         git='/usr/bin/git' if Path('/usr/bin/git').exists() else 'git'
