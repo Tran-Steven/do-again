@@ -42,7 +42,7 @@ class WorkerServiceTests(unittest.TestCase):
         (self.state/'worker-deployment.json').write_text(json.dumps(self.record))
         identity=[123,501,99,1]
         (self.state/'worker-instance.json').write_text(json.dumps({'epoch':2,'pid':123,'identity':identity}))
-        with patch('do_again.supervisor.macos_execution.MacOSProcesses.identity',return_value=tuple(identity)), \
+        with patch('do_again.supervisor.macos_execution.MacOSProcesses',return_value=SimpleNamespace(identity=lambda pid:tuple(identity))), \
              patch.object(service,'verified_worker_pid',return_value=123), \
              patch.object(service,'launchctl',return_value=SimpleNamespace(returncode=0)) as effect:
             result=service.restart_canary(self.broker)
@@ -62,7 +62,7 @@ class WorkerServiceTests(unittest.TestCase):
         _,spec=service.service_spec(self.broker,2);self.target.write_bytes(plistlib.dumps(spec))
         self.record['phase']='running';(self.state/'worker-deployment.json').write_text(json.dumps(self.record))
         (self.state/'worker-instance.json').write_text(json.dumps({'epoch':2,'pid':123,'identity':[123,501,99,1]}))
-        with patch('do_again.supervisor.macos_execution.MacOSProcesses.identity',return_value=(123,501,100,1)), \
+        with patch('do_again.supervisor.macos_execution.MacOSProcesses',return_value=SimpleNamespace(identity=lambda pid:(123,501,100,1))), \
              patch.object(service,'launchctl') as effect:
             with self.assertRaises(ExecutionBlocked):service.restart_canary(self.broker)
             effect.assert_not_called()
