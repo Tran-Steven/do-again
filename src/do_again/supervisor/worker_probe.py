@@ -22,7 +22,7 @@ def qualify_worker(broker):
     from .capability_probe import qualification_gate
     from .macos_server import ProjectBroker, machine_identity, worktree_authority
     from .qualification_control import FixtureControlRepository
-    from .control_history import blob_sha, sync_control, publish_control, reconcile_control
+    from .control_history import blob_sha, sync_control, publish_control, reconcile_control, api_for, snapshot
     from ..core.agent import Agent
     from ..core.broker_executor import BrokerExecutor
     from ..core.control_transport import BrokerControlHistory
@@ -38,7 +38,11 @@ def qualify_worker(broker):
             return prior['result']
         if broker.ledger.pending(broker.project.key):
             raise ExecutionBlocked('unresolved execution blocks worker qualification')
-        session={'identity':identity,'before':before,'phase':'preparation_started'}
+        live_head,_,live_entries=snapshot(api_for(broker))
+        live_control={'head':live_head,'records':len(live_entries),'repository':next(
+            p['github_repository'] for p in broker.config['projects'] if p['key']==broker.project.key),
+            'read_only':True}
+        session={'identity':identity,'before':before,'phase':'preparation_started','live_control':live_control}
         atomic_json(journal,session)
         root=EXECUTION_ROOT/broker.project.key/'worker-probes'/nonce
         root.mkdir(parents=True,mode=0o711);root.chmod(0o711);root.parent.chmod(0o711)
@@ -129,7 +133,8 @@ def qualify_worker(broker):
             raise ExecutionBlocked('qualification changed live authority or left unresolved execution')
         result={'verified':True,'identity':identity,'execution_uid':broker.project.uid,
             'tasks':3,'native_execution':True,'restart_without_reexecution':True,
-            'control_transport':'in_memory_fixture','uncertain_control_reconciled_read_only':True,
+            'control_transport':'in_memory_fixture','live_control_read_only':live_control,
+            'uncertain_control_reconciled_read_only':True,
             'pause_denied_control_effect':True,'live_authority_unchanged':True,
             'production_service':'not_measured','browser_delivery':'not_measured',
             'unattended_live_acceptance':'not_started'}

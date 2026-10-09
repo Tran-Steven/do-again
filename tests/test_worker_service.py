@@ -1,4 +1,5 @@
 import hashlib
+import os
 import json
 import plistlib
 import tempfile
@@ -31,6 +32,43 @@ class WorkerServiceTests(unittest.TestCase):
             ('do_again.supervisor.worker_service.private_root_file',{}),
             ('do_again.supervisor.macos_server.verify_installation',{})]:
             p=patch(target,**kwargs);p.start();self.addCleanup(p.stop)
+
+    def test_staging_writes_actual_exclusive_plist_and_refuses_pending_alias(self):
+        self.status['intent']='maintenance';self.status['epoch']=1
+        self.target.unlink();(self.state/'worker-deployment.json').unlink()
+        original_stat=type(self.root).stat
+        def trusted_directory(path,*args,**kwargs):
+            if path==self.root:return SimpleNamespace(st_uid=0,st_mode=0o755)
+            return original_stat(path,*args,**kwargs)
+        with patch.object(service,'provision_mirror'),              patch.object(service,'service_present',return_value=False),              patch('do_again.supervisor.git_broker.sync_directory'),              patch.object(service.AGENTS.__class__,'stat',new=trusted_directory):
+            # Directory trust is mocked; actual exclusive creation, fd wrapping,
+            # fsync, chmod, rename and plist serialization are exercised.
+            result=service.stage_worker(self.broker)
+            self.assertTrue(result['staged']);self.assertFalse(result['started'])
+            self.assertEqual(plistlib.loads(self.target.read_bytes())['ProgramArguments'][-1],'2')
+            self.assertEqual(json.loads((self.state/'worker-deployment.json').read_text())['phase'],'staged')
+        self.target.unlink();self.target.with_suffix('.plist.pending').write_bytes(b'preserve')
+        with patch.object(service,'provision_mirror'),patch.object(service,'service_present',return_value=False),              patch.object(service.AGENTS.__class__,'stat',new=trusted_directory):
+            with self.assertRaises(FileExistsError):service.stage_worker(self.broker)
+        self.assertEqual(self.target.with_suffix('.plist.pending').read_bytes(),b'preserve')
+
+    def test_existing_operator_mirror_accepts_root_marker_but_rejects_alias(self):
+        from do_again.supervisor.authority import project_identity
+        self.broker.config['operator_home']=str(self.root.resolve())
+        base=self.root.resolve()/'.do_again/projects'/project_identity(self.broker.project.repo)[:12]
+        mirror=base/'sealed-control';mirror.mkdir(parents=True,mode=0o700)
+        marker=mirror/'.broker-scope.json'
+        marker.write_text(json.dumps({'repo':str(self.broker.project.repo),'project':self.broker.project.key,'schema':1}))
+        original_stat=type(marker).stat
+        def scoped_stat(path,*args,**kwargs):
+            actual=original_stat(path,*args,**kwargs)
+            uid=0 if path==marker or path!=mirror else 501
+            return SimpleNamespace(st_uid=uid,st_nlink=actual.st_nlink,
+                                   st_mode=actual.st_mode&~0o022)
+        with patch.object(type(marker),'stat',new=scoped_stat),              patch.object(service,'private_root_file',side_effect=ExecutionBlocked('operator ancestors are intentionally not root-only')):
+            service.provision_mirror(self.broker)
+            os.link(marker,mirror/'alias')
+            with self.assertRaisesRegex(ExecutionBlocked,'aliased'):service.provision_mirror(self.broker)
 
     def test_service_spec_binds_project_source_epoch_and_disables_automatic_replay(self):
         label,spec=service.service_spec(self.broker,2)

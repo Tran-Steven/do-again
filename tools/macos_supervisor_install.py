@@ -19,6 +19,7 @@ ROOT=Path('/Library/Application Support/DoAgainSupervisor')
 EXEC=Path('/private/var/do-again-execution')
 LABEL='io.github.tran-steven.do-again.supervisor'
 PLIST=Path('/Library/LaunchDaemons')/(LABEL+'.plist')
+WORKER_AGENTS=Path('/Library/LaunchAgents')
 
 
 def run(args, **kwargs):
@@ -150,11 +151,12 @@ def verify_worker_quiescence(config):
     """A maintenance runtime cutover never replaces code beneath a live worker."""
     for project in config['projects']:
         journal=ROOT/'state'/project['key']/'worker-deployment.json'
+        record=None
         if journal.exists():
             if journal.is_symlink() or journal.stat().st_uid!=0 or journal.stat().st_nlink!=1:
                 raise RuntimeError('worker deployment ownership is invalid')
             record=json.loads(journal.read_text())
-            if record.get('phase') not in {'staged','withdrawn'}:
+            if record.get('phase') not in {'staged','withdrawn','stage_started','stage_failed_pre_effect'}:
                 raise RuntimeError('worker deployment requires guarded withdrawal before cutover')
         label='io.github.tran-steven.do-again.worker.'+project['key'][:12]
         observed=subprocess.run(['/bin/launchctl','print',f"gui/{config['operator_uid']}/{label}"],
@@ -164,6 +166,16 @@ def verify_worker_quiescence(config):
             raise RuntimeError('loaded engineering worker blocks immutable runtime cutover')
         if observed.returncode!=113 or 'Could not find service' not in observed.stderr:
             raise RuntimeError('worker service absence is unproven; cutover deferred')
+        if record and record.get('phase')=='stage_started':
+            target=WORKER_AGENTS/(label+'.plist')
+            pending=target.with_suffix('.plist.pending')
+            if any(path.exists() or path.is_symlink() for path in (target,pending)):
+                raise RuntimeError('interrupted staging has service artifacts; reconciliation required')
+            # No definition, pending artifact or loaded service exists. Preserve
+            # the original journal and record this independently proven failure.
+            record['phase']='stage_failed_pre_effect'
+            record['recovery_evidence']={'service_absent':True,'definition_absent':True,'pending_absent':True}
+            atomic(journal,record)
 
 
 @contextmanager

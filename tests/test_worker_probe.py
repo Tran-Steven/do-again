@@ -23,7 +23,8 @@ class WorkerProbeTests(unittest.TestCase):
                      'authority':{'repo_head':'a'*40,'repo_branch':None}}
         self.state=self.root/'state';self.state.mkdir();self.calls=[]
         project=ProjectExecution(repo,401,401,'_doagain_da',self.root/'work',(Path('/sealed/bin/python3'),))
-        self.broker=SimpleNamespace(project=project,config={'production_ready':False,'source_sha':'b'*40,'operator_uid':501},
+        self.broker=SimpleNamespace(project=project,config={'production_ready':False,'source_sha':'b'*40,'operator_uid':501,
+            'projects':[{'key':project.key,'github_repository':'Tran-Steven/do-again'}]},
             registry=SimpleNamespace(status=lambda repo:dict(self.before['operator'])),
             state=self.state,ledger=ExecutionLedger(self.root/'ledger.sqlite'),lock=threading.Lock(),
             _verified=lambda:True,probe_admission=nullcontext)
@@ -35,7 +36,9 @@ class WorkerProbeTests(unittest.TestCase):
             self.calls.append(packet['request_id'])
             result=subprocess.run([sys.executable,*packet['argv'][1:]],cwd=private.project.worktree,capture_output=True,text=True,timeout=20)
             return {'returncode':result.returncode,'stdout':result.stdout,'stderr':result.stderr,'timed_out':False}
-        targets=[('do_again.supervisor.worker_probe.EXECUTION_ROOT',{'new':self.root/'execution'}),
+        from do_again.supervisor.qualification_control import FixtureControlRepository
+        live=FixtureControlRepository()
+        targets=[('do_again.supervisor.control_history.api_for',{'return_value':live}),('do_again.supervisor.worker_probe.EXECUTION_ROOT',{'new':self.root/'execution'}),
             ('do_again.supervisor.worker_probe.os.chown',{}),
             ('do_again.supervisor.worker_probe.MacOSProcesses',{}),
             ('do_again.supervisor.capability_probe.qualification_gate',{'return_value':self.before}),

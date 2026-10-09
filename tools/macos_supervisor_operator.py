@@ -7,7 +7,7 @@ from do_again.supervisor.macos_client import broker_request, operator_request, e
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('operation',choices=('status','probe','pause','maintenance','stop','resume','enroll-github','qualify-capabilities','qualify-worker','stage-worker','start-worker','withdraw-worker'))
+    parser.add_argument('operation',choices=('status','probe','pause','maintenance','stop','resume','enroll-github','qualify-capabilities','qualify-worker','qualify-service','stage-worker','start-worker','withdraw-worker'))
     parser.add_argument('--repo',type=Path,required=True)
     parser.add_argument("--epoch",type=int)
     args=parser.parse_args()
@@ -23,7 +23,7 @@ if __name__ == '__main__':
                                     text=True,capture_output=True,check=True,timeout=15).stdout.strip()
         result=enroll_github_credential(args.repo,credential)
         credential=None
-    elif args.operation in ('qualify-capabilities','qualify-worker'):
+    elif args.operation in ('qualify-capabilities','qualify-worker','qualify-service'):
         result=broker_request(args.repo,{'operation':args.operation.replace('-','_')})
     elif args.operation in ('status','probe'):
         result=broker_request(args.repo,{'operation':args.operation})

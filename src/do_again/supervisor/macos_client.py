@@ -29,7 +29,7 @@ def _request(path: Path, packet: dict) -> dict:
     if len(payload) > MAX_PACKET:
         raise ExecutionBlocked('request exceeds broker limit')
     with socket.socket(socket.AF_UNIX) as connection:
-        connection.settimeout(600 if packet in ({'operation':'qualify_capabilities'},{'operation':'qualify_worker'})
+        connection.settimeout(600 if packet in ({'operation':'qualify_capabilities'},{'operation':'qualify_worker'},{'operation':'qualify_service'})
                               else float(packet.get('timeout', 60)) + 30)
         try:
             connection.connect(str(path))

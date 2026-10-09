@@ -141,6 +141,27 @@ class InstallationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'ownership|withdrawal'):
                 self.module.verify_worker_quiescence(config)
 
+    def test_interrupted_staging_recovery_requires_definition_pending_and_service_absence(self):
+        config={'operator_uid':501,'operator_gid':20,'operator_home':'/synthetic','projects':[{'key':'a'*64}]}
+        state=self.root/'state'/('a'*64);state.mkdir(parents=True)
+        journal=state/'worker-deployment.json';journal.write_text(json.dumps({'phase':'stage_started','source_sha':'preserved'}))
+        agents=self.root/'agents';agents.mkdir()
+        original_stat=type(journal).stat
+        def owned(path,*args,**kwargs):
+            if path==journal:return Mock(st_uid=0,st_nlink=1,st_mode=0o100600)
+            return original_stat(path,*args,**kwargs)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'WORKER_AGENTS',agents),              patch.object(type(journal),'stat',new=owned),patch.object(self.module.subprocess,'run',return_value=Mock(returncode=113,stderr='Could not find service')):
+            pending=agents/('io.github.tran-steven.do-again.worker.'+'a'*12+'.plist.pending')
+            pending.write_bytes(b'preserve interrupted artifact')
+            with self.assertRaisesRegex(RuntimeError,'service artifacts'):self.module.verify_worker_quiescence(config)
+            self.assertEqual(json.loads(journal.read_text())['phase'],'stage_started')
+            pending.unlink()  # Synthetic test artifact only.
+            self.module.verify_worker_quiescence(config)
+            recovered=json.loads(journal.read_text())
+            self.assertEqual(recovered['phase'],'stage_failed_pre_effect')
+            self.assertEqual(recovered['source_sha'],'preserved')
+            self.assertTrue(recovered['recovery_evidence']['service_absent'])
+
     def test_preview_cutover_preserves_production_helper(self):
         config={'production_ready':True,'projects':[]}
         (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))

@@ -59,7 +59,9 @@ def provision_mirror(broker):
     if mirror.exists():
         if mirror.is_symlink() or mirror.stat().st_uid!=broker.config['operator_uid'] or not marker.is_file():
             raise ExecutionBlocked('existing mirror lacks safe ownership evidence')
-        private_root_file(marker)
+        info=marker.lstat()
+        if marker.is_symlink() or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022:
+            raise ExecutionBlocked('worker mirror scope marker is mutable or aliased')
         if mirror.stat().st_mode&0o077 or json.loads(marker.read_text())!=identity:
             raise ExecutionBlocked('worker mirror project binding differs')
         return
@@ -94,7 +96,8 @@ def stage_worker(broker):
         if AGENTS.is_symlink() or AGENTS.stat().st_uid!=0 or AGENTS.stat().st_mode&0o022:
             raise ExecutionBlocked('worker service directory is not protected')
         temporary=target.with_suffix('.plist.pending')
-        with temporary.open('xb',opener=lambda p,f:os.open(p,f,0o644)) as stream:
+        descriptor=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o644)
+        with os.fdopen(descriptor,'wb') as stream:
             stream.write(data);stream.flush();os.fsync(stream.fileno())
         temporary.chmod(0o644)
         os.replace(temporary,target)

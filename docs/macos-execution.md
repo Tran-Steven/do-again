@@ -240,7 +240,8 @@ fallback, not permission to restore old effect state.
 
 `qualify-worker` runs three fixed native-confined synthetic tasks through the
 installed Agent and broker, then restarts the Agent and verifies no reexecution.
-Control history uses an in-memory Git-data fixture, including a lost response,
+The approved live control head/tree are inspected read-only through the trusted
+GitHub capability; execution control history uses an in-memory Git-data fixture, including a lost response,
 read-only reconciliation and pause rejection. This does not start a production
 service or send browser messages. Results explicitly distinguish native execution
 from simulated history and unmeasured service/browser/live acceptance.
@@ -249,3 +250,11 @@ The helper remains `production_ready=false`. Source regression tests do not
 qualify installed operation. Production promotion, complete browser acknowledgment
 and useful-progress scheduling, installed lifecycle/rollback qualification and
 the selected 24-hour plus 72-hour live acceptance remain release gates.
+
+`qualify-service` starts and withdraws one fixed inert launchd canary under the
+operator identity while holding the real maintenance fence. It independently
+verifies the launchd PID, kernel identity and post-withdrawal absence. The canary
+has no broker, repository, browser or network operations; it never opens
+production admission. Interrupted qualification preserves its original intent
+and cannot automatically start again. This qualifies native service mechanics,
+not production worker startup, runtime rollback or unattended development.

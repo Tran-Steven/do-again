@@ -119,6 +119,9 @@ class ProjectBroker:
                 (self.state / 'enforcement-blocker.json').unlink(missing_ok=True)
                 atomic_json(self.state / 'enforcement.json', {'identity': machine_identity(self.config), 'result': result})
                 return result
+        if packet == {'operation':'qualify_service'}:
+            from .service_probe import qualify_service
+            return qualify_service(self)
         if packet == {'operation':'qualify_worker'}:
             from .worker_probe import qualify_worker
             return qualify_worker(self)
