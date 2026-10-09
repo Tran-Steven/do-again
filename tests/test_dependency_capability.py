@@ -60,7 +60,7 @@ class DependencyTests(unittest.TestCase):
 
     def test_traversal_aliases_startup_hooks_and_install_scripts_are_denied(self):
         for name in ('../outside','/absolute','foo/../outside','foo//bar','foo\\bar','C:/outside',
-                     'startup.pth','fixture-1.0.data/scripts/executable'):
+                     'nul\x00suffix','startup.pth','fixture-1.0.data/scripts/executable'):
             with self.subTest(name=name):
                 content, artifact = wheel_fixture({name:'bad'})
                 with self.assertRaises(ExecutionBlocked):validate_wheel(content, artifact)

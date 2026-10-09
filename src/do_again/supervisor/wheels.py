@@ -30,7 +30,9 @@ def validate_wheel(content: bytes, artifact: dict) -> list[str]:
             names = []
             for entry in entries:
                 parts = entry.filename.split('/')
-                if (PurePosixPath(entry.filename).is_absolute() or '\\' in entry.filename
+                if (entry.orig_filename != entry.filename
+                        or any(ord(c)<32 for c in entry.orig_filename)
+                        or PurePosixPath(entry.filename).is_absolute() or '\\' in entry.filename
                         or any(p in {'', '.', '..'} or ':' in p for p in (parts[:-1] if entry.is_dir() else parts))
                         or '\x00' in entry.filename or entry.flag_bits & 1
                         or stat.S_ISLNK(entry.external_attr >> 16)
