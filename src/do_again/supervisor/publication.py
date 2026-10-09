@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..core.schema import canonical_json
 from .git_broker import validate_packet
-from .github import GitHubRepository, publish_commit, matching_pull_requests
+from .github import GitHubRepository, publish_commit, matching_pull_requests, validate_publication_paths
 from .macos_execution import EXECUTION_ROOT, INSTALL_ROOT, REQUEST_ID, ExecutionBlocked, MacOSProcesses, capture, launch_spec, private_root_file
 
 
@@ -84,6 +84,7 @@ def publish_via_broker(broker, packet: dict) -> dict:
                 raise ExecutionBlocked('bounded commit export failed')
             export = json.loads(outcome['stdout'])
             if export['head'] != packet['expected_head']:raise ExecutionBlocked('exported commit changed')
+            validate_publication_paths(export)
         except Exception:
             result = {'operation':'git_publish','returncode':1,'state':'failed_pre_publication',
                       'error':'local publication preparation failed','source_sha':broker.config['source_sha']}

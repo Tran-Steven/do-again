@@ -76,15 +76,8 @@ class GitHubRepository:
         except (ValueError,UnicodeError):raise ExecutionBlocked('repository API evidence is invalid') from None
 
 
-def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str, body: str,
-                   *, effect_guard) -> dict:
-    """Every mutation holds the same final authority fence as local execution."""
-    if not re.fullmatch('do-again/task-[0-9a-f]{20}',branch):
-        raise ExecutionBlocked('publication requires the supervisor-reserved goal branch')
-    if not all(isinstance(export.get(k),str) and SHA.fullmatch(export[k]) for k in ('head','parent','tree')):
-        raise ExecutionBlocked('publication commit evidence is incomplete')
-    if not isinstance(title,str) or not 1 <= len(title.strip()) <= 200 or not isinstance(body,str) or len(body.encode()) > 16000:
-        raise ExecutionBlocked('pull request content is invalid')
+def validate_publication_paths(export: dict) -> None:
+    """Reject unsupported authority before either object upload or reservation recovery."""
     entries = export.get('entries')
     if not isinstance(entries,list) or not 1 <= len(entries) <= 128:
         raise ExecutionBlocked('publication requires bounded exact file changes')
@@ -94,6 +87,18 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
             raise ExecutionBlocked('publication file path is invalid')
         if path.casefold() == '.github/workflows' or path.casefold().startswith('.github/workflows/'):
             raise ExecutionBlocked('workflow changes require separately authorized publication authority')
+
+
+def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str, body: str,
+                   *, effect_guard) -> dict:
+    """Every mutation holds the same final authority fence as local execution."""
+    if not re.fullmatch('do-again/task-[0-9a-f]{20}',branch):
+        raise ExecutionBlocked('publication requires the supervisor-reserved goal branch')
+    if not all(isinstance(export.get(k),str) and SHA.fullmatch(export[k]) for k in ('head','parent','tree')):
+        raise ExecutionBlocked('publication commit evidence is incomplete')
+    if not isinstance(title,str) or not 1 <= len(title.strip()) <= 200 or not isinstance(body,str) or len(body.encode()) > 16000:
+        raise ExecutionBlocked('pull request content is invalid')
+    validate_publication_paths(export)
     ref_endpoint = 'git/ref/heads/'+branch
     reference = api.request('GET',ref_endpoint)
     observed = None if reference is None else reference['object']['sha']

@@ -218,6 +218,14 @@ class PublicationBrokerTests(unittest.TestCase):
         self.assertEqual(self.api.effects,effects)
         self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
 
+    def test_workflow_denial_finishes_pre_dispatch_without_uncertain_reservation(self):
+        self.export['entries'][0]['path']='.github/workflows/ci.yml'
+        result=self.module.publish_via_broker(self.broker,self.packet)
+        self.assertEqual(result['state'],'failed_pre_publication')
+        self.assertEqual(result['returncode'],1)
+        self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+        self.assertEqual(self.api.effects,[])
+
     def test_missing_pr_or_changed_payload_stays_uncertain_without_effect(self):
         self.api.lose_pr_response=True
         with self.assertRaises(OSError):self.module.publish_via_broker(self.broker,self.packet)
