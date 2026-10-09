@@ -166,6 +166,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         key=project_key(canonical)
         projects.append({'repo':str(canonical),'key':key,'uid':ids[index],'gid':ids[index],
                          'account':account,'worktree':f'/private/var/do-again-execution/{key}/worktree',
+                         'github_repository':'Tran-Steven/'+name,
                          'executables':[runtime,'/bin/bash','/bin/sh','/bin/zsh',
                                         native_git,'/usr/bin/make','/usr/bin/true','/bin/launchctl'],
                          'source_sha':sha,'bundle':bundle})

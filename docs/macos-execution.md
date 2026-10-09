@@ -4,7 +4,7 @@ This boundary is an installation and enforcement preview for the authorized Do A
 
 The supervisor runs as root from an immutable package under `/Library/Application Support/DoAgainSupervisor/current`. Each project receives its own hidden, password-disabled, non-login account (`_doagain_da` or `_doagain_jp`) and collision-checked UID/GID in 400–499. Execution drops UID, GID, supplemental groups, inherited descriptors and environment before entering native Seatbelt confinement. The immutable child shim then clears the task bootstrap and registered-port mapping, zeros the cached bootstrap port, and destroys its inherited send right before executing untrusted code. Dedicated UID separation alone did not prevent starting an existing synthetic operator service; this capability removal is mandatory. The child attests effective groups through Darwin’s legacy POSIX `getgroups` symbol. [Python’s macOS directory-backed group access list](https://docs.python.org/3.13/library/os.html#os.getgroups) is not used, and no directory-service IPC is granted. Detached descendants are identified by kernel UID and birth time and drained before terminal evidence. No unsupported-platform or unsandboxed fallback exists.
 
-Writes are confined to the allocated engineering worktree and request scratch/cache. Git metadata is denied by the profile; successful broker promotion seals its replacement as root-owned read-only data. Network, signals, service creation, supervisor sockets and host credentials are unavailable to scripts. A typed local Git commit capability is implemented; repository network publication remains unavailable. The helper authenticates operator connections using `getpeereid`; project identity comes from its socket. Administrative intent uses a separate operator socket. Pause shares a file fence with the final spawn decision and permits already admitted work to drain.
+Writes are confined to the allocated engineering worktree and request scratch/cache. Git metadata is denied by the profile; successful broker promotion seals its replacement as root-owned read-only data. Network, signals, service creation, supervisor sockets and host credentials are unavailable to scripts. A typed local Git commit capability is implemented; scoped GitHub publication and approved wheel installation are implemented in source. The helper authenticates operator connections using `getpeereid`; project identity comes from its socket. Administrative intent uses a separate operator socket. Pause shares a file fence with the final spawn decision and permits already admitted work to drain.
 
 The root-owned SQLite journal stores operator intent and execution fingerprints. Started operations without terminal evidence remain ambiguous across restart; they cannot replay. An installation requires maintenance intent and the same accepted goal revision in the original operator journal. Originals, dirty primary checkouts, receipts, outboxes, browser sessions, and Sonary records are retained.
 
@@ -49,7 +49,7 @@ admission. Cross-platform packaging/tests continue; Linux/Windows production
 execution has no admitted native boundary and fails closed.
 
 This is partial production integration. The sealed production gate remains false.
-Immutable engineering-daemon deployment, repository publication brokers, atomic
+Immutable engineering-daemon deployment, atomic
 claim/publication admission and browser delivery/rollover/archive admission are
 still required. These source changes do not upgrade a legacy installed daemon.
 Legacy protocol regression fixtures explicitly inject their executor dependency;
@@ -127,4 +127,44 @@ install twice. Root journals and original workspace files are preserved.
 Local real-extraction fixtures and malicious archive/network regressions validate
 the source capability. Installed dependency qualification is not yet measured;
 the installed source remains the PR #52 milestone. Production and live acceptance
-remain closed until the remaining publication, worker and release gates pass.
+remain closed until the remaining installed qualification, worker and release gates pass.
+
+
+### Scoped GitHub publication
+
+`git_publish` accepts only bounded PR title/body and original request/head/epoch
+identity. The sealed project configuration binds `Tran-Steven/do-again` or
+`Tran-Steven/jobpipe`; the accepted goal derives the `do-again/task-…` branch.
+No packet selects a remote, ref, executable, credential, force flag or API path.
+The confined immutable exporter reads a bounded canonical unsigned single-parent
+commit, including binary blobs and deletions. Oversized changes and unavailable
+remote parents require an explicit synchronization task.
+
+Only the trusted supervisor sends HTTPS Git-data requests. It verifies remote
+blob/tree/commit identities before creating or advancing the reserved branch,
+uses non-force updates, and requires independent branch and PR read-back. Main,
+repository administration and unrelated endpoints are excluded. Existing matching
+PRs receive the requested title/body; new PRs start as drafts. API requests never
+execute Git with credentials or expose tokens to execution users. Supported API
+contracts: https://docs.github.com/en/rest/git/commits and
+https://docs.github.com/en/rest/git/refs.
+
+An operator can enroll the existing authenticated GitHub CLI credential using
+`tools/macos_supervisor_operator.py enroll-github --repo /absolute/project`.
+Enrollment requires maintenance and the authenticated operator socket. The token
+is kept only in root-owned private supervisor state, excluded from journals,
+command arguments, model input, receipts and status. No credential is enrolled by
+default. This operator tool is not an untrusted-script administrative interface.
+
+Publication intent and execution reservation commit in one SQLite transaction.
+Uncertain network/ref/PR effects remain started and cannot replay. The separate
+`git_publication_reconcile` operation reads only the original repository, ref,
+head and exact PR payload. Positive independent evidence can finish the original
+receipt while maintenance or pause remains in force. Missing/changed evidence
+stays uncertain; reconciliation never sends a mutation. Additive intent records
+preserve existing authority, execution and compatibility journals.
+
+Source fixtures exercise real Git export, scoped remote effects, exact payload
+read-back, pause, changed tips, receipt replay and restart/lost-response recovery.
+Installed publication/network qualification, immutable worker integration and
+live acceptance remain pending. No production-ready flag is changed by this work.

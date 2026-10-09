@@ -18,6 +18,12 @@ def operator_request(repo: Path, intent: str) -> dict:
                     'project':project_identity(repo),'intent':intent})
 
 
+def enroll_github_credential(repo: Path, token: str) -> dict:
+    """Trusted operator only; caller must never print or journal the token."""
+    return _request(SOCKET_ROOT/'operator.sock',{'operation':'set_github_token',
+                    'project':project_identity(repo),'token':token})
+
+
 def _request(path: Path, packet: dict) -> dict:
     payload = canonical_json(packet) + b'\n'
     if len(payload) > MAX_PACKET:

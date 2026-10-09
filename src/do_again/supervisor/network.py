@@ -10,10 +10,11 @@ from .macos_execution import ExecutionBlocked
 
 
 def https_bytes(url: str, *, host: str, limit: int, method: str = 'GET',
-                body: bytes | None = None, headers: dict | None = None) -> tuple[int, bytes]:
+                body: bytes | None = None, headers: dict | None = None,
+                allow_query: bool = False) -> tuple[int, bytes]:
     parsed = urlsplit(url)
     if (parsed.scheme != 'https' or parsed.hostname != host or parsed.username or parsed.password
-            or parsed.port not in (None, 443) or parsed.fragment or parsed.query
+            or parsed.port not in (None, 443) or parsed.fragment or (parsed.query and not allow_query)
             or not parsed.path.startswith('/') or '\\' in parsed.path
             or any(ord(c) < 32 for c in url)):
         raise ExecutionBlocked('network origin is not admitted')

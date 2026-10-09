@@ -124,6 +124,12 @@ class ProjectBroker:
         if packet.get('operation') == 'dependency_install':
             from .dependencies import install_via_broker
             return install_via_broker(self, packet)
+        if packet.get('operation') == 'git_publish':
+            from .publication import publish_via_broker
+            return publish_via_broker(self, packet)
+        if packet.get('operation') == 'git_publication_reconcile':
+            from .publication import reconcile_publication
+            return reconcile_publication(self, packet)
         if packet.get('operation') != 'execute':
             raise ExecutionBlocked('no administrative operations are exposed')
         with self.lock:
@@ -207,6 +213,24 @@ class ProjectBroker:
             epoch = self.registry.set_intent(self.project.repo, intent, goal_revision=status['goal_revision'])
             return {'intent':intent,'epoch':epoch}
 
+    def operator_github_token(self, token: str) -> dict:
+        from .github import GitHubRepository
+        project_config = next(p for p in self.config['projects'] if p['key']==self.project.key)
+        GitHubRepository(project_config.get('github_repository'),token)
+        with self.admission():
+            if self.registry.status(self.project.repo)['intent'] != 'maintenance':
+                raise ExecutionBlocked('credential enrollment requires maintenance intent')
+            target = self.state / 'github-token'
+            if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
+                raise ExecutionBlocked('credential path is aliased')
+            temporary = self.state / 'github-token.pending'
+            with temporary.open('x',opener=lambda p,f:os.open(p,f,0o600)) as stream:
+                stream.write(token);stream.flush();os.fsync(stream.fileno())
+            os.replace(temporary,target)
+            from .git_broker import sync_directory
+            sync_directory(self.state)
+            return {'registered':True,'repository':project_config['github_repository']}
+
     def _probe_blocker(self) -> dict | None:
         try:
             value=json.loads((self.state / 'enforcement-blocker.json').read_text())
@@ -282,11 +306,14 @@ def serve_operator(config: dict, brokers: dict) -> None:
                     if peer_uid(connection) != config['operator_uid']:
                         raise ExecutionBlocked('untrusted administrative peer')
                     packet=receive_packet(connection)
-                    if set(packet)!={'operation','project','intent'} or packet['operation']!='set_intent':
-                        raise ExecutionBlocked('unknown operator operation')
                     broker=brokers.get(packet['project'])
                     if broker is None:raise ExecutionBlocked('project is excluded or unregistered')
-                    response={'ok':True,'result':broker.operator_intent(packet['intent'])}
+                    if set(packet)=={'operation','project','intent'} and packet['operation']=='set_intent':
+                        result=broker.operator_intent(packet['intent'])
+                    elif set(packet)=={'operation','project','token'} and packet['operation']=='set_github_token':
+                        result=broker.operator_github_token(packet['token'])
+                    else:raise ExecutionBlocked('unknown operator operation')
+                    response={'ok':True,'result':result}
                 except Exception as exc:
                     response={'ok':False,'blocked':True,'error':str(exc)}
                 try:connection.sendall(canonical_json(response)+b'\n')
