@@ -12,7 +12,7 @@ from ..core.schema import atomic_json
 from .macos_execution import INSTALL_ROOT, MacOSProcesses, ExecutionBlocked
 
 
-def _await_operator_identity(broker, service, *, timeout=3.0):
+def _await_operator_identity(broker, service, *, timeout=3.0, observation=None):
     """Admit only a birth-pinned launchd PID after the operator UID appears.
 
     launchd may expose root-owned xpcproxy briefly before its UID transition.
@@ -43,6 +43,8 @@ def _await_operator_identity(broker, service, *, timeout=3.0):
                 birth = kernel[1:3]
             elif kernel[1:3] != birth:
                 raise ExecutionBlocked('qualification daemon kernel birth identity changed')
+            if observation is not None:
+                observation.update(pid=pid, birth=tuple(birth))
             if kernel[0] == operator_uid:
                 return pid, kernel, saw_root_proxy
             if kernel[0] != 0:
@@ -51,6 +53,24 @@ def _await_operator_identity(broker, service, *, timeout=3.0):
         if time.monotonic() >= deadline:
             raise ExecutionBlocked('qualification launchd identity handoff timed out')
         time.sleep(0.025)
+
+
+
+def _verify_observed_process_withdrawn(pid, birth, *, timeout=5.0):
+    """An unqualified root xpcproxy must disappear by PID+birth, not by UID.
+
+    A root->operator UID transition on the same process is not withdrawal.
+    Do not signal another process, and never declare success while it lives.
+    """
+    deadline = time.monotonic() + timeout
+    processes = MacOSProcesses()
+    while True:
+        current = processes.identity(pid)
+        if current is None or current[1:3] != tuple(birth) or current[3] == 5:
+            return
+        if time.monotonic() >= deadline:
+            raise ExecutionBlocked('qualification process persists after service withdrawal')
+        time.sleep(0.1)
 
 
 def run_operator_service(broker, root, binding, nonce, guard):
@@ -85,7 +105,7 @@ def run_operator_service(broker, root, binding, nonce, guard):
             'definition_sha256':hashlib.sha256(definition.read_bytes()).hexdigest()}
     atomic_json(journal,record)
     domain='gui/'+str(broker.config['operator_uid']);service=domain+'/'+label
-    kernel=None;pid=None;result=None
+    kernel=None;pid=None;result=None;handoff_observation={}
     try:
         with guard():
             launchctl(broker,'bootstrap',domain,str(definition))
@@ -93,7 +113,8 @@ def run_operator_service(broker, root, binding, nonce, guard):
         deadline=time.monotonic()+90
         while time.monotonic()<deadline:
             if pid is None:
-                pid,kernel,saw_root_proxy=_await_operator_identity(broker,service)
+                pid,kernel,saw_root_proxy=_await_operator_identity(
+                    broker,service,observation=handoff_observation)
                 record.update(phase='running_observed',pid=pid,kernel=list(kernel),
                               root_proxy_observed=saw_root_proxy)
                 atomic_json(journal,record)
@@ -113,6 +134,9 @@ def run_operator_service(broker, root, binding, nonce, guard):
         if service_present(broker,label):
             raise ExecutionBlocked('qualification service withdrawal remains uncertain')
         if pid is not None:verify_process_withdrawn(pid,kernel)
+        elif handoff_observation:
+            _verify_observed_process_withdrawn(
+                handoff_observation['pid'],handoff_observation['birth'])
     record.update(phase='complete',result=result,withdrawn=True)
     atomic_json(journal,record)
     return dict(result,launchd_service=True,service_pid=pid,service_withdrawn=True)
