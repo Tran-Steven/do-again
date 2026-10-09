@@ -19,6 +19,16 @@ class InstallationTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
+    def test_runtime_executable_paths_are_validated_before_cutover(self):
+        current=self.root/'current'
+        valid={'python':str(current/'runtimes/python/bin/python3'),
+               'git':str(current/'runtimes/git/bin/git')}
+        self.assertEqual(len(self.module.runtime_executables(valid,current)),2)
+        for invalid in ({'python':valid['python']}, {**valid,'git':'/usr/bin/git'},
+                        {**valid,'python':'/tmp/untrusted'}):
+            with self.assertRaises(RuntimeError):
+                self.module.runtime_executables(invalid,current)
+
     def test_account_collision_requires_trusted_provenance_without_mutation(self):
         project={'account':'_doagain_da','uid':400,'gid':400}
         with patch.object(self.module.pwd,'getpwnam',return_value=Mock()),patch.object(self.module,'run') as run:
@@ -54,6 +64,27 @@ class InstallationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'commit and validate'):
                 module.prepare(self.root,self.root,self.root,self.root/'output')
             runtime.assert_not_called();self.assertFalse((self.root/'output').exists())
+
+    @unittest.skipUnless(sys.platform=='darwin','Apple-signed Git packaging is macOS-only')
+    def test_failed_git_signature_removes_unverified_copy(self):
+        spec=importlib.util.spec_from_file_location('failed_git_preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        with patch.object(module.subprocess,'run',side_effect=ValueError('signature rejected')):
+            with self.assertRaisesRegex(ValueError,'signature rejected'):
+                module.seal_git(self.root)
+        self.assertFalse((self.root/'runtimes/git/bin/git').exists())
+
+    @unittest.skipUnless(sys.platform=='darwin','Apple-signed Git packaging is macOS-only')
+    def test_sealed_git_runs_without_developer_tool_launcher(self):
+        import subprocess
+        spec=importlib.util.spec_from_file_location('git_preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        sealed=module.seal_git(self.root)
+        binary=self.root/'runtimes/git/bin/git'
+        self.assertTrue(sealed.endswith('/current/runtimes/git/bin/git'))
+        self.assertTrue(binary.is_file());self.assertFalse(binary.is_symlink())
+        version=subprocess.check_output([str(binary),'--version'],env={'PATH':'/nonexistent','HOME':str(self.root)},text=True)
+        self.assertTrue(version.startswith('git version'))
 
     def test_remote_tracking_bundle_materializes_exact_commit(self):
         import subprocess

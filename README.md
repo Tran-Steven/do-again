@@ -380,3 +380,25 @@ This module is an integration foundation, not a deployed security boundary.
 Privileged entrypoints still need integration, and native confinement must
 protect the journal before arbitrary scripts can run under its authority.
 Do not deploy or claim M2 acceptance from these registry tests alone.
+
+### Scoped local Git transactions (v1 integration foundation)
+
+The dedicated-identity broker's local Git transaction primitives copy only Git
+object, index and reference data into request scratch space. Repository hooks,
+configuration includes, filters, alternates and replacement references are not
+imported. A transaction binds an exact starting commit and a supervisor-reserved
+`do-again/` branch; commits rebuild the index and accept explicit relative paths.
+Candidate metadata is validated and copied to a fresh sealed directory before
+any future authoritative promotion. Git must execute through the native
+confinement boundary, never as the root supervisor.
+
+The macOS bundle preparer seals an Apple-signed Git executable alongside Python.
+Installation qualification now requires a real confined edit-to-commit transaction
+in synthetic scratch space, including exact-path and unchanged-authority checks.
+A missing native Git binary blocks qualification without host-tool fallback.
+
+These primitives are not yet exposed by the installed broker. Guarded metadata
+promotion, durable effect admission, repository publication, approved dependency
+retrieval and immutable worker integration remain release blockers. Their fixture
+tests do not qualify native execution or the autonomous development loop. Both
+projects remain in maintenance until installed end-to-end evidence passes.

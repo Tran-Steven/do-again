@@ -229,6 +229,14 @@ def main() -> int:
 
             print("BROWSER_SMOKE_OK")
             return 0
+        except Exception as exc:
+            # Preserve synthetic startup evidence before temporary profile removal.
+            log = Path(tmp) / "home/browser/browser.log"
+            if log.is_file():
+                tail = log.read_bytes()[-32768:].decode("utf-8", errors="replace")
+                tail = "".join(char for char in tail if char in "\n\t" or ord(char) >= 32)
+                exc.add_note("Synthetic browser log (last 32 KiB):\n" + tail)
+            raise
         finally:
             try:
                 stop_browser(force=True)

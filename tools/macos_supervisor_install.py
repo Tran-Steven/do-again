@@ -185,6 +185,14 @@ def preview_cutover(config, registry, live):
         yield
 
 
+def runtime_executables(config, current):
+    expected={'python':current/'runtimes/python/bin/python3',
+              'git':current/'runtimes/git/bin/git'}
+    if any(config.get(key)!=str(path) for key,path in expected.items()):
+        raise RuntimeError('invalid sealed runtime executable path')
+    return tuple(expected.values())
+
+
 def install(stage):
     if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
     os.umask(0o077)
@@ -232,6 +240,7 @@ def install(stage):
         raise RuntimeError('initial installation must remain in maintenance')
     if PLIST.exists() and not existing_installation:
         raise RuntimeError('existing service definition has unknown provenance')
+    runtimes=runtime_executables(config,current)
     for project in config['projects']:create_account(project,journal_path,journal)
     with preview_cutover(config,registry,live.returncode==0):
         if current.exists():
@@ -239,9 +248,7 @@ def install(stage):
             previous=ROOT/('previous-'+uuid.uuid4().hex)
             os.rename(current,previous)
         os.rename(stage,current)
-        runtime=Path(config['python'])
-        if runtime!=current/'runtimes/python/bin/python3':raise RuntimeError('invalid sealed runtime path')
-        runtime.chmod(0o755)
+        for runtime in runtimes:runtime.chmod(0o755)
         if not registry.path.exists():
             registry.initialize()
             for project in config['projects']:
