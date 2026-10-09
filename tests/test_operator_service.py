@@ -129,7 +129,7 @@ class OperatorServiceTests(unittest.TestCase):
             calls.append(args[0])
             return SimpleNamespace(stdout=' pid = 123\n')
         with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
-             patch('do_again.supervisor.operator_service.time.monotonic',side_effect=[0,0,4]), \
+             patch('do_again.supervisor.operator_service.time.monotonic',side_effect=iter(range(1000))), \
              patch('do_again.supervisor.operator_service.time.sleep') as sleep, \
              patch('do_again.supervisor.worker_service.service_present',return_value=False), \
              patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
