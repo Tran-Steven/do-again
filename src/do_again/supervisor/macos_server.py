@@ -145,6 +145,9 @@ class ProjectBroker:
                 raise ExecutionBlocked('execution observation accepts original identity only')
             verify_installation(self.config)
             return self.ledger.observe_request(self.project.key,packet['request_id'],packet['request_fingerprint'])
+        if packet.get('operation') == 'ci_observe':
+            from .ci_observation import observe_ci
+            return observe_ci(self,packet)
         if packet == {'operation': 'probe'}:
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('installation probes require maintenance intent')

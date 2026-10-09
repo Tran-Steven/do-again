@@ -5,7 +5,7 @@ import json
 import re
 from urllib.parse import urlencode, parse_qs
 
-from .git_capabilities import SHA
+from .git_capabilities import SHA, _safe_relative
 from .macos_execution import ExecutionBlocked
 from .network import https_bytes
 
@@ -47,7 +47,15 @@ class GitHubRepository:
         write = method=='POST' and endpoint in {'git/blobs','git/trees','git/commits','git/refs','pulls'}
         update = method=='PATCH' and bool(re.fullmatch('git/refs/heads/'+branch+'|pulls/[1-9][0-9]*',endpoint))
         if self.control:
-            read = bool(re.fullmatch(r'actions/runs/[1-9][0-9]*|git/(?:commits|blobs|trees)/[0-9a-f]{40}|git/trees/[0-9a-f]{40}\?recursive=1',endpoint) or endpoint == 'git/ref/heads/' + self.control_branch)
+            read = bool(re.fullmatch(r'actions/runs/[1-9][0-9]*|pulls/[1-9][0-9]*|git/(?:commits|blobs|trees)/[0-9a-f]{40}|git/trees/[0-9a-f]{40}\?recursive=1',endpoint) or endpoint == 'git/ref/heads/' + self.control_branch)
+            if endpoint.startswith('actions/workflows/ci.yml/runs?'):
+                query = parse_qs(endpoint.split('?',1)[1],keep_blank_values=True)
+                read = (set(query)=={'head_sha','branch','event','per_page'}
+                        and len(query['head_sha'])==1
+                        and bool(SHA.fullmatch(query['head_sha'][0]))
+                        and len(query['branch'])==1
+                        and bool(re.fullmatch(branch,query['branch'][0]))
+                        and query['event']==['pull_request'] and query['per_page']==['100'])
             write = method=='POST' and endpoint in {'git/blobs','git/trees','git/commits'}
             update = (method=='PATCH' and endpoint=='git/refs/heads/'+self.control_branch
                       and isinstance(payload,dict) and set(payload)=={'sha','force'}
@@ -77,6 +85,15 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
         raise ExecutionBlocked('publication commit evidence is incomplete')
     if not isinstance(title,str) or not 1 <= len(title.strip()) <= 200 or not isinstance(body,str) or len(body.encode()) > 16000:
         raise ExecutionBlocked('pull request content is invalid')
+    entries = export.get('entries')
+    if not isinstance(entries,list) or not 1 <= len(entries) <= 128:
+        raise ExecutionBlocked('publication requires bounded exact file changes')
+    for entry in entries:
+        path = entry.get('path') if isinstance(entry,dict) else None
+        if not _safe_relative(path):
+            raise ExecutionBlocked('publication file path is invalid')
+        if path.casefold() == '.github/workflows' or path.casefold().startswith('.github/workflows/'):
+            raise ExecutionBlocked('workflow changes require separately authorized publication authority')
     ref_endpoint = 'git/ref/heads/'+branch
     reference = api.request('GET',ref_endpoint)
     observed = None if reference is None else reference['object']['sha']

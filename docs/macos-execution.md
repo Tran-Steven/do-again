@@ -398,3 +398,30 @@ than execution. Once the repaired receipt is durable, another restart republishe
 the stored receipt without invoking the executor. Unavailable or conflicting
 broker evidence preserves the started local journal. This is source regression
 evidence, not a new installed qualification or live autonomous cycle.
+
+### Existing-workflow CI observation
+
+The live canary can reuse `Tran-Steven/do-again`'s existing
+`.github/workflows/ci.yml`: pull requests against main run the full suite,
+including discovered synthetic tests. No workflow file change or OAuth workflow scope
+is required. The publication capability rejects workflow additions, edits,
+and deletions before contacting GitHub; separate publication authority would
+be needed to change those files. Canary publication must eventually be restricted to the two
+synthetic fixture files; that admission boundary is still under implementation.
+The unused private target remains empty and is preserved.
+
+`ci_observe` accepts only `args.original_request_id`, identifying an original
+broker-created publication. The authenticated broker derives repository, head,
+branch, and draft PR from protected terminal evidence. It verifies the current
+engineering head, installed source, open draft PR, existing workflow path,
+pull-request event, repository identity, exact run, and run attempt. Discovery
+is bounded to 100 runs for that exact head and branch; incomplete inventories
+and concurrent reruns fail closed. Missing runs are waiting, failed CI remains
+failed, and changed heads invalidate old success. It never dispatches workflows
+or GitHub writes. Restart can repeat this read-only observation without replaying
+publication or adding execution reservations. A resulting Agent receipt retains
+the observation separately from engineering progress and browser acknowledgment.
+
+The installed runtime remains unchanged and production stays disabled. These
+regressions do not establish a live canary, authorize jobpipe execution, or
+start acceptance windows.

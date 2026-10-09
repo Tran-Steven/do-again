@@ -49,6 +49,12 @@ class BrokerExecutor:
             raise OperatorError('recovery operation is not allowed')
         rpc=self.rpc or broker_request
         fingerprint=request_fingerprint(request)
+        if request['operation']=='ci_observe':
+            # Repeating an observation is read-only, not an execution replay.
+            # Root still rechecks original publication and current HEAD.
+            result=rpc(self.repo,self._packet(request,{}))
+            return {'operation':'ci_observe','request_fingerprint':fingerprint,
+                    'result':result,'recovered_read_only':True}
         result=rpc(self.repo,{'operation':'execution_observe','request_id':request['request_id'],
                              'request_fingerprint':fingerprint})
         if result.get('state')!='terminal':return None
@@ -64,12 +70,12 @@ class BrokerExecutor:
         args = request.get('args', {})
         if args.get('env'):
             raise OperatorError('script-supplied environment is not admitted')
-        if request['operation'] == 'git_publication_reconcile':
+        if request['operation'] in {'git_publication_reconcile','ci_observe'}:
             original = args.get('original_request_id')
             if (set(args) != {'original_request_id'} or not isinstance(original, str)
                     or not REQUEST_ID_RE.fullmatch(original)):
                 raise OperatorError('publication reconciliation requires one original request identity')
-            return {'operation':'git_publication_reconcile','request_id':original}
+            return {'operation':request['operation'],'request_id':original}
         if request['operation'] == 'git_publish':
             if set(args) != {'title','body'}:
                 raise OperatorError('publication accepts pull request content only')

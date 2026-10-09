@@ -21,7 +21,7 @@ from .macos_client import broker_request
 PROJECT_ACCOUNTS = {"do-again": "_doagain_da", "jobpipe": "_doagain_jp"}
 WORKER_OPERATIONS = frozenset({
     "status", "run_tests", "repo_script", "scratch_script", "extended_exec",
-    "git_commit", "git_publish", "dependency_install", "git_publication_reconcile",
+    "git_commit", "git_publish", "dependency_install", "git_publication_reconcile", "ci_observe",
 })
 SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 

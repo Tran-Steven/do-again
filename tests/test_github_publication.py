@@ -93,9 +93,18 @@ class PublicationTests(unittest.TestCase):
         self.api.head='f'*40
         with self.assertRaises(ExecutionBlocked):self.publish()
         self.assertEqual(self.api.effects,[])
+
         self.api.head=None;self.branch='main'
         with self.assertRaises(ExecutionBlocked):self.publish()
         self.assertEqual(self.api.effects,[])
+
+    def test_workflow_changes_rejected_before_any_github_operation(self):
+        for path in ('.github/workflows/ci.yml','.GitHub/Workflows/other.yml',
+                     '.github/workflows','../.github/workflows/ci.yml'):
+            with self.subTest(path=path):
+                self.export['entries'][0]['path']=path
+                with patch.object(self.api,'request',side_effect=AssertionError('network must not run')):
+                    with self.assertRaises(ExecutionBlocked):self.publish()
 
     def test_pause_before_reference_mutation_does_not_publish_branch_or_pr(self):
         calls=0
