@@ -157,3 +157,16 @@ class GitCapabilityTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):
             tx.validate_candidate(head, self.root / 'sealed')
         self.assertFalse((self.root / 'sealed').exists())
+
+
+class NativeBrokerProofAdmissionTests(unittest.TestCase):
+    def test_unprotected_or_production_fixture_cannot_enter_broker(self):
+        from do_again.supervisor.macos_probe import verify_native_git_broker
+        from unittest.mock import Mock, patch
+        project = Mock(key='fixed-project-key')
+        with patch('do_again.supervisor.git_broker.commit_via_broker') as commit:
+            for config in ({}, {'production_ready':True}, {'production_ready':False}):
+                with self.subTest(config=config), self.assertRaises(ExecutionBlocked):
+                    verify_native_git_broker(config, project, Path('/untrusted/fixture'),
+                                             Path('/untrusted'), 'a'*40, 'nonce', start_guard=Mock())
+            commit.assert_not_called()
