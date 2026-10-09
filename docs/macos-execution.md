@@ -176,3 +176,29 @@ It does not use host site packages, relocated-interpreter CA defaults or
 binds the complete installed manifest, so replacing a runtime, Git binary or trust
 bundle under the same source commit invalidates an earlier proof. The native
 probe verifies immutable extraction/export module imports under confinement.
+
+### Installed capability qualification
+
+After maintenance installation and a fresh native boundary `probe`, the trusted
+operator can enroll the existing GitHub credential with `enroll-github`, then run
+`qualify-capabilities`. This explicit operation downloads the fixed SHA-256
+packaging 25.0 pure wheel, installs and imports it under the dedicated identity,
+and replays the terminal dependency receipt without another installation.
+The qualification approval is private to the synthetic fixture; production
+artifact policy is unchanged.
+
+For Do Again, it also copies inert approved Git data into an isolated fixture,
+checks out the assigned snapshot under confinement, commits one synthetic file
+through actual broker promotion, and publishes one clearly marked draft canary
+PR through the installed scoped GitHub capability. It verifies receipt replay.
+jobpipe measures dependency execution only; its publication is not measured by
+this operation. Neither engineering worktree nor operator intent changes. The
+production flag stays false, and these receipts never count as useful progress.
+
+Qualification uses the supervisor execution journal and deterministic identities
+bound to the complete installed manifest. Interrupted preparation blocks
+repetition for evidence review. Interrupted publication permits only read-only
+reconciliation of the original repository/ref/head/PR content; it never submits
+another effect. Fixture files and the draft PR are retained for audit. A changed
+live authority invalidates the result. This is capability evidence, not worker
+integration, end-to-end acceptance, or release authorization.

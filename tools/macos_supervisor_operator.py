@@ -7,7 +7,7 @@ from do_again.supervisor.macos_client import broker_request, operator_request, e
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('operation',choices=('status','probe','pause','maintenance','stop','resume','enroll-github'))
+    parser.add_argument('operation',choices=('status','probe','pause','maintenance','stop','resume','enroll-github','qualify-capabilities'))
     parser.add_argument('--repo',type=Path,required=True)
     args=parser.parse_args()
     if args.operation == 'enroll-github':
@@ -19,6 +19,8 @@ if __name__ == '__main__':
                                     text=True,capture_output=True,check=True,timeout=15).stdout.strip()
         result=enroll_github_credential(args.repo,credential)
         credential=None
+    elif args.operation == 'qualify-capabilities':
+        result=broker_request(args.repo,{'operation':'qualify_capabilities'})
     elif args.operation in ('status','probe'):
         result=broker_request(args.repo,{'operation':args.operation})
     else:

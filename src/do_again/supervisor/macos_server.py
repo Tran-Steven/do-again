@@ -119,6 +119,9 @@ class ProjectBroker:
                 (self.state / 'enforcement-blocker.json').unlink(missing_ok=True)
                 atomic_json(self.state / 'enforcement.json', {'identity': machine_identity(self.config), 'result': result})
                 return result
+        if packet == {'operation':'qualify_capabilities'}:
+            from .capability_probe import qualify_capabilities
+            return qualify_capabilities(self)
         if packet.get('operation') == 'git_commit':
             from .git_broker import commit_via_broker
             return commit_via_broker(self, packet)
