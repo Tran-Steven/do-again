@@ -97,7 +97,8 @@ class DependencyTests(unittest.TestCase):
             fetch.assert_not_called();capture.assert_not_called()
 
     def test_network_origin_redirect_and_byte_budget_fail_closed(self):
-        with patch('do_again.supervisor.network.http.client.HTTPSConnection') as constructor:
+        with patch('do_again.supervisor.network.http.client.HTTPSConnection') as constructor, \
+                patch('do_again.supervisor.network.trusted_context'):
             for url in ('http://files.pythonhosted.org/pkg', 'https://evil.invalid/pkg',
                         'https://user:secret@files.pythonhosted.org/pkg',
                         'https://files.pythonhosted.org:444/pkg', 'https://files.pythonhosted.org/pkg?q=1'):
@@ -180,3 +181,16 @@ class DependencyBrokerTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionBlocked,'ambiguous started'):
             install_via_broker(self.broker,self.packet)
         self.assertEqual(self.calls,0)
+
+
+class SupervisorTrustTests(unittest.TestCase):
+    def test_tls_context_uses_sealed_ca_despite_host_environment(self):
+        from do_again.supervisor.network import trusted_context
+        from do_again.supervisor.macos_execution import INSTALL_ROOT
+        with patch.dict(os.environ,{'SSL_CERT_FILE':'/untrusted/roots','SSL_CERT_DIR':'/untrusted'}), \
+                patch('do_again.supervisor.network.private_root_file') as validate, \
+                patch('do_again.supervisor.network.ssl.create_default_context') as create:
+            trusted_context()
+            expected=INSTALL_ROOT/'current/runtimes/trust/ca.pem'
+            validate.assert_called_once_with(expected)
+            create.assert_called_once_with(cafile=str(expected))

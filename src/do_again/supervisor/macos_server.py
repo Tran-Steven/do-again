@@ -22,6 +22,7 @@ from ..core.schema import canonical_json
 
 def machine_identity(config: dict) -> dict:
     return {'source_sha': config['source_sha'], 'os': platform.platform(),
+            'manifest_sha256':hashlib.sha256((INSTALL_ROOT/'current/manifest.json').read_bytes()).hexdigest(),
             'python_sha256': hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
             'sandbox_sha256': hashlib.sha256(Path('/usr/bin/sandbox-exec').read_bytes()).hexdigest()}
 

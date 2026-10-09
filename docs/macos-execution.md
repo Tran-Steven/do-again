@@ -168,3 +168,11 @@ Source fixtures exercise real Git export, scoped remote effects, exact payload
 read-back, pause, changed tips, receipt replay and restart/lost-response recovery.
 Installed publication/network qualification, immutable worker integration and
 live acceptance remain pending. No production-ready flag is changed by this work.
+
+
+Broker HTTPS uses the OS certificate roots copied into the sealed build manifest.
+It does not use host site packages, relocated-interpreter CA defaults or
+`SSL_CERT_FILE`/`SSL_CERT_DIR` to select trust. Native enforcement identity also
+binds the complete installed manifest, so replacing a runtime, Git binary or trust
+bundle under the same source commit invalidates an earlier proof. The native
+probe verifies immutable extraction/export module imports under confinement.

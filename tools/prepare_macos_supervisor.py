@@ -153,6 +153,14 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     (payload/'install.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_install.py']))
     runtime=seal_runtime(payload)
     native_git=seal_git(payload)
+    ca=Path('/private/etc/ssl/cert.pem')
+    for path in (ca,*ca.parents):
+        if path.is_symlink() or path.stat().st_uid!=0 or path.stat().st_mode&0o022:
+            raise ValueError('OS certificate roots are mutable or aliased')
+    if not ca.is_file() or ca.stat().st_nlink!=1:
+        raise ValueError('OS certificate roots are not regular sealed input')
+    (payload/'runtimes/trust').mkdir()
+    shutil.copyfile(ca,payload/'runtimes/trust/ca.pem')
     (payload/'snapshots').mkdir()
     projects=[]
     for index,(repo,canonical,name,account,ref) in enumerate((

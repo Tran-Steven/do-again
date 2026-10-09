@@ -242,3 +242,25 @@ class CredentialPrivacyTests(unittest.TestCase):
                 with self.assertRaises(ExecutionBlocked):read_credential(broker)
                 secret.write_text('s'*40)
                 self.assertEqual(read_credential(broker),'s'*40)
+
+
+class RuntimeAttestationTests(unittest.TestCase):
+    def test_changed_manifest_invalidates_same_source_native_proof(self):
+        from do_again.supervisor import macos_server
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'current').mkdir();(root/'state').mkdir()
+            manifest=root/'current/manifest.json';manifest.write_bytes(b'first build')
+            python=root/'python';python.write_bytes(b'fixed interpreter')
+            original=Path.read_bytes
+            def read(path):
+                return b'fixture sandbox' if str(path)=='/usr/bin/sandbox-exec' else original(path)
+            with patch.object(macos_server,'INSTALL_ROOT',root), \
+                    patch.object(macos_server.sys,'executable',str(python)), \
+                    patch.object(Path,'read_bytes',read):
+                config={'source_sha':'same source'}
+                broker=SimpleNamespace(config=config,state=root/'state')
+                proof={'identity':macos_server.machine_identity(config),'result':{'verified':True}}
+                (broker.state/'enforcement.json').write_text(json.dumps(proof))
+                self.assertTrue(macos_server.ProjectBroker._verified(broker))
+                manifest.write_bytes(b'changed Git or certificate bundle')
+                self.assertFalse(macos_server.ProjectBroker._verified(broker))
