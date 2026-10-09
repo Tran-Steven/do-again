@@ -178,7 +178,7 @@ class PublicationBrokerTests(unittest.TestCase):
                  patch.object(publication.os,'geteuid',return_value=0,create=True),
                  patch.object(publication.os,'chown',create=True),
                  patch.object(publication,'EXECUTION_ROOT',self.root/'execution'),
-                 patch.object(publication,'private_root_file'),
+                 patch.object(publication,'read_credential',return_value='s'*40),
                  patch.object(publication,'GitHubRepository',return_value=self.api),
                  patch.object(publication,'MacOSProcesses',return_value=SimpleNamespace(owned=lambda uid:[])),
                  patch.object(publication,'launch_spec',return_value={}),
@@ -226,3 +226,19 @@ class PublicationBrokerTests(unittest.TestCase):
         self.state['intent']='paused'
         with self.assertRaises(ExecutionBlocked):self.module.publish_via_broker(self.broker,self.packet)
         self.assertEqual(self.api.effects,[]);self.assertEqual(self.exports,0)
+
+
+@unittest.skipUnless(os.name=='posix','native POSIX credential modes required')
+class CredentialPrivacyTests(unittest.TestCase):
+    def test_open_or_oversized_credentials_are_rejected_before_read(self):
+        from do_again.supervisor.publication import read_credential
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);secret=root/'github-token';secret.write_text('s'*40)
+            broker=SimpleNamespace(state=root)
+            with patch('do_again.supervisor.publication.private_root_file'):
+                secret.chmod(0o644)
+                with self.assertRaises(ExecutionBlocked):read_credential(broker)
+                secret.chmod(0o600);secret.write_text('s'*300)
+                with self.assertRaises(ExecutionBlocked):read_credential(broker)
+                secret.write_text('s'*40)
+                self.assertEqual(read_credential(broker),'s'*40)

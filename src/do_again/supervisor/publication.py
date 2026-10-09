@@ -14,6 +14,14 @@ from .github import GitHubRepository, publish_commit, matching_pull_requests
 from .macos_execution import EXECUTION_ROOT, INSTALL_ROOT, REQUEST_ID, ExecutionBlocked, MacOSProcesses, capture, launch_spec, private_root_file
 
 
+def read_credential(broker) -> str:
+    credential = broker.state / 'github-token'
+    private_root_file(credential)
+    if credential.stat().st_mode & 0o077 or credential.stat().st_size > 256:
+        raise ExecutionBlocked('publication credential is not private')
+    return credential.read_text().strip()
+
+
 def publish_via_broker(broker, packet: dict) -> dict:
     from .macos_server import verify_installation, worktree_authority
     if sys.platform != 'darwin' or os.geteuid() != 0:
@@ -30,11 +38,7 @@ def publish_via_broker(broker, packet: dict) -> dict:
     expected = {'_doagain_da':'Tran-Steven/do-again','_doagain_jp':'Tran-Steven/jobpipe'}
     if repository != expected.get(broker.project.account):
         raise ExecutionBlocked('publication repository is not sealed for this project')
-    credential = broker.state / 'github-token'
-    private_root_file(credential)
-    if credential.stat().st_mode & 0o077 or credential.stat().st_size > 256:
-        raise ExecutionBlocked('publication credential is not private')
-    api = GitHubRepository(repository,credential.read_text().strip())
+    api = GitHubRepository(repository,read_credential(broker))
     fingerprint = hashlib.sha256(canonical_json(packet)).hexdigest()
     with broker.lock:
         def gate():
@@ -112,9 +116,7 @@ def reconcile_publication(broker, packet: dict) -> dict:
         configured=next(p for p in broker.config['projects'] if p['key']==broker.project.key)
         if configured.get('github_repository')!=intent['repository']:
             raise ExecutionBlocked('publication binding changed; reconciliation is blocked')
-        credential=broker.state/'github-token';private_root_file(credential)
-        if credential.stat().st_mode&0o077:raise ExecutionBlocked('credential is not private')
-        api=GitHubRepository(intent['repository'],credential.read_text().strip())
+        api=GitHubRepository(intent['repository'],read_credential(broker))
         reference=api.request('GET','git/ref/heads/'+intent['branch'])
         matches=matching_pull_requests(api,intent['branch'],intent['head'])
         if (reference is None or reference['object']['sha']!=intent['head'] or len(matches)!=1
