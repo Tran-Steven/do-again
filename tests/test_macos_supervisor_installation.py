@@ -81,6 +81,40 @@ class InstallationTests(unittest.TestCase):
             ledger.reserve('fixture','uncertain','fingerprint')
             with self.assertRaisesRegex(RuntimeError,'unresolved'):self.module.recovery_candidate('b'*40)
 
+    def test_cutover_crash_preserves_ticket_runtime_and_newer_effects(self):
+        current=self.root/'current';stage=self.root/'stage'
+        current.mkdir();stage.mkdir()
+        (current/'version').write_text('old');(stage/'version').write_text('new')
+        effects=self.root/'effects';effects.write_text('newer terminal effect')
+        journal_path=self.root/'installation.json';journal={'source_sha':'a'*40}
+        rename=os.rename;calls=[]
+        def interrupt(source,target):
+            calls.append((source,target))
+            ticket=json.loads(journal_path.read_text())['runtime_transition']
+            self.assertEqual(ticket['phase'],'cutover_started')
+            if len(calls)==2:raise OSError('injected interruption after retaining old runtime')
+            rename(source,target)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.os,'rename',side_effect=interrupt):
+            with self.assertRaisesRegex(OSError,'injected'):
+                self.module.select_runtime(stage,current,journal_path,journal,'b'*40,recovery=False)
+        ticket=json.loads(journal_path.read_text())['runtime_transition']
+        self.assertEqual((Path(ticket['retained_path'])/'version').read_text(),'old')
+        self.assertEqual((stage/'version').read_text(),'new');self.assertFalse(current.exists())
+        self.assertEqual(effects.read_text(),'newer terminal effect')
+        self.assertEqual(ticket['phase'],'cutover_started')
+
+    def test_successful_runtime_selection_flushes_each_rename_before_advancing(self):
+        current=self.root/'current';stage=self.root/'stage'
+        current.mkdir();stage.mkdir();(current/'version').write_text('old');(stage/'version').write_text('new')
+        journal_path=self.root/'installation.json';journal={'source_sha':'a'*40}
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'sync_directory',wraps=self.module.sync_directory) as sync:
+            self.module.select_runtime(stage,current,journal_path,journal,'b'*40,recovery=True)
+        self.assertEqual(sync.call_count,4)  # Two durable tickets and two package renames.
+        ticket=json.loads(journal_path.read_text())['runtime_transition']
+        self.assertEqual(ticket['phase'],'runtime_selected');self.assertEqual(ticket['operation'],'recovery')
+        self.assertEqual((current/'version').read_text(),'new')
+        self.assertEqual((Path(ticket['retained_path'])/'version').read_text(),'old')
+
     def test_account_collision_requires_trusted_provenance_without_mutation(self):
         project={'account':'_doagain_da','uid':400,'gid':400}
         with patch.object(self.module.pwd,'getpwnam',return_value=Mock()),patch.object(self.module,'run') as run:

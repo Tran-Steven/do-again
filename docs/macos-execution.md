@@ -277,6 +277,9 @@ uses the current authority and effect database; it never copies a historical
 database over newer effects. Pending effects, live execution and loaded worker
 services block the same locked cutover used for installation, including when the
 supervisor itself is offline. The retained runtime and transition phase are
-recorded before package renames. Interrupted selection stays in maintenance and
+recorded before package renames. Journal directory entries and each package
+rename are flushed before advancing the transition. A deterministic interrupted
+rename test proves that the old runtime, new stage and newer effects survive
+without falsely recording successful selection. Interrupted selection stays in maintenance and
 requires explicit administrator reconciliation rather than automatic replay.
 Source regressions do not establish native installed rollback qualification.

@@ -37,6 +37,27 @@ def atomic(path, data):
     with temporary.open('w') as stream:
         json.dump(data,stream,sort_keys=True);stream.flush();os.fsync(stream.fileno())
     temporary.chmod(0o600);os.replace(temporary,path)
+    sync_directory(path.parent)
+
+
+def sync_directory(path):
+    fd=os.open(path,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+
+def select_runtime(stage, current, journal_path, journal, source_sha, *, recovery):
+    previous=ROOT/('previous-'+uuid.uuid4().hex)
+    journal['runtime_transition']={'operation':'recovery' if recovery else 'install',
+        'from_source':journal.get('source_sha'),'to_source':source_sha,
+        'retained_path':str(previous),'phase':'cutover_started'}
+    # Persist the ticket and directory entry before the first package rename.
+    # A crash never authorizes replay or replacing the retained effect DB.
+    atomic(journal_path,journal)
+    if current.exists():
+        os.rename(current,previous);sync_directory(ROOT)
+    os.rename(stage,current);sync_directory(ROOT)
+    journal['runtime_transition']['phase']='runtime_selected';atomic(journal_path,journal)
 
 
 def secure_directory(path, mode=0o755):
@@ -322,16 +343,7 @@ def install(stage, *, recovery=False):
     runtimes=runtime_executables(config,current)
     for project in config['projects']:create_account(project,journal_path,journal)
     with preview_cutover(config,registry,live.returncode==0):
-        previous=ROOT/('previous-'+uuid.uuid4().hex)
-        journal['runtime_transition']={'operation':'recovery' if recovery else 'install',
-            'from_source':journal.get('source_sha'),'to_source':config['source_sha'],
-            'retained_path':str(previous),'phase':'cutover_started'}
-        atomic(journal_path,journal)
-        if current.exists():
-            # Retain earlier immutable package. Effect journals always remain newer.
-            os.rename(current,previous)
-        os.rename(stage,current)
-        journal['runtime_transition']['phase']='runtime_selected';atomic(journal_path,journal)
+        select_runtime(stage,current,journal_path,journal,config['source_sha'],recovery=recovery)
         for runtime in runtimes:runtime.chmod(0o755)
         if not registry.path.exists():
             registry.initialize()
