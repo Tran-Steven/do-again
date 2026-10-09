@@ -43,6 +43,14 @@ class BrokerExecutor:
         args = request.get('args', {})
         if args.get('env'):
             raise OperatorError('script-supplied environment is not admitted')
+        if request['operation'] == 'git_commit':
+            if set(args) != {'paths', 'message'}:
+                raise OperatorError('Git accepts exact file paths and a message only')
+            return {'operation':'git_commit','request_id':request['request_id'],
+                    'paths':args['paths'],'message':args['message'],
+                    'expected_head':status.get('authority',{}).get('repo_head'),
+                    'expected_epoch':status.get('epoch'),
+                    'request_fingerprint':request_fingerprint(request)}
         worktree = Path(status['worktree'])
         executables = [Path(value) for value in status['executables']]
 

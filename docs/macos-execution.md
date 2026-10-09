@@ -4,7 +4,7 @@ This boundary is an installation and enforcement preview for the authorized Do A
 
 The supervisor runs as root from an immutable package under `/Library/Application Support/DoAgainSupervisor/current`. Each project receives its own hidden, password-disabled, non-login account (`_doagain_da` or `_doagain_jp`) and collision-checked UID/GID in 400–499. Execution drops UID, GID, supplemental groups, inherited descriptors and environment before entering native Seatbelt confinement. The immutable child shim then clears the task bootstrap and registered-port mapping, zeros the cached bootstrap port, and destroys its inherited send right before executing untrusted code. Dedicated UID separation alone did not prevent starting an existing synthetic operator service; this capability removal is mandatory. The child attests effective groups through Darwin’s legacy POSIX `getgroups` symbol. [Python’s macOS directory-backed group access list](https://docs.python.org/3.13/library/os.html#os.getgroups) is not used, and no directory-service IPC is granted. Detached descendants are identified by kernel UID and birth time and drained before terminal evidence. No unsupported-platform or unsandboxed fallback exists.
 
-Writes are confined to the allocated engineering worktree and request scratch/cache. Git metadata remains operator-owned and denied by the profile. Network, signals, service creation, supervisor sockets and host credentials are unavailable to scripts. Privileged Git/dependency operations are not yet implemented. The helper authenticates operator connections using `getpeereid`; project identity comes from its socket. Administrative intent uses a separate operator socket. Pause shares a file fence with the final spawn decision and permits already admitted work to drain.
+Writes are confined to the allocated engineering worktree and request scratch/cache. Git metadata is denied by the profile; successful broker promotion seals its replacement as root-owned read-only data. Network, signals, service creation, supervisor sockets and host credentials are unavailable to scripts. A typed local Git commit capability is implemented; repository network publication and approved dependency retrieval remain unavailable. The helper authenticates operator connections using `getpeereid`; project identity comes from its socket. Administrative intent uses a separate operator socket. Pause shares a file fence with the final spawn decision and permits already admitted work to drain.
 
 The root-owned SQLite journal stores operator intent and execution fingerprints. Started operations without terminal evidence remain ambiguous across restart; they cannot replay. An installation requires maintenance intent and the same accepted goal revision in the original operator journal. Originals, dirty primary checkouts, receipts, outboxes, browser sessions, and Sonary records are retained.
 
@@ -49,9 +49,42 @@ admission. Cross-platform packaging/tests continue; Linux/Windows production
 execution has no admitted native boundary and fails closed.
 
 This is partial production integration. The sealed production gate remains false.
-Immutable engineering-daemon deployment, scoped Git/dependency brokers, atomic
+Immutable engineering-daemon deployment, repository publication/dependency brokers, atomic
 claim/publication admission and browser delivery/rollover/archive admission are
 still required. These source changes do not upgrade a legacy installed daemon.
 Legacy protocol regression fixtures explicitly inject their executor dependency;
 no configuration or environment switch enables that dependency in production.
 Native installed isolation proofs and unit protocol fixtures are separate evidence.
+
+
+### Local Git commit capability
+
+`git_commit` accepts only an original request identity/fingerprint, exact starting
+HEAD and authority epoch, exact relative file paths, and a bounded commit message.
+The authenticated socket fixes the project; the supervisor derives the branch
+from the accepted goal revision. Neither scripts nor model requests select a
+repository, branch, executable, arbitrary Git arguments, or credentials. Operator
+policy must explicitly allow this capability before Agent requests can use it.
+
+One durable execution reservation covers candidate creation and promotion. Each
+fixed Git command runs with the dedicated identity through the same native
+confinement and pause fence as script execution, using the sealed Apple Git.
+Candidate metadata excludes hooks, host configuration, alternate objects,
+replacement references and remote access. The index starts from the exact base
+commit; the verified commit must have that single parent and change only selected
+files. A no-op is a failed receipt rather than useful progress.
+
+After descendants drain, the broker rechecks admission and exchanges sealed
+metadata with the assigned `.git` using Darwin's atomic directory exchange.
+There is no paired-rename fallback. A crash or lost receipt after the exchange
+leaves a started reservation visible in status; that request cannot replay.
+Completed requests return their original receipt without creating another commit.
+Original source files and excluded edits are preserved.
+
+Fixture regressions exercise actual Git data with a substituted execution backend;
+they do not qualify the installed privileged RPC. Production remains disabled.
+Before enabling it, qualification must exercise the broker under its immutable
+installed runtime, and guarded upgrades must accept proven broker-owned metadata
+and its audited new HEAD instead of assuming the initial operator-owned snapshot.
+This migration, immutable worker integration, publication/dependencies and live
+acceptance remain release gates.

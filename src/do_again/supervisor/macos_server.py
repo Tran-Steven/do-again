@@ -98,7 +98,8 @@ class ProjectBroker:
                     'authority': worktree_authority(self.project.worktree),
                     'goal_revision': status['goal_revision'],
                     'enforcement_verified': self._verified(),
-                    'enforcement_blocker': self._probe_blocker()}
+                    'enforcement_blocker': self._probe_blocker(),
+                    'unresolved_executions': self.ledger.pending(self.project.key)}
         if packet == {'operation': 'probe'}:
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('installation probes require maintenance intent')
@@ -117,6 +118,9 @@ class ProjectBroker:
                 (self.state / 'enforcement-blocker.json').unlink(missing_ok=True)
                 atomic_json(self.state / 'enforcement.json', {'identity': machine_identity(self.config), 'result': result})
                 return result
+        if packet.get('operation') == 'git_commit':
+            from .git_broker import commit_via_broker
+            return commit_via_broker(self, packet)
         if packet.get('operation') != 'execute':
             raise ExecutionBlocked('no administrative operations are exposed')
         with self.lock:

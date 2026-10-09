@@ -199,6 +199,24 @@ class ExecutionLedger:
             db.execute('CREATE TABLE IF NOT EXISTS execution (project TEXT, request TEXT, fingerprint TEXT, '
                        'state TEXT, result TEXT, PRIMARY KEY(project,request))')
 
+    def pending(self, project: str) -> list[dict[str, str]]:
+        with closing(sqlite3.connect(self.path)) as db:
+            rows = db.execute("SELECT request,fingerprint FROM execution WHERE project=? AND state='started'",
+                              (project,)).fetchall()
+        return [{'request_id':row[0],'fingerprint':row[1],'state':'started'} for row in rows]
+
+    def lookup(self, project: str, request: str, fingerprint: str) -> dict[str, Any] | None:
+        with closing(sqlite3.connect(self.path)) as db:
+            row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
+                             (project,request)).fetchone()
+        if row is None:
+            return None
+        if row[0] != fingerprint:
+            raise ExecutionBlocked('request fingerprint conflict')
+        if row[1] != 'terminal':
+            raise ExecutionBlocked('ambiguous started execution cannot replay')
+        return json.loads(row[2])
+
     def reserve(self, project: str, request: str, fingerprint: str) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')
