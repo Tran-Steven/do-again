@@ -12,6 +12,20 @@ from do_again.service import liveness
 
 
 class LivenessDecisionTests(unittest.TestCase):
+    def test_control_import_mtime_does_not_reorder_goals_or_refresh_receipts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control=Path(directory)
+            requests=control/'automation/do_again/requests';requests.mkdir(parents=True)
+            receipts=control/'automation/do_again/receipts';receipts.mkdir()
+            for name,issued in [('old','2026-10-08T10:00:00Z'),('new','2026-10-08T11:00:00Z')]:
+                (requests/(name+'.json')).write_text(json.dumps({'request_id':name,'issued_at_utc':issued,
+                    'continuation':{'goal_state':'waiting_for_ci'}}))
+            os.utime(requests/'old.json',(2000000000,2000000000))
+            self.assertEqual(liveness._latest_goal(control)['request_id'],'new')
+            (receipts/'old.json').write_text(json.dumps({'finished_at_utc':'2026-10-08T10:00:00Z'}))
+            os.utime(receipts/'old.json',(2000000000,2000000000))
+            self.assertLess(liveness._activity(control)[1],2000000000)
+
     def test_idle_receipt_triggers_bounded_recovery_then_stall(self):
         base = {"receipt_id": "r1", "progress_at": 100.0, "attempts": 0}
         result, action = liveness._decision(

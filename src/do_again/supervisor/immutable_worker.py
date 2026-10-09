@@ -79,7 +79,7 @@ def validate_worker_context(
         raise OperatorError('dedicated project identity or workspace binding differs')
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     base = Path(home_value) / ".do_again" / "projects" / key
-    control, state = base / "control", base / "state"
+    control, state = base / "sealed-control", base / "state"
     policy_path = current / "package/do_again/worker_policy.json"
     if (policy.get("worker_policy_schema") != 1
             or policy.get("control_branch") != "operator-control"
@@ -135,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Immutable Do Again operator worker")
     parser.add_argument("--project", choices=sorted(PROJECT_ACCOUNTS), required=True)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--expected-source")
+    parser.add_argument("--expected-epoch",type=int)
     args = parser.parse_args(argv)
     if sys.platform != "darwin":
         raise OperatorError("installed worker requires verified macOS confinement")
@@ -156,6 +158,9 @@ def main(argv: list[str] | None = None) -> int:
         raise OperatorError("project is not sealed into the installation")
     repo = Path(project["repo"])
     status = broker_request(repo, {"operation": "status"})
+    if ((args.expected_source is not None and args.expected_source!=config.get("source_sha"))
+            or (args.expected_epoch is not None and args.expected_epoch!=status.get("epoch"))):
+        raise OperatorError("worker service source or authority epoch changed")
     policy_path = INSTALL_ROOT / "current/package/do_again/worker_policy.json"
     try:
         policy = json.loads(policy_path.read_text(encoding="utf-8"))
@@ -175,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
         interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid())
     if any(latest.get(k) != status.get(k) for k in ('epoch','goal_revision','authority')):
         raise OperatorError('worker authority changed during admission')
+    broker_request(repo,{"operation":"worker_register","pid":os.getpid(),
+                         "epoch":status["epoch"],"source_sha":config["source_sha"]})
     from ..service.daemon import main as daemon_main
     argv = [
         "--repo", str(repo),
@@ -199,7 +206,13 @@ def main(argv: list[str] | None = None) -> int:
                 raise OperatorError('worker admission epoch or goal changed')
         except OperatorError as exc:
             raise AuthorityDenied(str(exc)) from exc
-    return daemon_main(argv,admission_check=admission_check)
+    from ..core.control_transport import BrokerControlHistory
+    transport=BrokerControlHistory(repo,control,status["epoch"])
+    def browser_effect():
+        import uuid
+        return broker_request(repo,{'operation':'browser_tick','request_id':'browser-'+uuid.uuid4().hex,
+                                    'epoch':status['epoch']})
+    return daemon_main(argv,admission_check=admission_check,control_transport=transport,browser_effect=browser_effect)
 
 
 if __name__ == "__main__":

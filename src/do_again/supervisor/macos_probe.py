@@ -61,7 +61,11 @@ import sys
 sys.path.insert(0,T['package'])
 from do_again.supervisor.wheels import validate_wheel
 from do_again.supervisor.git_export import export_commit
-result['immutable_module_import']=callable(validate_wheel) and callable(export_commit)
+from do_again.supervisor.control_history import publish_control
+from do_again.supervisor.browser_broker import browser_tick
+from do_again.supervisor.worker_service import register_worker
+from do_again.core.control_transport import BrokerControlHistory
+result['immutable_module_import']=all(callable(value) for value in (validate_wheel,export_commit,publish_control,browser_tick,register_worker,BrokerControlHistory))
 def denied(name, action):
     try: action()
     except OSError as e: result[name]=e.errno in (errno.EPERM,errno.EACCES)

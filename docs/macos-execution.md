@@ -215,9 +215,37 @@ accepted goal and positive authority epoch. Startup rechecks the same authority.
 The daemon receives a session admission callback for control Git, polling and
 browser monitoring. Authority loss ends polling rather than restarting it.
 
-This entrypoint is not production deployment qualification. The helper remains
-`production_ready=false`, and neither worker service is installed or started.
-Root-broker integration of control-history transport and atomic browser effect
-admission, guarded launchd rollout/rollback, and installed end-to-end acceptance
-remain release prerequisites. Per-call checks do not prove atomic exclusion of
-pause between a status read and an external browser or control-history effect.
+Control-history JSON synchronization, claim/receipt publication and read-only
+uncertain publication reconciliation use the trusted broker's fixed repository
+and `operator-control` ref. No host Git process handles this history in the sealed
+worker. Every remote mutation rechecks epoch and intent under the pause fence;
+non-force ref updates require original-parent and exact-content read-back.
+
+Browser delivery and CI continuation run in a fixed installed operator helper.
+The broker holds the pause fence from durable intent through helper completion.
+A lost helper outcome remains uncertain and cannot replay. Exact CI repository,
+run and current engineering head are checked before continuation. Browser leases
+use the registered service worker's kernel birth identity. Mirrored files retain
+original goal/receipt chronology instead of treating import time as progress.
+
+`stage-worker` provisions a separate compatibility mirror without replacing the
+legacy control worktree, and stages a root-owned service for the next explicit
+resume epoch. `start-worker --epoch N` binds source, epoch and plist hash before
+one start trigger. Automatic restart is disabled. Registration verifies the
+service PID and kernel identity; a lost start response can recover through that
+observation without another trigger. `withdraw-worker` closes admission before
+withdrawal and proves absence while retaining effect journals. Runtime rollback
+and live service recovery remain unqualified; withdrawal is the safe maintenance
+fallback, not permission to restore old effect state.
+
+`qualify-worker` runs three fixed native-confined synthetic tasks through the
+installed Agent and broker, then restarts the Agent and verifies no reexecution.
+Control history uses an in-memory Git-data fixture, including a lost response,
+read-only reconciliation and pause rejection. This does not start a production
+service or send browser messages. Results explicitly distinguish native execution
+from simulated history and unmeasured service/browser/live acceptance.
+
+The helper remains `production_ready=false`. Source regression tests do not
+qualify installed operation. Production promotion, complete browser acknowledgment
+and useful-progress scheduling, installed lifecycle/rollback qualification and
+the selected 24-hour plus 72-hour live acceptance remain release gates.

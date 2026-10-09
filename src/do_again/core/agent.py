@@ -42,6 +42,7 @@ class Agent:
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         executor: Any | None = None,
         admission_check: Callable[[], Any] | None = None,
+        control_transport: Any | None = None,
     ):
         self.repo = repo.resolve()
         self.control_worktree = control_worktree.resolve()
@@ -49,6 +50,7 @@ class Agent:
         self.remote = remote
         self.receipt_callback = receipt_callback
         self.admission_check = admission_check
+        self.control_transport = control_transport
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
@@ -75,6 +77,8 @@ class Agent:
         self.poll_seconds = max(1.0, float(self.policy.get("poll_seconds", 3)))
 
     def git(self, *args: str, timeout: float = 60) -> subprocess.CompletedProcess[str]:
+        if getattr(self,"control_transport",None) is not None:
+            raise OperatorError("sealed worker cannot execute host control Git")
         if self.admission_check is not None:
             self.admission_check()
         return subprocess.run(
@@ -173,6 +177,9 @@ class Agent:
         return proc.stdout
 
     def sync(self) -> None:
+        if self.control_transport is not None:
+            self.control_transport.sync()
+            return
         status = self.require_git("status", "--porcelain")
         if status.strip():
             raise OperatorError("operator control worktree is dirty")
@@ -200,6 +207,9 @@ class Agent:
             self.require_git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
 
     def publish_json(self, relative: Path, value: dict[str, Any], message: str) -> None:
+        if self.control_transport is not None:
+            self.control_transport.publish(relative,value)
+            return
         for attempt in range(4):
             try:
                 self.sync()
@@ -290,6 +300,8 @@ class Agent:
         return value if isinstance(value, dict) else None
 
     def acquire_remote_claim(self, request: dict[str, Any]) -> bool:
+        if self.control_transport is not None:
+            return self.control_transport.claim(self,request)
         if isinstance(self.executor, BrokerExecutor):
             from ..supervisor.admission import require_active
             require_active(self.repo)
@@ -898,7 +910,13 @@ class Agent:
         return [path for _, _, path in values]
 
     def run(self, once: bool = False) -> int:
-        if isinstance(self.executor, BrokerExecutor):
+        if self.admission_check is not None:
+            from ..supervisor.authority import AuthorityDenied
+            try:
+                self.admission_check()
+            except AuthorityDenied:
+                return 0
+        elif isinstance(self.executor, BrokerExecutor):
             from ..supervisor.admission import require_active
             require_active(self.repo)
         self.ledger_dir.mkdir(parents=True, exist_ok=True)

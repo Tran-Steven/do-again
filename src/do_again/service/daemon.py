@@ -98,9 +98,9 @@ def _read_outbox(path: Path) -> dict[str, Any]:
     return value
 
 
-def _drain_browser_outbox(repo: Path, state_dir: Path) -> int:
+def _drain_browser_outbox(repo: Path, state_dir: Path, *, daemon_pid: int | None = None) -> int:
     with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
-        return _drain_browser_outbox_locked(repo, state_dir)
+        return _drain_browser_outbox_locked(repo, state_dir, daemon_pid=daemon_pid)
 
 
 def _uncertain_delivery_path(state_dir: Path) -> Path:
@@ -146,52 +146,13 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
         return len(paths)
     age = time.time() - float(state.get("first_seen_epoch", time.time()))
     ack_token = str(state.get("ack_probe_token") or "")
-    if ack_token:
-        # A separately named, read-only reconciliation probe is allowed once,
-        # even if the original receipt send was uncertain. Its only action is
-        # to ask the model to acknowledge the durable receipt, not execute.
-        if target is not None:
-            snapshot = browser_runtime._assistant_snapshot(target)
-            if str(snapshot.get("latest") or "").strip() == ack_token:
-                _acknowledge_uncertain_batch(state_dir, paths)
-                return len(paths)
-    elif age >= 300 and target is not None:
+    if ack_token and target is not None:
+        # Preserve historical probe evidence without another submission. Its
+        # acknowledgment is separate from visibility of the original message.
         snapshot = browser_runtime._assistant_snapshot(target)
-        if not snapshot.get("busy"):
-            # Persist a *new* immutable acknowledgment intent before CDP.
-            # This is not a replay of the original task/receipt notification.
-            digest = hashlib.sha256(
-                (chat_url + str(state["batch_marker"]) + str(state.get("first_seen_epoch"))).encode("utf-8")
-            ).hexdigest()[:24]
-            ack_token = "DO_AGAIN_RECEIPT_ACK token=" + digest
-            state = dict(state)
-            state["ack_probe_token"] = ack_token
-            state["ack_probe_at"] = time.time()
-            state["ack_probe_phase"] = "uncertain"
+        if str(snapshot.get("latest") or "").strip() == ack_token:
+            state = dict(state, assistant_acknowledged=True)
             atomic_json(_uncertain_delivery_path(state_dir), state)
-            prompt = (
-                "READ-ONLY DELIVERY RECONCILIATION. A previously attempted receipt "
-                "notification may or may not have been delivered. Do not repeat any "
-                "prior actions, create Do Again requests, submit job applications, "
-                "or modify files in this turn. Inspect the durable receipt(s) on "
-                "operator-control: " + ", ".join(ids) + ". "
-                "Acknowledge that you have checked their current terminal states "
-                "by replying with exactly " + ack_token + " and nothing else. "
-                "The daemon will then independently continue its existing goal."
-            )
-            try:
-                browser_runtime.send_message(target, prompt, wait_for_response=False)
-            except Exception as exc:
-                state["ack_probe_error"] = type(exc).__name__
-                atomic_json(_uncertain_delivery_path(state_dir), state)
-                raise BrowserSubmissionUncertain(
-                    "Read-only receipt reconciliation probe outcome is uncertain; never replay"
-                ) from exc
-            state["ack_probe_phase"] = "submitted_unverified"
-            atomic_json(_uncertain_delivery_path(state_dir), state)
-            raise BrowserSubmissionUncertain(
-                "Awaiting one-time read-only receipt acknowledgment, without original notification replay"
-            )
     if age >= 300:
         incident = state_dir / "incidents" / "browser-submission-unacknowledged.json"
         incident.parent.mkdir(parents=True, exist_ok=True)
@@ -208,8 +169,8 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
     )
 
 
-def _drain_browser_outbox_locked(repo: Path, state_dir: Path) -> int:
-    activate_project(repo)
+def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int | None = None) -> int:
+    activate_project(repo, daemon_pid=daemon_pid)
     ensure_browser_running(verify_auth=True)
 
     uncertain = _read_uncertain_delivery(state_dir)
@@ -272,13 +233,14 @@ def _browser_monitor(
     stop_event: threading.Event,
     work_event: threading.Event,
     admission_check: Callable[[], Any] | None = None,
+    browser_effect: Callable[[], Any] | None = None,
 ) -> None:
     while not stop_event.is_set():
         try:
             if admission_check is not None:
                 admission_check()
-            delivered = _drain_browser_outbox(repo, state_dir)
-            if not delivered and not _pending_outbox(state_dir):
+            delivered = browser_effect()["delivered"] if browser_effect is not None else _drain_browser_outbox(repo, state_dir)
+            if browser_effect is None and not delivered and not _pending_outbox(state_dir):
                 with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
                     check_liveness(repo, runtime_layout(repo).control_worktree, state_dir)
             delay = 3.0 if delivered else 30.0
@@ -311,7 +273,7 @@ def _browser_monitor(
         work_event.clear()
 
 
-def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | None = None) -> int:
+def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | None = None, control_transport: Any | None = None, browser_effect: Callable[[], Any] | None = None) -> int:
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
     from ..supervisor.admission import require_active
@@ -342,9 +304,10 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
         state_dir=state_dir,
         receipt_callback=receipt_callback if browser_enabled else None,
         admission_check=admission_check,
+        control_transport=control_transport,
     )
 
-    if browser_enabled:
+    if browser_enabled and browser_effect is None:
         if admission_check is not None:
             admission_check()
         activate_project(repo)
@@ -385,6 +348,12 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
         else:
             browser_thread = None
 
+    if browser_enabled and browser_effect is not None and not args.once:
+        browser_thread=threading.Thread(target=_browser_monitor,kwargs={"repo":repo,"state_dir":state_dir,
+            "stop_event":browser_monitor_stop,"work_event":browser_work,"admission_check":admission_check,
+            "browser_effect":browser_effect},daemon=True)
+        browser_thread.start()
+
     def stop_handler(signum: int, frame: Any) -> None:
         agent.stop_requested = True
         browser_monitor_stop.set()
@@ -399,7 +368,8 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
             try:
                 if admission_check is not None:
                     admission_check()
-                _drain_browser_outbox(repo, state_dir)
+                if browser_effect is not None:browser_effect()
+                else:_drain_browser_outbox(repo, state_dir)
             except Exception:
                 pass
         return result
@@ -408,7 +378,7 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
         browser_work.set()
         if browser_thread is not None:
             browser_thread.join(timeout=2.0)
-        if browser_enabled:
+        if browser_enabled and browser_effect is None:
             try:
                 if admission_check is not None:
                     admission_check()

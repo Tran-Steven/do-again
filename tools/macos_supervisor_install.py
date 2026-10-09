@@ -146,6 +146,26 @@ def provision_worktree(config, project, current):
     target.chmod(0o750)
 
 
+def verify_worker_quiescence(config):
+    """A maintenance runtime cutover never replaces code beneath a live worker."""
+    for project in config['projects']:
+        journal=ROOT/'state'/project['key']/'worker-deployment.json'
+        if journal.exists():
+            if journal.is_symlink() or journal.stat().st_uid!=0 or journal.stat().st_nlink!=1:
+                raise RuntimeError('worker deployment ownership is invalid')
+            record=json.loads(journal.read_text())
+            if record.get('phase') not in {'staged','withdrawn'}:
+                raise RuntimeError('worker deployment requires guarded withdrawal before cutover')
+        label='io.github.tran-steven.do-again.worker.'+project['key'][:12]
+        observed=subprocess.run(['/bin/launchctl','print',f"gui/{config['operator_uid']}/{label}"],
+            capture_output=True,text=True,timeout=30,user=config['operator_uid'],group=config['operator_gid'],
+            extra_groups=[],env={'PATH':'/usr/bin:/bin','HOME':config['operator_home']})
+        if observed.returncode==0:
+            raise RuntimeError('loaded engineering worker blocks immutable runtime cutover')
+        if observed.returncode!=113 or 'Could not find service' not in observed.stderr:
+            raise RuntimeError('worker service absence is unproven; cutover deferred')
+
+
 @contextmanager
 def preview_cutover(config, registry, live):
     """Upgrade only this sealed, maintenance-only helper under admission fences.
@@ -179,6 +199,7 @@ def preview_cutover(config, registry, live):
             inventory=MacOSProcesses()
             if any(inventory.owned(p['uid']) for p in config['projects']):
                 raise RuntimeError('dedicated execution still active; cutover deferred')
+            verify_worker_quiescence(config)
             run(['/bin/launchctl','bootout','system/'+LABEL])
             stopped=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
             if stopped.returncode!=113:raise RuntimeError('helper stop is uncertain; cutover deferred')

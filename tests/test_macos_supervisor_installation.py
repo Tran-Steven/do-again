@@ -125,6 +125,22 @@ class InstallationTests(unittest.TestCase):
                 with self.module.preview_cutover(config,registry,True):self.fail('unsafe cutover admitted')
             run.assert_not_called()
 
+    def test_worker_cutover_requires_absence_and_preserves_ambiguous_deployment(self):
+        config={'operator_uid':501,'operator_gid':20,'operator_home':'/synthetic',
+                'projects':[{'key':'a'*64}]}
+        state=self.root/'state'/('a'*64);state.mkdir(parents=True)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.subprocess,'run') as effect:
+            effect.return_value=Mock(returncode=113,stderr='Could not find service')
+            self.module.verify_worker_quiescence(config)
+            effect.return_value=Mock(returncode=1,stderr='Permission denied')
+            with self.assertRaisesRegex(RuntimeError,'unproven'):self.module.verify_worker_quiescence(config)
+            effect.return_value=Mock(returncode=0,stderr='')
+            with self.assertRaisesRegex(RuntimeError,'loaded'):self.module.verify_worker_quiescence(config)
+            (state/'worker-deployment.json').write_text(json.dumps({'phase':'start_started'}))
+            # Unknown ownership is preserved rather than adopted by an upgrade.
+            with self.assertRaisesRegex(RuntimeError,'ownership|withdrawal'):
+                self.module.verify_worker_quiescence(config)
+
     def test_preview_cutover_preserves_production_helper(self):
         config={'production_ready':True,'projects':[]}
         (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))

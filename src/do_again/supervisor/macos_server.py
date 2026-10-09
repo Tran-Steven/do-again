@@ -119,9 +119,21 @@ class ProjectBroker:
                 (self.state / 'enforcement-blocker.json').unlink(missing_ok=True)
                 atomic_json(self.state / 'enforcement.json', {'identity': machine_identity(self.config), 'result': result})
                 return result
+        if packet == {'operation':'qualify_worker'}:
+            from .worker_probe import qualify_worker
+            return qualify_worker(self)
         if packet == {'operation':'qualify_capabilities'}:
             from .capability_probe import qualify_capabilities
             return qualify_capabilities(self)
+        if packet.get('operation') == 'worker_register':
+            from .worker_service import register_worker
+            return register_worker(self,packet)
+        if packet.get('operation') == 'browser_tick':
+            from .browser_broker import browser_tick
+            return browser_tick(self,packet)
+        if packet.get('operation') in {'control_sync','control_publish','control_reconcile'}:
+            from .control_history import sync_control,publish_control,reconcile_control
+            return {'control_sync':sync_control,'control_publish':publish_control,'control_reconcile':reconcile_control}[packet['operation']](self,packet)
         if packet.get('operation') == 'git_commit':
             from .git_broker import commit_via_broker
             return commit_via_broker(self, packet)
@@ -321,6 +333,12 @@ def serve_operator(config: dict, brokers: dict) -> None:
                         result=broker.operator_intent(packet['intent'])
                     elif set(packet)=={'operation','project','token'} and packet['operation']=='set_github_token':
                         result=broker.operator_github_token(packet['token'])
+                    elif set(packet)=={'operation','project'} and packet['operation'] in {'stage_worker','withdraw_worker'}:
+                        from .worker_service import stage_worker,withdraw_worker
+                        result={'stage_worker':stage_worker,'withdraw_worker':withdraw_worker}[packet['operation']](broker)
+                    elif set(packet)=={'operation','project','epoch'} and packet['operation']=='start_worker':
+                        from .worker_service import start_worker
+                        result=start_worker(broker,packet['epoch'])
                     else:raise ExecutionBlocked('unknown operator operation')
                     response={'ok':True,'result':result}
                 except Exception as exc:

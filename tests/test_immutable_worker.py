@@ -134,8 +134,8 @@ class WorkerAdmissionTests(unittest.TestCase):
             with patch('do_again.core.agent.time.sleep') as retry:
                 self.assertEqual(agent.run(),0)
                 agent.sync.assert_not_called();retry.assert_not_called()
-            # Only the pre-loop status attempt, never a post-pause remote status.
-            agent.publish_status.assert_called_once_with('ready')
+            # Even initial status publication is excluded once pause is known.
+            agent.publish_status.assert_not_called()
 
     def test_browser_monitor_pause_never_delivers_or_restarts(self):
         from do_again.service.daemon import _browser_monitor

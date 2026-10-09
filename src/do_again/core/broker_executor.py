@@ -10,17 +10,19 @@ from ..supervisor.macos_client import broker_request
 
 
 class BrokerExecutor:
-    def __init__(self, *, repo: Path, policy_path: Path, state_dir: Path):
+    def __init__(self, *, repo: Path, policy_path: Path, state_dir: Path, rpc=None):
         self.repo = repo.resolve()
         self.policy = read_json(policy_path)
+        self.rpc = rpc
 
     def execute(self, request: dict[str, Any]) -> dict[str, Any]:
         if sys.platform != 'darwin':
             raise OperatorError('native execution boundary unavailable on this platform; no local fallback')
+        rpc = self.rpc or broker_request
         operation = request['operation']
         if operation not in self.policy.get('allowed_operations', []):
             raise OperatorError(f'operation is not allowed: {operation}')
-        before = broker_request(self.repo, {'operation': 'status'})
+        before = rpc(self.repo, {'operation': 'status'})
         if before.get('operator_intent') != 'active' or before.get('production_ready') is not True:
             raise OperatorError('operator authority or production migration blocks execution')
         if before.get('enforcement_verified') is not True:
@@ -33,8 +35,8 @@ class BrokerExecutor:
             result = before
         else:
             packet = self._packet(request, before)
-            result = broker_request(self.repo, packet)
-        after = broker_request(self.repo, {'operation': 'status'})
+            result = rpc(self.repo, packet)
+        after = rpc(self.repo, {'operation': 'status'})
         return {'operation': operation, 'request_fingerprint': request_fingerprint(request),
                 'authority_before': actual, 'authority_after': after.get('authority', {}),
                 'result': result}

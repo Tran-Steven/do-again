@@ -11,13 +11,14 @@ from .network import https_bytes
 
 
 class GitHubRepository:
-    def __init__(self, repository: str, token: str):
+    def __init__(self, repository: str, token: str, *, control: bool = False):
         if repository not in {'Tran-Steven/do-again','Tran-Steven/jobpipe'}:
             raise ExecutionBlocked('repository publication scope is excluded')
         if not isinstance(token,str) or not re.fullmatch('[A-Za-z0-9_]{20,255}',token):
             raise ExecutionBlocked('repository credential is unavailable')
         self.repository = repository
         self._token = token
+        self.control = control
 
     def request(self, method: str, endpoint: str, payload=None):
         branch = r'do-again/task-[0-9a-f]{20}'
@@ -32,6 +33,13 @@ class GitHubRepository:
                     and query=={'state':['all'],'head':heads,'base':['main'],'per_page':['100']})
         write = method=='POST' and endpoint in {'git/blobs','git/trees','git/commits','git/refs','pulls'}
         update = method=='PATCH' and bool(re.fullmatch('git/refs/heads/'+branch+'|pulls/[1-9][0-9]*',endpoint))
+        if self.control:
+            read = bool(re.fullmatch(r'actions/runs/[1-9][0-9]*|git/(?:commits|blobs|trees)/[0-9a-f]{40}|git/trees/[0-9a-f]{40}\?recursive=1|git/ref/heads/operator-control',endpoint))
+            write = method=='POST' and endpoint in {'git/blobs','git/trees','git/commits'}
+            update = (method=='PATCH' and endpoint=='git/refs/heads/operator-control'
+                      and isinstance(payload,dict) and set(payload)=={'sha','force'}
+                      and payload['force'] is False and isinstance(payload['sha'],str)
+                      and SHA.fullmatch(payload['sha']))
         if not ((method=='GET' and read) or write or update):
             raise ExecutionBlocked('repository API operation is outside the publication capability')
         body = None if payload is None else json.dumps(payload).encode()
