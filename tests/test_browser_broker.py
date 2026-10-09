@@ -31,14 +31,17 @@ class BrowserBrokerTests(unittest.TestCase):
         # continues to inspect every real ancestor and reject writable ancestry.
         original_stat=Path.stat
         higher=set(Path(self.temp.name).resolve().parents)
+        class FixtureStat:
+            def __init__(self,value,uid):
+                self.value=value;self.st_uid=uid;self.st_mode=value.st_mode & ~0o022
+            def __getattr__(self,name):
+                return getattr(self.value,name)
         def fixture_stat(path,*args,**kwargs):
             value=original_stat(path,*args,**kwargs)
             if path in higher:
-                return SimpleNamespace(st_uid=0,st_mode=value.st_mode & ~0o022,
-                    st_nlink=value.st_nlink,st_size=value.st_size)
+                return FixtureStat(value,0)
             if os.name!='posix':
-                return SimpleNamespace(st_uid=501,st_mode=value.st_mode & ~0o022,
-                    st_nlink=value.st_nlink,st_size=value.st_size)
+                return FixtureStat(value,501)
             return value
         p=patch.object(Path,'stat',fixture_stat);p.start();self.addCleanup(p.stop)
 
