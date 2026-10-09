@@ -50,7 +50,7 @@ def select_runtime(stage, current, journal_path, journal, source_sha, *, recover
     previous=ROOT/('previous-'+uuid.uuid4().hex)
     journal['runtime_transition']={'operation':'recovery' if recovery else 'install',
         'from_source':journal.get('source_sha'),'to_source':source_sha,
-        'retained_path':str(previous),'phase':'cutover_started'}
+        'selected_path':str(stage),'retained_path':str(previous),'phase':'cutover_started'}
     # Persist the ticket and directory entry before the first package rename.
     # A crash never authorizes replay or replacing the retained effect DB.
     atomic(journal_path,journal)
@@ -260,14 +260,21 @@ def recovery_candidate(source_sha):
     active=json.loads((current/'config.json').read_text())
     if active.get('production_ready') is not False or active.get('recovery_contract')!=RECOVERY_CONTRACT:
         raise RuntimeError('current runtime lacks the compatible maintenance recovery contract')
+    if active.get('source_sha')==source_sha:
+        raise RuntimeError('requested source is already installed; no recovery effect')
     candidates=[]
     for path in ROOT.glob('previous-*'):
         # A malformed retained package blocks recovery instead of being silently
         # adopted or discarded. Retained packages and journals remain untouched.
         manifest=verify_stage(path)
-        if manifest.get('source_sha')==source_sha:candidates.append(path)
-    if len(candidates)!=1:raise RuntimeError('recovery source is absent or ambiguous')
-    candidate=candidates[0];config=json.loads((candidate/'config.json').read_text())
+        if manifest.get('source_sha')==source_sha:
+            seal=hashlib.sha256((path/'manifest.json').read_bytes()).hexdigest()
+            candidates.append((path,seal))
+    if not candidates or len({seal for path,seal in candidates})!=1:
+        raise RuntimeError('recovery source is absent or ambiguous')
+    # Reinstalling an approved bundle can retain multiple byte-identical copies.
+    # Fully verify each; equivalent seals are one choice, different seals block.
+    candidate=min(path for path,seal in candidates);config=json.loads((candidate/'config.json').read_text())
     if (config.get('source_sha')!=source_sha or config.get('production_ready') is not False
             or config.get('recovery_contract')!=RECOVERY_CONTRACT):
         raise RuntimeError('target runtime lacks the compatible maintenance recovery contract')

@@ -138,6 +138,8 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
         raise BrowserSubmissionUncertain(
             "Uncertain browser receipt is bound to a different conversation; manual reconciliation required"
         )
+    if state.get('binding_identity') and state['binding_identity']!=browser_runtime.binding_identity(record):
+        raise BrowserSubmissionUncertain('Uncertain receipt binding generation changed; manual reconciliation required')
     session = ensure_browser_running(verify_auth=True)
     target = browser_runtime._find_chatgpt_target(int(session["port"]), chat_url)
     if target is not None and browser_runtime._page_contains(target, str(state["batch_marker"])):
@@ -192,11 +194,17 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
         "request_ids": ids,
         "batch_marker": "DO_AGAIN_RECEIPTS_READY request_ids=" + ",".join(ids),
         "chat_url": str(record.get("chat_url") or ""),
+        'binding_identity':browser_runtime.binding_identity(record),
         "first_seen_epoch": time.time(),
         "state": "preparing",
     })
+    def commit_dispatch(evidence):
+        original=_read_uncertain_delivery(state_dir)
+        if original.get('request_ids')!=ids or original.get('state')!='preparing':
+            raise BrowserSubmissionUncertain('receipt intent changed before dispatch; no automatic replay')
+        atomic_json(_uncertain_delivery_path(state_dir),dict(original,**evidence))
     try:
-        outcome = notify_receipts(repo, receipts)
+        outcome = notify_receipts(repo, receipts,before_dispatch=commit_dispatch)
         if not isinstance(outcome, dict) or outcome.get("response") != "already_delivered":
             # A browser submitted result is just a click, not in-chat proof.
             raise BrowserSubmissionUncertain(

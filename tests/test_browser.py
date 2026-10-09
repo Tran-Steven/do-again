@@ -579,6 +579,35 @@ class BrowserRuntimeTests(unittest.TestCase):
             self.assertFalse(send_mock.call_args.kwargs["wait_for_response"])
             self.assertEqual(value["response"], "submitted")
 
+    def test_receipt_dispatch_hook_uses_post_rollover_conversation_and_payload(self):
+        import hashlib
+        from do_again.browser import runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            repo=Path(tmp)/'repo';repo.mkdir();events=[]
+            old=cdp.Target('old','https://chatgpt.com/c/old','','ws://127.0.0.1/old')
+            new=cdp.Target('new','https://chatgpt.com/c/new','','ws://127.0.0.1/new')
+            with patch.dict(os.environ,{'DO_AGAIN_HOME':str(Path(tmp)/'home')}):
+                register_project(repo,chat_url=old.url,control_branch='operator-control')
+                def rollover(*args,**kwargs):return new,register_project(repo,chat_url=new.url)
+                def send(target,text,**kwargs):
+                    kwargs['before_dispatch']();events.append(('gesture',target.url))
+                    return {'response':'submitted','chat_url':target.url}
+                with patch.object(runtime,'ensure_browser_running',return_value={'port':9223}),\
+                     patch.object(runtime,'_find_chatgpt_target',return_value=old),\
+                     patch.object(runtime,'_rollover_needed',return_value=True),\
+                     patch.object(runtime,'_rollover_project_chat',side_effect=rollover),\
+                     patch.object(runtime,'wait_for_authenticated',return_value=(new,{})),\
+                     patch.object(runtime,'_assistant_snapshot',return_value={'busy':False}),\
+                     patch.object(runtime,'_page_contains',return_value=False),\
+                     patch.object(runtime,'send_message',side_effect=send) as submit:
+                    notify_receipts(repo,[{'request_id':'rollover','state':'succeeded'}],
+                                    before_dispatch=lambda evidence:events.append(('commit',evidence)))
+                evidence=events[0][1]
+                self.assertEqual(events[0][0],'commit');self.assertEqual(events[1],('gesture',new.url))
+                self.assertEqual(evidence['chat_url'],new.url)
+                self.assertEqual(evidence['binding_identity'],runtime.binding_identity(project_record(repo)))
+                self.assertEqual(evidence['payload_sha256'],hashlib.sha256(submit.call_args.args[1].encode()).hexdigest())
+
     def test_duplicate_receipt_marker_is_not_sent_twice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"

@@ -46,6 +46,8 @@ class InstallationTests(unittest.TestCase):
                 'operator_home':'/fixture','dependency_artifacts':{},'projects':[]}
         (current/'config.json').write_text(json.dumps(config))
         (candidate/'config.json').write_text(json.dumps({**config,'source_sha':'b'*40}))
+        (current/'manifest.json').write_text(json.dumps({'source_sha':'a'*40}))
+        (candidate/'manifest.json').write_text(json.dumps({'source_sha':'b'*40}))
         return current,candidate,database,ledger
 
     def test_recovery_preserves_newer_effects_and_requires_exact_compatible_source(self):
@@ -60,8 +62,12 @@ class InstallationTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):self.module.recovery_candidate(source)
             duplicate=self.root/'previous-duplicate';duplicate.mkdir()
             (duplicate/'config.json').write_bytes((candidate/'config.json').read_bytes())
+            (duplicate/'manifest.json').write_bytes((candidate/'manifest.json').read_bytes())
+            self.assertIn(self.module.recovery_candidate('b'*40),(candidate,duplicate))
+            (duplicate/'manifest.json').write_text(json.dumps({'source_sha':'b'*40,'different_build':True}))
             with self.assertRaisesRegex(RuntimeError,'ambiguous'):self.module.recovery_candidate('b'*40)
-            (duplicate/'config.json').unlink();duplicate.rmdir()
+            (duplicate/'config.json').unlink();(duplicate/'manifest.json').unlink();duplicate.rmdir()
+            with self.assertRaisesRegex(RuntimeError,'already installed'):self.module.recovery_candidate('a'*40)
             config=json.loads((candidate/'config.json').read_text());config.pop('recovery_contract')
             (candidate/'config.json').write_text(json.dumps(config))
             with self.assertRaisesRegex(RuntimeError,'contract'):self.module.recovery_candidate('b'*40)

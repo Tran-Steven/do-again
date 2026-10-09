@@ -235,8 +235,8 @@ one start trigger. Automatic restart is disabled. Registration verifies the
 service PID and kernel identity; a lost start response can recover through that
 observation without another trigger. `withdraw-worker` closes admission before
 withdrawal and proves absence while retaining effect journals. Runtime rollback
-and live service recovery remain unqualified; withdrawal is the safe maintenance
-fallback, not permission to restore old effect state.
+is qualified for the maintenance-only round trip described below. Live production
+service recovery remains unmeasured; withdrawal never permits restoring old effect state.
 
 `qualify-worker` first runs three fixed native-confined synthetic tasks through
 the installed Agent and broker. It then runs three additional tasks with the
@@ -254,7 +254,7 @@ from simulated history and unmeasured service/browser/live acceptance.
 
 The helper remains `production_ready=false`. Source regression tests do not
 qualify installed operation. Production promotion, complete browser acknowledgment
-and useful-progress scheduling, installed lifecycle/rollback qualification and
+and useful-progress scheduling, full production-worker lifecycle qualification and
 the selected 24-hour plus 72-hour live acceptance remain release gates.
 
 `qualify-service` starts and withdraws one fixed inert launchd canary under the
@@ -272,7 +272,11 @@ The administrator installer supports `--recover-source <full-commit>` for a
 previous immutable package. Both packages must declare the same maintenance-only
 recovery contract, authority/effect schema and fenced worker admission. Project
 scope, identities, goal revision and dependency capabilities must match. A
-missing, ambiguous, incompatible or pre-contract target blocks recovery. Recovery
+missing, ambiguous, incompatible or pre-contract target blocks recovery. Fully
+verified retained copies with identical manifest bytes are one equivalent choice;
+different manifests for the same commit remain ambiguous. The chosen path is
+recorded before cutover. An already-installed source is rejected without effects.
+Recovery
 uses the current authority and effect database; it never copies a historical
 database over newer effects. Pending effects, live execution and loaded worker
 services block the same locked cutover used for installation, including when the
@@ -286,3 +290,21 @@ Source regressions do not establish native installed rollback qualification.
 Operator status includes transaction-consistent, project-scoped effect counts
 and a digest. This permits before/after recovery comparison without exposing
 receipt contents, capability payloads or credentials.
+
+Native maintenance qualification completed at source
+`54796ba8d8c3cc475e65d04d35d9919fdee8601a`, with 473 local tests and all 17
+exact-head CI checks. Both installed identities passed 21 native checks and six
+synthetic tasks each, including operator-identity IPC and restart without replay.
+Actual rollback to `842e11d0d7edc4c63b5ca78bc0a3628c5da6d73a` and restoration
+preserved both projects' effect counts and digests, maintenance epoch 1, worktree
+authority and zero unresolved executions. Production remained disabled.
+
+Receipt dispatch now commits the actual post-rollover conversation, binding
+generation and payload digest immediately before its one Enter gesture. New
+explicit chat bindings get a fresh generation, including same-URL rebinding;
+changed generations block uncertain reconciliation. POSIX JSON journal writes
+flush the parent directory entry as well as file contents. Commit failure remains
+uncertain and prevents the gesture. These source regressions do not establish
+live browser delivery or assistant acknowledgment; those gates remain open.
+Conversation target lookup compares the entire conversation ID, including when
+the page has a query string. A shared ID prefix cannot authorize a different chat.

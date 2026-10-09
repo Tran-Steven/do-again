@@ -465,7 +465,7 @@ def _find_chatgpt_target(port: int, chat_url: str | None = None) -> cdp.Target |
             return exact[0]
         if "/c/" in chat_url:
             chat_id = chat_url.split("/c/", 1)[1].split("?", 1)[0].split("#", 1)[0]
-            matched = [item for item in rows if f"/c/{chat_id}" in item.url]
+            matched = [item for item in rows if _chat_id(item.url)==chat_id]
             if matched:
                 return matched[0]
         return None
@@ -812,6 +812,7 @@ def send_message(
     *,
     timeout: float = 180.0,
     wait_for_response: bool = True,
+    before_dispatch: Any = None,
 ) -> dict[str, Any]:
     baseline = _assistant_snapshot(target)
     if baseline.get("busy"):
@@ -851,6 +852,10 @@ return 'ready';
         # Exactly one gesture. From this point every exception is uncertain;
         # absence of composer clearing never permits a fallback submission.
         dispatch_started = True
+        if before_dispatch is not None:
+            # A failed/crashed durable commit is uncertain even when Enter
+            # may never occur. Never permit a fallback after this boundary.
+            before_dispatch()
         cdp.press_enter(target)
         accepted = False
         for _ in range(20):
@@ -1813,6 +1818,12 @@ def project_record(repo: Path) -> dict[str, Any]:
     return _read_json(_project_record_path(repo))
 
 
+def binding_identity(record: dict[str, Any]) -> str:
+    value={'chat_url':str(record.get('chat_url') or ''),
+           'generation':str(record.get('binding_generation') or 'legacy')}
+    return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
 @_project_operation
 def register_project(
     repo: Path,
@@ -1837,6 +1848,7 @@ def register_project(
         value["control_branch"] = control_branch
     if chat_url is not None:
         value["chat_url"] = chat_url
+        value['binding_generation']=uuid.uuid4().hex
     _atomic_json(_project_record_path(repo), value)
     return value
 
@@ -1960,7 +1972,7 @@ def stop_if_unused() -> bool:
 
 
 @_project_operation
-def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any]:
+def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispatch: Any = None) -> dict[str, Any]:
     if not receipts:
         return {"response": "nothing_to_deliver", "chat_url": ""}
 
@@ -2022,12 +2034,25 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
     if _page_contains(target, batch_marker):
         return {"response": "already_delivered", "chat_url": target.url}
 
+    def commit_dispatch():
+        bound=project_record(repo)
+        bound_url=str(bound.get('chat_url') or '')
+        conversation=_chat_id(target.url)
+        if not conversation or _chat_id(bound_url)!=conversation:
+            raise BrowserSubmissionUncertain('receipt binding changed before dispatch; no automatic replay')
+        before_dispatch({'chat_url':bound_url,'conversation_id':conversation,'binding_identity':binding_identity(bound),
+                         'payload_sha256':hashlib.sha256(message.encode()).hexdigest(),
+                         'purpose':'receipt_notification','state':'dispatch_started'})
+
+    dispatch_options={'before_dispatch':commit_dispatch} if before_dispatch is not None else {}
+
     try:
         return send_message(
             target,
             message,
             timeout=180.0,
             wait_for_response=False,
+            **dispatch_options,
         )
     except BrowserSubmissionUncertain:
         # Never create a new chat or resend after an unverified CDP submit.
@@ -2049,6 +2074,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
             message,
             timeout=180.0,
             wait_for_response=False,
+            **dispatch_options,
         )
 
 
