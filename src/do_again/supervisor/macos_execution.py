@@ -217,6 +217,19 @@ class ExecutionLedger:
                              (project,request)).fetchone()
         return None if row is None else json.loads(row[0])
 
+    def evidence(self, project: str) -> dict[str, Any]:
+        """Redacted, transaction-consistent proof that effects survived cutover."""
+        digest=hashlib.sha256();counts={}
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            db.execute('BEGIN')
+            for table,fields in (('execution','request,fingerprint,state,result'),
+                                 ('capability_intent','request,payload')):
+                count=0;digest.update(canonical_json({'table':table,'project':project}))
+                for row in db.execute('SELECT '+fields+' FROM '+table+' WHERE project=? ORDER BY request',(project,)):
+                    digest.update(canonical_json(list(row)));digest.update(b'\n');count+=1
+                counts[table]=count
+        return {'schema_version':1,'sha256':digest.hexdigest(),'counts':counts}
+
     def pending(self, project: str) -> list[dict[str, str]]:
         with closing(sqlite3.connect(self.path)) as db:
             rows = db.execute("SELECT request,fingerprint FROM execution WHERE project=? AND state='started'",

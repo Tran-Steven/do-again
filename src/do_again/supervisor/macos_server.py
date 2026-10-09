@@ -100,6 +100,7 @@ class ProjectBroker:
                     'goal_revision': status['goal_revision'],
                     'enforcement_verified': self._verified(),
                     'enforcement_blocker': self._probe_blocker(),
+                    'effect_journal': self.ledger.evidence(self.project.key),
                     'unresolved_executions': self.ledger.pending(self.project.key)}
         if packet == {'operation': 'probe'}:
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':

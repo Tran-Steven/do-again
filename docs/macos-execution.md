@@ -283,3 +283,6 @@ rename test proves that the old runtime, new stage and newer effects survive
 without falsely recording successful selection. Interrupted selection stays in maintenance and
 requires explicit administrator reconciliation rather than automatic replay.
 Source regressions do not establish native installed rollback qualification.
+Operator status includes transaction-consistent, project-scoped effect counts
+and a digest. This permits before/after recovery comparison without exposing
+receipt contents, capability payloads or credentials.
