@@ -121,6 +121,9 @@ class ProjectBroker:
         if packet.get('operation') == 'git_commit':
             from .git_broker import commit_via_broker
             return commit_via_broker(self, packet)
+        if packet.get('operation') == 'dependency_install':
+            from .dependencies import install_via_broker
+            return install_via_broker(self, packet)
         if packet.get('operation') != 'execute':
             raise ExecutionBlocked('no administrative operations are exposed')
         with self.lock:

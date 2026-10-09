@@ -4,7 +4,7 @@ This boundary is an installation and enforcement preview for the authorized Do A
 
 The supervisor runs as root from an immutable package under `/Library/Application Support/DoAgainSupervisor/current`. Each project receives its own hidden, password-disabled, non-login account (`_doagain_da` or `_doagain_jp`) and collision-checked UID/GID in 400–499. Execution drops UID, GID, supplemental groups, inherited descriptors and environment before entering native Seatbelt confinement. The immutable child shim then clears the task bootstrap and registered-port mapping, zeros the cached bootstrap port, and destroys its inherited send right before executing untrusted code. Dedicated UID separation alone did not prevent starting an existing synthetic operator service; this capability removal is mandatory. The child attests effective groups through Darwin’s legacy POSIX `getgroups` symbol. [Python’s macOS directory-backed group access list](https://docs.python.org/3.13/library/os.html#os.getgroups) is not used, and no directory-service IPC is granted. Detached descendants are identified by kernel UID and birth time and drained before terminal evidence. No unsupported-platform or unsandboxed fallback exists.
 
-Writes are confined to the allocated engineering worktree and request scratch/cache. Git metadata is denied by the profile; successful broker promotion seals its replacement as root-owned read-only data. Network, signals, service creation, supervisor sockets and host credentials are unavailable to scripts. A typed local Git commit capability is implemented; repository network publication and approved dependency retrieval remain unavailable. The helper authenticates operator connections using `getpeereid`; project identity comes from its socket. Administrative intent uses a separate operator socket. Pause shares a file fence with the final spawn decision and permits already admitted work to drain.
+Writes are confined to the allocated engineering worktree and request scratch/cache. Git metadata is denied by the profile; successful broker promotion seals its replacement as root-owned read-only data. Network, signals, service creation, supervisor sockets and host credentials are unavailable to scripts. A typed local Git commit capability is implemented; repository network publication remains unavailable. The helper authenticates operator connections using `getpeereid`; project identity comes from its socket. Administrative intent uses a separate operator socket. Pause shares a file fence with the final spawn decision and permits already admitted work to drain.
 
 The root-owned SQLite journal stores operator intent and execution fingerprints. Started operations without terminal evidence remain ambiguous across restart; they cannot replay. An installation requires maintenance intent and the same accepted goal revision in the original operator journal. Originals, dirty primary checkouts, receipts, outboxes, browser sessions, and Sonary records are retained.
 
@@ -49,7 +49,7 @@ admission. Cross-platform packaging/tests continue; Linux/Windows production
 execution has no admitted native boundary and fails closed.
 
 This is partial production integration. The sealed production gate remains false.
-Immutable engineering-daemon deployment, repository publication/dependency brokers, atomic
+Immutable engineering-daemon deployment, repository publication brokers, atomic
 claim/publication admission and browser delivery/rollover/archive admission are
 still required. These source changes do not upgrade a legacy installed daemon.
 Legacy protocol regression fixtures explicitly inject their executor dependency;
@@ -98,3 +98,33 @@ the real maintenance fence guards every command and promotion. The live sealed
 production flag is never changed. This proves the installed implementation's
 local commit boundary; it does not resume the worker, qualify publication or
 start a production acceptance window.
+
+
+### Approved dependency capability
+
+`dependency_install` accepts an artifact identifier and exact request/head/epoch
+fences. Its project-bound approval must be sealed into the installation using
+`--dependency-lock`: a JSON object keyed only by `do-again` and/or `jobpipe`, whose
+arrays contain `{id, name, version, url, sha256}` records. No artifacts are approved
+by default. Duplicate identities, other projects, incomplete hashes and arbitrary
+origins fail closed. Agent policy must separately permit the operation.
+
+The trusted broker retrieves only the exact HTTPS wheel on
+`files.pythonhosted.org`, with certificate validation, no redirects/proxies and
+bounded response/time budgets. Scripts receive no network capability. Hash,
+package/version and pure-Python wheel metadata must match. Paths, links, duplicate
+members, archive expansion, startup `.pth` hooks and wheel installer scripts are
+checked before extraction. This first slice deliberately excludes native wheels
+and source/build downloads.
+
+The immutable extraction module executes under the project UID and native
+confinement into a fresh request cache, returning its `site_packages` path for
+confined tests/scripts to import explicitly. The privileged worker never imports
+these packages. A conclusive pause before installation produces a failed terminal
+receipt. Uncertain admission/crashes retain started state; terminal replay cannot
+install twice. Root journals and original workspace files are preserved.
+
+Local real-extraction fixtures and malicious archive/network regressions validate
+the source capability. Installed dependency qualification is not yet measured;
+the installed source remains the PR #52 milestone. Production and live acceptance
+remain closed until the remaining publication, worker and release gates pass.

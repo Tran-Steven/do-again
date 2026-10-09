@@ -94,6 +94,15 @@ def load_configuration(path: Path) -> dict[str, Any]:
     projects = config.get('projects', [])
     if not projects or len({p['uid'] for p in projects}) != len(projects):
         raise ExecutionBlocked('each project requires its own execution identity')
+    approvals = config.get('dependency_artifacts', {})
+    from .dependencies import approved_artifact
+    if not isinstance(approvals, dict) or set(approvals) - {p['key'] for p in projects}:
+        raise ExecutionBlocked('dependency approval includes an excluded project')
+    for key, entries in approvals.items():
+        if not isinstance(entries, list) or len(entries) > 64:
+            raise ExecutionBlocked('dependency approval exceeds project limits')
+        for item in entries:
+            approved_artifact(config, key, item['id'])
     import pwd, grp
     operator = pwd.getpwuid(config['operator_uid'])
     if operator.pw_gid != config['operator_gid'] or operator.pw_dir != config['operator_home']:
