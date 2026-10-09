@@ -144,7 +144,8 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
                 elif p.is_file() and p.stat().st_nlink != 1:
                     raise ExecutionBlocked('hardlink alias in write root')
     reads = (*roots, Path('/System'), Path('/usr/lib'), Path('/usr/share'),
-             Path('/bin'), Path('/usr/bin'), INSTALL_ROOT / 'current/runtimes')
+             Path('/bin'), Path('/usr/bin'), INSTALL_ROOT / 'current/runtimes',
+             INSTALL_ROOT / 'current/package')
     subpaths = lambda paths: ' '.join(f'(subpath {json.dumps(str(p))})' for p in paths)
     runner = INSTALL_ROOT / 'current/package/do_again/supervisor/execution_runner.py'
     protected_git = json.dumps(str(project.worktree / '.git'))
@@ -207,6 +208,14 @@ class ExecutionLedger:
             db.execute('PRAGMA synchronous=FULL')
             db.execute('CREATE TABLE IF NOT EXISTS execution (project TEXT, request TEXT, fingerprint TEXT, '
                        'state TEXT, result TEXT, PRIMARY KEY(project,request))')
+            db.execute('CREATE TABLE IF NOT EXISTS capability_intent (project TEXT, request TEXT, '
+                       'payload TEXT NOT NULL, PRIMARY KEY(project,request))')
+
+    def intent(self, project: str, request: str) -> dict[str, Any] | None:
+        with closing(sqlite3.connect(self.path)) as db:
+            row = db.execute('SELECT payload FROM capability_intent WHERE project=? AND request=?',
+                             (project,request)).fetchone()
+        return None if row is None else json.loads(row[0])
 
     def pending(self, project: str) -> list[dict[str, str]]:
         with closing(sqlite3.connect(self.path)) as db:
@@ -226,7 +235,7 @@ class ExecutionLedger:
             raise ExecutionBlocked('ambiguous started execution cannot replay')
         return json.loads(row[2])
 
-    def reserve(self, project: str, request: str, fingerprint: str) -> dict[str, Any] | None:
+    def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
@@ -240,6 +249,8 @@ class ExecutionLedger:
             if db.execute("SELECT 1 FROM execution WHERE project=? AND state='started'", (project,)).fetchone():
                 raise ExecutionBlocked('project already has an unresolved execution')
             db.execute('INSERT INTO execution VALUES(?,?,?,?,NULL)', (project, request, fingerprint, 'started'))
+            if intent is not None:
+                db.execute('INSERT INTO capability_intent VALUES(?,?,?)',(project,request,json.dumps(intent)))
         return None
 
     def finish(self, project: str, request: str, result: dict[str, Any]) -> None:
