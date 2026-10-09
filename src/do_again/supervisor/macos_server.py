@@ -228,11 +228,16 @@ class ProjectBroker:
             if target.is_symlink() or (target.exists() and target.stat().st_nlink != 1):
                 raise ExecutionBlocked('credential path is aliased')
             temporary = self.state / 'github-token.pending'
-            with temporary.open('x',opener=lambda p,f:os.open(p,f,0o600)) as stream:
-                stream.write(token);stream.flush();os.fsync(stream.fileno())
-            os.replace(temporary,target)
-            from .git_broker import sync_directory
-            sync_directory(self.state)
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                                 | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+            try:
+                with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                    stream.write(token);stream.flush();os.fsync(stream.fileno())
+                os.replace(temporary,target)
+                from .git_broker import sync_directory
+                sync_directory(self.state)
+            finally:
+                temporary.unlink(missing_ok=True)
             return {'registered':True,'repository':project_config['github_repository']}
 
     def _probe_blocker(self) -> dict | None:
