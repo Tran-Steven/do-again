@@ -617,6 +617,11 @@ class Agent:
 
     def result_succeeded(self, payload: dict[str, Any]) -> bool:
         result = payload.get("result")
+        if payload.get("operation") == "git_publication_reconcile":
+            return (isinstance(result, dict)
+                    and result.get("state") == "succeeded"
+                    and result.get("returncode") == 0
+                    and result.get("reconciled_read_only") is True)
         if not isinstance(result, dict):
             return True
         if "returncode" in result:
