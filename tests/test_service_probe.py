@@ -11,7 +11,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
-from do_again.supervisor.service_probe import qualify_service
+from do_again.supervisor.service_probe import qualify_service, verify_process_withdrawn
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 
@@ -32,7 +32,8 @@ class ServiceProbeTests(unittest.TestCase):
             ('do_again.supervisor.macos_server.machine_identity',{'return_value':{'source_sha':'b'*40}}),
             ('do_again.supervisor.service_probe.MacOSProcesses',{})]:
             p=patch(target,**kwargs);mock=p.start();self.addCleanup(p.stop)
-            if target.endswith('MacOSProcesses'):mock.return_value.identity.return_value=(os.getuid(),10,20,1)
+            if target.endswith('MacOSProcesses'):
+                mock.return_value.identity.side_effect=lambda pid: (os.getuid(),10,20,1) if self.proc and self.proc.poll() is None else None
     def stop(self):
         if self.proc and self.proc.poll() is None:self.proc.terminate();self.proc.wait(timeout=5)
     def launch(self,broker,operation,*args,**kwargs):
@@ -49,6 +50,7 @@ class ServiceProbeTests(unittest.TestCase):
         with patch('do_again.supervisor.worker_service.launchctl',side_effect=self.launch):
             result=qualify_service(self.broker)
             self.assertTrue(result['verified']);self.assertEqual(self.starts,1)
+            self.assertTrue(result['withdrawn_process_identity_verified'])
             self.assertFalse(self.definition['KeepAlive']);self.assertFalse(self.definition['RunAtLoad'])
             self.assertEqual(qualify_service(self.broker),result);self.assertEqual(self.starts,1)
             self.assertEqual(result['production_worker_start'],'not_measured')
@@ -60,6 +62,16 @@ class ServiceProbeTests(unittest.TestCase):
             with self.assertRaises(ExecutionBlocked):qualify_service(self.broker)
             with self.assertRaisesRegex(ExecutionBlocked,'no automatic start'):qualify_service(self.broker)
         self.assertEqual(self.starts,0)
+
+    def test_service_absence_does_not_prove_process_withdrawal(self):
+        original=(os.getuid(),10,20,1)
+        with patch('do_again.supervisor.service_probe.MacOSProcesses') as processes:
+            processes.return_value.identity.return_value=original
+            with self.assertRaisesRegex(ExecutionBlocked,'remains live'):
+                verify_process_withdrawn(123,original,timeout=0)
+            # PID reuse must never lead to signaling the new process.
+            processes.return_value.identity.return_value=(os.getuid(),11,20,1)
+            verify_process_withdrawn(123,original,timeout=0)
 
 
 if __name__=='__main__':unittest.main()

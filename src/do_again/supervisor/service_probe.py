@@ -11,6 +11,18 @@ from ..core.schema import atomic_json, canonical_json
 from .macos_execution import EXECUTION_ROOT, ExecutionBlocked, MacOSProcesses
 
 
+def verify_process_withdrawn(pid, original, timeout=5):
+    """Observe the exact kernel identity; never signal an operator-owned PID."""
+    deadline=time.monotonic()+timeout
+    while True:
+        observed=MacOSProcesses().identity(pid)
+        if observed is None or observed[:3]!=original[:3] or observed[3]==5:
+            return
+        if time.monotonic()>=deadline:
+            raise ExecutionBlocked('canary process remains live after service withdrawal')
+        time.sleep(0.1)
+
+
 def qualify_service(broker):
     from .capability_probe import qualification_gate
     from .macos_server import machine_identity
@@ -77,10 +89,12 @@ def qualify_service(broker):
                 # process enumeration, generic signals or Chrome cleanup.
                 launchctl(broker,'bootout',service,allow_missing=True)
             if service_present(broker,label):raise ExecutionBlocked('canary withdrawal remains uncertain')
+            verify_process_withdrawn(value['pid'],kernel)
         if qualification_gate(broker)!=before:
             raise ExecutionBlocked('service qualification changed live authority')
         result={'verified':True,'identity':identity,'operator_uid':broker.config['operator_uid'],
                 'kernel_identity_verified':True,'one_start_trigger':True,'withdrawal_absence_verified':True,
+                'withdrawn_process_identity_verified':True,
                 'automatic_restart':False,'live_authority_unchanged':True,
                 'service_kind':'inert_qualification_canary','production_worker_start':'not_measured'}
         record.update(phase='complete',result=result);atomic_json(journal,record)

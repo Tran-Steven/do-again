@@ -259,7 +259,10 @@ the selected 24-hour plus 72-hour live acceptance remain release gates.
 
 `qualify-service` starts and withdraws one fixed inert launchd canary under the
 operator identity while holding the real maintenance fence. It independently
-verifies the launchd PID, kernel identity and post-withdrawal absence. The canary
+verifies the launchd PID, kernel identity, post-withdrawal service absence and
+termination of the original worker identity. A service label disappearing while
+its original process remains live blocks qualification. A reused PID is only
+observed; it is never signaled. The canary
 has no broker, repository, browser or network operations; it never opens
 production admission. Interrupted qualification preserves its original intent
 and cannot automatically start again. This qualifies native service mechanics,
