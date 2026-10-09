@@ -402,3 +402,7 @@ promotion, durable effect admission, repository publication, approved dependency
 retrieval and immutable worker integration remain release blockers. Their fixture
 tests do not qualify native execution or the autonomous development loop. Both
 projects remain in maintenance until installed end-to-end evidence passes.
+
+Native qualification retains escape-test evidence in its original scratch
+space and allocates fresh roots for the following Git transaction. Forbidden
+aliases remain rejected; proof sequencing does not relax confinement.
