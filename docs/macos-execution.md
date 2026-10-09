@@ -202,3 +202,22 @@ reconciliation of the original repository/ref/head/PR content; it never submits
 another effect. Fixture files and the draft PR are retained for audit. A changed
 live authority invalidates the result. This is capability evidence, not worker
 integration, end-to-end acceptance, or release authorization.
+
+### Sealed operator worker
+
+The maintenance installer now seals `worker-bootstrap.py`, the worker module,
+and its typed policy into the manifest. The bootstrap uses the installed Python
+with `-I -S -B`; worker configuration is read as the operator from root-owned
+public configuration, without invoking the root-only broker configuration loader.
+Admission binds operator UID/GID, installed interpreter/module, source SHA,
+canonical project/workspace, isolated control paths, policy, native proof,
+accepted goal and positive authority epoch. Startup rechecks the same authority.
+The daemon receives a session admission callback for control Git, polling and
+browser monitoring. Authority loss ends polling rather than restarting it.
+
+This entrypoint is not production deployment qualification. The helper remains
+`production_ready=false`, and neither worker service is installed or started.
+Root-broker integration of control-history transport and atomic browser effect
+admission, guarded launchd rollout/rollback, and installed end-to-end acceptance
+remain release prerequisites. Per-call checks do not prove atomic exclusion of
+pause between a status read and an external browser or control-history effect.
