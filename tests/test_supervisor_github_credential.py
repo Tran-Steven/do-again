@@ -6,6 +6,7 @@ import unittest
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from do_again.supervisor.macos_execution import ExecutionBlocked
 from do_again.supervisor.macos_server import ProjectBroker
@@ -25,6 +26,10 @@ class OperatorGitHubCredentialTests(unittest.TestCase):
             admission=nullcontext,
         )
         self.token = "testCredentialOnly" * 3
+        if os.name == "nt":
+            sync_patch = patch("do_again.supervisor.git_broker.sync_directory")
+            sync_patch.start()
+            self.addCleanup(sync_patch.stop)
 
     def enroll(self):
         return ProjectBroker.operator_github_token(self.broker, self.token)
@@ -35,7 +40,8 @@ class OperatorGitHubCredentialTests(unittest.TestCase):
         self.assertEqual(result, {"registered": True, "repository": "Tran-Steven/do-again"})
         self.assertNotIn(self.token, str(result))
         self.assertEqual(target.read_text(), self.token)
-        self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+        if os.name == "posix":
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         self.assertEqual(target.stat().st_nlink, 1)
         self.assertFalse((self.path / "github-token.pending").exists())
 
@@ -44,7 +50,8 @@ class OperatorGitHubCredentialTests(unittest.TestCase):
         self.token = "anotherPrivateCredential" * 2
         self.enroll()
         self.assertEqual((self.path / "github-token").read_text(), self.token)
-        self.assertEqual((self.path / "github-token").stat().st_mode & 0o777, 0o600)
+        if os.name == "posix":
+            self.assertEqual((self.path / "github-token").stat().st_mode & 0o777, 0o600)
         self.assertFalse((self.path / "github-token.pending").exists())
 
     def test_maintenance_required_before_file_creation(self):
@@ -55,7 +62,10 @@ class OperatorGitHubCredentialTests(unittest.TestCase):
 
     def test_alias_target_never_replaced(self):
         (self.path / "original").write_text("unchanged")
-        (self.path / "github-token").symlink_to(self.path / "original")
+        try:
+            (self.path / "github-token").symlink_to(self.path / "original")
+        except OSError:
+            self.skipTest("platform does not permit test symlink creation")
         with self.assertRaises(ExecutionBlocked):
             self.enroll()
         self.assertEqual((self.path / "original").read_text(), "unchanged")
