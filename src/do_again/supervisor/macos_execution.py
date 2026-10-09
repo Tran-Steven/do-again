@@ -153,7 +153,9 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
 
 
 def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path, cache: Path) -> dict[str, Any]:
-    if set(packet) != {'operation', 'request_id', 'argv', 'cwd', 'timeout'} or packet['operation'] != 'execute':
+    fields = {'operation', 'request_id', 'argv', 'cwd', 'timeout'}
+    optional = {'request_fingerprint', 'expected_head', 'expected_authority'}
+    if not fields <= set(packet) or set(packet) - fields - optional or packet['operation'] != 'execute':
         raise ExecutionBlocked('unknown broker operation or administrative fields')
     request_id = packet['request_id']
     if not isinstance(request_id, str) or not REQUEST_ID.fullmatch(request_id):

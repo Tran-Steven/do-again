@@ -27,3 +27,31 @@ Run `PYTHONPATH=src python3 tools/macos_supervisor_operator.py status --repo /ab
 `pause`, `maintenance` and `stop` are scoped operator actions. `resume` is rejected until the production migration and verified enforcement gates are satisfied. The private Python runtime is sealed with the package; the helper never imports writable source or host site packages. Synthetic proof evidence is distinct from live acceptance. Do not replace an effect journal during rollback; leave maintenance in place when compatibility or ambiguity prevents recovery.
 
 Local tests cover protocol rejection, authority races, PID reuse, output bounds, durable replay suppression and platform failure. Actual privileged UID/service isolation is **not measured** until post-install probes pass. Linux and Windows production execution through this boundary remain unsupported and blocked.
+
+### Agent integration and legacy entrypoint hold
+
+The production Agent now selects `BrokerExecutor`. Scratch Python/Bash, repository
+scripts, unit tests and approved extended commands go to the authenticated
+project socket and use supervisor-resolved interpreters in the assigned
+engineering tree. They have no local-execution fallback. Script-supplied
+environment variables and unsupported host administrative operations are blocked.
+Original request fingerprints remain attached to broker packets; the assigned
+HEAD is rechecked under the final pause/spawn fence. The root helper reads Git
+identity files directly rather than executing writable repository configuration.
+Dirty-state or legacy control-plane fences cannot yet be attested and therefore
+block rather than being silently ignored.
+
+Foreground run, install, restart and runtime preparation reject before source
+copying, service effects or browser preparation. Legacy runtime installation
+remains disabled even if a future supervisor configuration admits execution.
+Daemon startup and Agent claiming require active, production-ready, verified
+admission. Cross-platform packaging/tests continue; Linux/Windows production
+execution has no admitted native boundary and fails closed.
+
+This is partial production integration. The sealed production gate remains false.
+Immutable engineering-daemon deployment, scoped Git/dependency brokers, atomic
+claim/publication admission and browser delivery/rollover/archive admission are
+still required. These source changes do not upgrade a legacy installed daemon.
+Legacy protocol regression fixtures explicitly inject their executor dependency;
+no configuration or environment switch enables that dependency in production.
+Native installed isolation proofs and unit protocol fixtures are separate evidence.

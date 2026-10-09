@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from do_again.core.executor import LocalExecutor
+
 import os
 import subprocess
 import sys
@@ -36,7 +38,7 @@ class StaleGitLockTests(unittest.TestCase):
         self.policy = root / "policy.json"
         atomic_json(self.policy, {"schema_version": 1})
         self.agent = Agent(repo=self.repo, control_worktree=self.control, branch="operator-control",
-                           policy_path=self.policy, state_dir=root/"state")
+                           policy_path=self.policy, state_dir=root/"state", executor=LocalExecutor(repo=self.repo, policy_path=self.policy, state_dir=root/"state"), )
         self.lock = Path(git(self.control, "rev-parse", "--git-path", "index.lock")).resolve()
         (self.control / "pending.txt").write_text("pending\n")
 

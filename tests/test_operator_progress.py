@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from do_again.core.executor import LocalExecutor
+
 import json
 import tempfile
 import unittest
@@ -81,6 +83,7 @@ class OperatorProgressAgentTests(unittest.TestCase):
             branch="operator-control",
             policy_path=policy,
             state_dir=state,
+            executor=LocalExecutor(repo=repo, policy_path=policy, state_dir=state),
         )
 
     def test_progress_requires_durable_acknowledged_receipts(self) -> None:

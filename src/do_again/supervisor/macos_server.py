@@ -42,6 +42,38 @@ def verify_installation(config: dict) -> None:
             raise ExecutionBlocked('installed package drift; execution blocked')
 
 
+def worktree_authority(worktree: Path) -> dict:
+    """Read only Git identity files; never execute worktree Git configuration."""
+    import re
+    git = worktree / '.git'
+    if not git.is_dir() or git.is_symlink():
+        raise ExecutionBlocked('assigned Git directory cannot be attested')
+    def read(relative: str) -> str:
+        path = git / relative
+        for item in (path, *path.parents):
+            if item == git.parent: break
+            if item.is_symlink(): raise ExecutionBlocked('Git identity contains an alias')
+        if path.stat().st_nlink != 1: raise ExecutionBlocked('Git identity contains a hardlink')
+        if path.stat().st_size > 1024 * 1024: raise ExecutionBlocked('Git identity file exceeds limit')
+        return path.read_text().strip()
+    head = read('HEAD')
+    branch = None
+    if head.startswith('ref: '):
+        ref = head[5:]
+        if not re.fullmatch(r'refs/heads/[A-Za-z0-9._/-]+', ref) or '..' in ref or '//' in ref:
+            raise ExecutionBlocked('invalid assigned HEAD reference')
+        branch = ref[len('refs/heads/'):]
+        try: head = read(ref)
+        except FileNotFoundError:
+            head = ''
+            for line in read('packed-refs').splitlines():
+                fields = line.split()
+                if len(fields) == 2 and fields[1] == ref: head = fields[0]
+    if not re.fullmatch('[0-9a-f]{40}', head):
+        raise ExecutionBlocked('assigned HEAD cannot be attested')
+    return {'repo_head': head, 'repo_branch': branch}
+
+
 class ProjectBroker:
     def __init__(self, config: dict, project: dict):
         self.config = config
@@ -61,6 +93,10 @@ class ProjectBroker:
             return {'operator_intent': status['intent'], 'epoch': status['epoch'],
                     'source_sha': self.config['source_sha'], 'uid': self.project.uid,
                     'worktree': str(self.project.worktree),
+                    'production_ready': self.config.get('production_ready', False),
+                    'executables': [str(p) for p in self.project.executables],
+                    'authority': worktree_authority(self.project.worktree),
+                    'goal_revision': status['goal_revision'],
                     'enforcement_verified': self._verified(),
                     'enforcement_blocker': self._probe_blocker()}
         if packet == {'operation': 'probe'}:
@@ -90,6 +126,10 @@ class ProjectBroker:
             verify_installation(self.config)
             if not self._verified():
                 raise ExecutionBlocked('native enforcement has not been verified for this OS/runtime')
+            if 'request_fingerprint' in packet:
+                import re
+                if not isinstance(packet['request_fingerprint'], str) or not re.fullmatch('[0-9a-f]{64}', packet['request_fingerprint']):
+                    raise ExecutionBlocked('invalid original request fingerprint')
             request_id = packet.get('request_id', '')
             from .macos_execution import REQUEST_ID
             if not isinstance(request_id, str) or not REQUEST_ID.fullmatch(request_id):
@@ -110,6 +150,13 @@ class ProjectBroker:
                     raise ExecutionBlocked('operator authority changed before launch')
                 if not self.config.get('production_ready', False):
                     raise ExecutionBlocked('production entrypoint migration is incomplete')
+                if 'expected_head' in packet or 'expected_authority' in packet:
+                    actual = worktree_authority(self.project.worktree)
+                    expected = packet.get('expected_authority', {})
+                    if not isinstance(expected, dict) or any(key not in actual or actual[key] != value for key, value in expected.items()):
+                        raise ExecutionBlocked('assigned worktree authority changed before launch')
+                    if 'expected_head' in packet and packet['expected_head'] != actual['repo_head']:
+                        raise ExecutionBlocked('assigned worktree head changed before launch')
                 recovered = self.ledger.reserve(self.project.key, request_id, fingerprint)
                 if recovered is not None:
                     return recovered

@@ -285,7 +285,7 @@ class BrowserHardeningTests(unittest.TestCase):
 
     def test_daemon_executes_local_agent_when_browser_requires_auth(self):
         args = ["--repo", str(self.repo), "--control-worktree", str(self.root / "control"), "--policy", str(self.root / "policy.json"), "--state-dir", str(self.root / "state"), "--once"]
-        with patch.object(daemon, "runtime_layout", return_value=Mock(browser_enabled=True)), patch.object(daemon, "Agent") as agent, patch.object(daemon, "activate_project"), patch.object(daemon, "deactivate_project"), patch.object(daemon, "stop_if_unused"), patch.object(daemon, "ensure_browser_running", side_effect=browser.BrowserAuthRequired("expired")), patch.object(daemon.signal, "signal"):
+        with patch("do_again.supervisor.admission.require_active", return_value={"operator_intent":"active"}), patch.object(daemon, "runtime_layout", return_value=Mock(browser_enabled=True)), patch.object(daemon, "Agent") as agent, patch.object(daemon, "activate_project"), patch.object(daemon, "deactivate_project"), patch.object(daemon, "stop_if_unused"), patch.object(daemon, "ensure_browser_running", side_effect=browser.BrowserAuthRequired("expired")), patch.object(daemon.signal, "signal"):
             agent.return_value.run.return_value = 0
             self.assertEqual(daemon.main(args), 0)
         agent.return_value.run.assert_called_once_with(once=True)

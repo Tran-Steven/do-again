@@ -306,6 +306,8 @@ def _browser_monitor(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
+    from ..supervisor.admission import require_active
+    require_active(repo)
     state_dir = Path(args.state_dir).resolve()
     layout = runtime_layout(repo)
     browser_enabled = layout.browser_enabled

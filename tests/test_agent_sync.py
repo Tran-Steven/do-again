@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from do_again.core.executor import LocalExecutor
+
 import subprocess
 import tempfile
 import unittest
@@ -54,6 +56,7 @@ class AgentSyncTests(unittest.TestCase):
             remote="relay",
             policy_path=self.policy,
             state_dir=root / "state",
+            executor=LocalExecutor(repo=self.seed, policy_path=self.policy, state_dir=root / "state"),
         )
 
     def commands(self, spy):
