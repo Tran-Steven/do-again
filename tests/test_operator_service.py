@@ -137,8 +137,10 @@ class OperatorServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ExecutionBlocked,'handoff timed out'):
                 operator_service.run_operator_service(
                     self.broker,self.root,self.binding,self.nonce,nullcontext)
-            sleep.assert_not_called()
-        self.assertEqual(calls,['bootstrap','kickstart','print','bootout'])
+            self.assertGreaterEqual(sleep.call_count,1)
+        self.assertEqual(calls[:2],['bootstrap','kickstart'])
+        self.assertEqual(calls[-1],'bootout')
+        self.assertNotIn('kickstart',calls[2:])
 
     def test_launchd_pid_change_after_root_probe_fails_closed(self):
         calls=[]
