@@ -38,7 +38,8 @@ class WorkerProbeTests(unittest.TestCase):
             return {'returncode':result.returncode,'stdout':result.stdout,'stderr':result.stderr,'timed_out':False}
         from do_again.supervisor.qualification_control import FixtureControlRepository
         live=FixtureControlRepository()
-        targets=[('do_again.supervisor.control_history.api_for',{'return_value':live}),('do_again.supervisor.worker_probe.EXECUTION_ROOT',{'new':self.root/'execution'}),
+        targets=[('do_again.supervisor.operator_probe.run_operator_loop',{'return_value':{'controller_uid':501,'tasks':3}}),
+            ('do_again.supervisor.control_history.api_for',{'return_value':live}),('do_again.supervisor.worker_probe.EXECUTION_ROOT',{'new':self.root/'execution'}),
             ('do_again.supervisor.worker_probe.os.chown',{}),
             ('do_again.supervisor.worker_probe.MacOSProcesses',{}),
             ('do_again.supervisor.capability_probe.qualification_gate',{'return_value':self.before}),
@@ -53,7 +54,7 @@ class WorkerProbeTests(unittest.TestCase):
 
     def test_tasks_restart_uncertainty_pause_and_qualification_replay(self):
         result=qualify_worker(self.broker)
-        self.assertTrue(result['verified']);self.assertEqual(result['tasks'],3)
+        self.assertTrue(result['verified']);self.assertEqual(result['tasks'],6)
         self.assertEqual(len(self.calls),3)
         self.assertEqual(result['browser_delivery'],'not_measured')
         self.assertEqual(qualify_worker(self.broker),result)

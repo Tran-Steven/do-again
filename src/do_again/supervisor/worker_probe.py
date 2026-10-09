@@ -108,6 +108,8 @@ def qualify_worker(broker):
         if (len(executions)!=3 or len(receipts)!=3 or any(r['state']!='succeeded' for r in receipts)
                 or not (work/'README.md').is_file()):
             raise ExecutionBlocked('native worker task or restart evidence differs')
+        from .operator_probe import run_operator_loop
+        operator_proof=run_operator_loop(broker,private,root,control,state,policy,remote,rpc,guard,nonce)
         # Simulate a lost control-ref response. Only read-only reconciliation
         # may resolve the original effect; a restart cannot send it again.
         packet={'operation':'control_publish','request_id':'worker-uncertain-'+nonce,'epoch':1,
@@ -132,7 +134,7 @@ def qualify_worker(broker):
                 or qualification_gate(broker)!=before or worktree_authority(work)['repo_head']!=atomic_head):
             raise ExecutionBlocked('qualification changed live authority or left unresolved execution')
         result={'verified':True,'identity':identity,'execution_uid':broker.project.uid,
-            'tasks':3,'native_execution':True,'restart_without_reexecution':True,
+            'tasks':6,'root_agent_tasks':3,'operator_agent':operator_proof,'native_execution':True,'restart_without_reexecution':True,
             'control_transport':'in_memory_fixture','live_control_read_only':live_control,
             'uncertain_control_reconciled_read_only':True,
             'pause_denied_control_effect':True,'live_authority_unchanged':True,

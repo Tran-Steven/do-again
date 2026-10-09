@@ -238,8 +238,14 @@ withdrawal and proves absence while retaining effect journals. Runtime rollback
 and live service recovery remain unqualified; withdrawal is the safe maintenance
 fallback, not permission to restore old effect state.
 
-`qualify-worker` runs three fixed native-confined synthetic tasks through the
-installed Agent and broker, then restarts the Agent and verifies no reexecution.
+`qualify-worker` first runs three fixed native-confined synthetic tasks through
+the installed Agent and broker. It then runs three additional tasks with the
+controller under the actual operator identity, using an authenticated root-owned
+Unix socket. Each new request is queued only after the preceding receipt,
+measuring unattended request intake and a bounded handoff. Restart verifies no
+reexecution. The root-only binding fixes project, source, policy and socket paths;
+the fixture endpoint accepts only its exact execution packets. The production
+configuration remains closed and cannot enable this qualification entrypoint.
 The approved live control head/tree are inspected read-only through the trusted
 GitHub capability; execution control history uses an in-memory Git-data fixture, including a lost response,
 read-only reconciliation and pause rejection. This does not start a production
