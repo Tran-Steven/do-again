@@ -124,6 +124,22 @@ class GitCapabilityTests(unittest.TestCase):
         self.assertNotIn('refs/replace/', (tx.metadata / 'packed-refs').read_text())
         tx.check_head(self.head)
 
+    @unittest.skipUnless(os.name=='posix','native qualification uses POSIX ownership')
+    def test_escape_evidence_does_not_contaminate_allowed_git_proof(self):
+        from do_again.supervisor.macos_probe import git_proof_directories
+        from do_again.supervisor.macos_execution import profile, ProjectExecution
+        old = self.root / 'escape-scratch';old.mkdir()
+        sentinel = self.root / 'protected';sentinel.write_text('unchanged')
+        (old / 'symlink-proof').symlink_to(sentinel)
+        scratch, cache = git_proof_directories(self.root, os.getuid(), os.getgid())
+        project = ProjectExecution(self.repo, 401, 401, '_doagain_da', self.repo, (self.git,))
+        with self.assertRaises(ExecutionBlocked):
+            profile(project, old, cache)
+        plan = profile(project, scratch, cache)
+        self.assertIn(str(scratch), plan)
+        self.assertTrue((old / 'symlink-proof').is_symlink())
+        self.assertEqual(sentinel.read_text(), 'unchanged')
+
     def test_native_probe_missing_git_fails_closed_without_launch(self):
         from do_again.supervisor.macos_probe import verify_native_git
         from unittest.mock import Mock, patch

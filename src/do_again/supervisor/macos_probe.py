@@ -119,7 +119,8 @@ print(json.dumps(result),flush=True)
         from .macos_execution import MacOSProcesses
         if MacOSProcesses().owned(project.uid):
             raise ExecutionBlocked('detached execution descendants survived proof')
-        git_evidence = verify_native_git(config, project, scratch, cache, nonce, start_guard=start_guard)
+        git_scratch, git_cache = git_proof_directories(root, project.uid, project.gid)
+        git_evidence = verify_native_git(config, project, git_scratch, git_cache, nonce, start_guard=start_guard)
         result['git_transaction'] = True
         return {'verified': True, 'git': git_evidence, 'checks': sorted(result), 'detached_descendants_drained': True,
                 'execution_uid': project.uid, 'fixture': label}
@@ -129,6 +130,17 @@ print(json.dumps(result),flush=True)
         launchctl('bootout', target)
         # Preserve proof work and failures for inspection; no synthetic chat,
         # real application, other project, or user browser is mutated.
+
+
+def git_proof_directories(root: Path, uid: int, gid: int) -> tuple[Path, Path]:
+    # Preserve escape-test evidence, including forbidden aliases, in the original
+    # scratch. Allowed-work qualification gets fresh roots rather than weakening
+    # the execution profile's alias checks or deleting diagnostic evidence.
+    paths = root / 'git-scratch', root / 'git-cache'
+    for path in paths:
+        path.mkdir(mode=0o700)
+        os.chown(path, uid, gid)
+    return paths
 
 
 def verify_native_git(config: dict, project, scratch: Path, cache: Path, nonce: str, *, start_guard) -> dict:
