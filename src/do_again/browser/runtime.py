@@ -854,10 +854,10 @@ return 'ready';
         # absence of composer clearing never permits a fallback submission.
         dispatch_started = True
         if before_dispatch is not None:
-            # A failed/crashed durable commit is uncertain even when Enter
+            # A failed/crashed durable commit is uncertain even when Send
             # may never occur. Never permit a fallback after this boundary.
             before_dispatch()
-        cdp.press_enter(target)
+        cdp.click_send(target)
         accepted = False
         for _ in range(20):
             time.sleep(0.1)
@@ -869,7 +869,7 @@ return 'ready';
                 break
         if not accepted:
             raise BrowserSubmissionUncertain(
-                "ChatGPT did not confirm submission after the single Enter gesture; "
+                "ChatGPT did not confirm submission after the single Send gesture; "
                 "delivery outcome must be reconciled before another submission"
             )
 
@@ -2000,11 +2000,14 @@ def stop_if_unused() -> bool:
 
 
 @_project_operation
-def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispatch: Any = None) -> dict[str, Any]:
+def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispatch: Any = None, binding_guard: dict | None = None) -> dict[str, Any]:
     if not receipts:
         return {"response": "nothing_to_deliver", "chat_url": ""}
 
     record = project_record(repo)
+    if binding_guard is not None and (record.get('chat_url')!=binding_guard.get('chat_url')
+            or binding_identity(record)!=binding_guard.get('binding_identity')):
+        raise BrowserSubmissionUncertain('sealed canary conversation binding changed')
     chat_url = str(record.get("chat_url") or "")
     if not chat_url:
         raise BrowserError("project has no bound automation chat; run do-again setup")
@@ -2056,6 +2059,8 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
         target = cdp.create_target(port, chat_url, background=True)
 
     if _rollover_needed(target):
+        if binding_guard is not None:
+            raise BrowserSubmissionUncertain('sealed canary cannot authorize conversation rollover')
         if _assistant_snapshot(target).get("busy"):
             raise BrowserError(
                 "rollover needed while ChatGPT is still busy; retrying later"
@@ -2081,6 +2086,9 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
 
     def commit_dispatch():
         bound=project_record(repo)
+        if binding_guard is not None and (bound.get('chat_url')!=binding_guard.get('chat_url')
+                or binding_identity(bound)!=binding_guard.get('binding_identity')):
+            raise BrowserSubmissionUncertain('sealed canary binding changed before dispatch')
         bound_url=str(bound.get('chat_url') or '')
         conversation=_chat_id(target.url)
         if not conversation or _chat_id(bound_url)!=conversation:
@@ -2104,6 +2112,8 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
         # Never create a new chat or resend after an unverified CDP submit.
         raise
     except BrowserError:
+        if binding_guard is not None:
+            raise  # A sealed canary never admits an implicit replacement chat.
         warning = _context_limit_warning(target)
         if not warning or _assistant_snapshot(target).get("busy"):
             raise

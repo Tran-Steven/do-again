@@ -11,6 +11,39 @@ from do_again.browser.errors import BrowserError, BrowserSubmissionUncertain
 
 
 class OneGestureDeliveryTests(unittest.TestCase):
+    def test_sealed_binding_blocks_both_rollover_paths(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ,{'DO_AGAIN_HOME':tmp+'/home'}):
+            repo=Path(tmp)/'repo';repo.mkdir()
+            record=browser.register_project(repo,chat_url=self.target.url)
+            guard={'chat_url':record['chat_url'],'binding_identity':browser.binding_identity(record)}
+            with patch.object(browser,'ensure_browser_running',return_value={'port':9224}), \
+                 patch.object(browser,'_find_chatgpt_target',return_value=self.target), \
+                 patch.object(browser,'wait_for_authenticated',return_value=(self.target,{})), \
+                 patch.object(browser,'_assistant_snapshot',return_value={'busy':False}), \
+                 patch.object(browser,'_page_contains',return_value=False), \
+                 patch.object(browser,'_context_limit_warning',return_value='context limit'), \
+                 patch.object(browser,'_rollover_project_chat') as rollover, \
+                 patch.object(browser,'send_message',side_effect=BrowserError('pre-dispatch')) as send:
+                with patch.object(browser,'_rollover_needed',return_value=True):
+                    with self.assertRaises(BrowserSubmissionUncertain):
+                        browser.notify_receipts(repo,[{'request_id':'synthetic','state':'succeeded'}],binding_guard=guard)
+                    send.assert_not_called()
+                with patch.object(browser,'_rollover_needed',return_value=False):
+                    with self.assertRaises(BrowserError):
+                        browser.notify_receipts(repo,[{'request_id':'synthetic','state':'succeeded'}],binding_guard=guard)
+                rollover.assert_not_called()
+
+    def test_explicit_send_uses_one_click_and_never_enter(self):
+        with patch.object(cdp,'evaluate',return_value='clicked') as evaluate, patch.object(cdp,'press_enter') as enter:
+            cdp.click_send(self.target)
+            evaluate.assert_called_once()
+            self.assertIn('buttons[0].click()',evaluate.call_args.args[1])
+            self.assertTrue(evaluate.call_args.kwargs['user_gesture'])
+            enter.assert_not_called()
+        with patch.object(cdp,'evaluate',return_value='send_unavailable'), patch.object(cdp,'press_enter') as enter:
+            with self.assertRaises(BrowserError):cdp.click_send(self.target)
+            enter.assert_not_called()
+
     def test_target_lookup_cannot_match_a_different_conversation_prefix(self):
         wrong=cdp.Target('wrong','https://chatgpt.com/c/abc-other','','ws://127.0.0.1/wrong')
         right=cdp.Target('right','https://chatgpt.com/c/abc?model=fixture','','ws://127.0.0.1/right')
@@ -31,7 +64,7 @@ class OneGestureDeliveryTests(unittest.TestCase):
         stack.enter_context(patch.object(browser.time, "sleep"))
         evaluate = stack.enter_context(patch.object(cdp, "evaluate", side_effect=["ready"] + [False]*20))
         insert = stack.enter_context(patch.object(cdp, "insert_text"))
-        enter = stack.enter_context(patch.object(cdp, "press_enter"))
+        enter = stack.enter_context(patch.object(cdp, "click_send"))
         return evaluate, insert, enter
 
     def test_missing_acceptance_never_clicks_or_sends_again(self):
@@ -58,7 +91,7 @@ class OneGestureDeliveryTests(unittest.TestCase):
 
     def test_timeout_during_single_gesture_is_uncertain(self):
         _, _, enter = self.mocks()
-        enter.side_effect = cdp.CdpTimeoutError("Enter timeout")
+        enter.side_effect = cdp.CdpTimeoutError("Send timeout")
         with self.assertRaises(BrowserSubmissionUncertain):
             browser.send_message(self.target, "synthetic", wait_for_response=False)
         enter.assert_called_once()

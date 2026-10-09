@@ -23,7 +23,7 @@ class BrokerExecutor:
         if operation not in self.policy.get('allowed_operations', []):
             raise OperatorError(f'operation is not allowed: {operation}')
         before = rpc(self.repo, {'operation': 'status'})
-        if before.get('operator_intent') != 'active' or before.get('production_ready') is not True:
+        if before.get('operator_intent') != 'active' or (before.get('production_ready') is not True and before.get('canary_authorized') is not True):
             raise OperatorError('operator authority or production migration blocks execution')
         if before.get('enforcement_verified') is not True:
             raise OperatorError('native enforcement is not verified')

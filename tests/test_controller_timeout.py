@@ -35,7 +35,7 @@ class ControllerTimeoutTests(unittest.TestCase):
             patch.object(browser, "_context_limit_warning", return_value=""),
             patch.object(cdp, "evaluate", side_effect=["ready", cdp.CdpTimeoutError("CDP Runtime.evaluate response timed out")]) as evaluate,
             patch.object(cdp, "insert_text") as insert,
-            patch.object(cdp, "press_enter") as enter,
+            patch.object(cdp, "click_send") as enter,
             patch.object(browser.time, "sleep"),
         ):
             with self.assertRaisesRegex(BrowserSubmissionUncertain, "outcome is uncertain"):
@@ -53,7 +53,7 @@ class ControllerTimeoutTests(unittest.TestCase):
             patch.object(browser, "_context_limit_warning", return_value=""),
             patch.object(cdp, "evaluate", side_effect=outcomes) as evaluate,
             patch.object(cdp, "insert_text") as insert,
-            patch.object(cdp, "press_enter") as enter,
+            patch.object(cdp, "click_send") as enter,
             patch.object(browser.time, "sleep"),
         ):
             with self.assertRaises(BrowserSubmissionUncertain):
@@ -68,7 +68,7 @@ class ControllerTimeoutTests(unittest.TestCase):
             patch.object(browser,"_context_limit_warning",return_value=""),
             patch.object(cdp,"evaluate",side_effect=["ready"]+[False]*20+["no_button"]) as evaluate,
             patch.object(cdp,"insert_text") as insert,
-            patch.object(cdp,"press_enter") as enter,
+            patch.object(cdp,"click_send") as enter,
             patch.object(browser.time,"sleep"),
         ):
             with self.assertRaisesRegex(BrowserSubmissionUncertain,"delivery outcome must be reconciled"):

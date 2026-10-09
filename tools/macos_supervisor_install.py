@@ -173,6 +173,10 @@ def provision_worktree(config, project, current):
 
 def verify_worker_quiescence(config):
     """A maintenance runtime cutover never replaces code beneath a live worker."""
+    if config.get('live_canary') is not None:
+        from do_again.supervisor.live_canary import scope
+        _,_,canary=scope(config)
+        config=dict(config,projects=[*config['projects'],canary])
     for project in config['projects']:
         journal=ROOT/'state'/project['key']/'worker-deployment.json'
         record=None
@@ -235,6 +239,7 @@ def preview_cutover(config, registry, live):
             inventory=MacOSProcesses()
             if any(inventory.owned(p['uid']) for p in config['projects']):
                 raise RuntimeError('dedicated execution still active; cutover deferred')
+            verify_worker_quiescence(old)
             verify_worker_quiescence(config)
             if live:
                 run(['/bin/launchctl','bootout','system/'+LABEL])
@@ -361,6 +366,26 @@ def install(stage, *, recovery=False):
                 if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
                     raise RuntimeError('existing authority admits work; upgrade deferred')
         for project in config['projects']:provision_worktree(config,project,current)
+        if config.get('live_canary') is not None:
+            from do_again.supervisor.live_canary import scope
+            grant,_,canary=scope(config)
+            repo=Path(canary['repo']);repo.mkdir(parents=True,exist_ok=True,mode=0o700)
+            if repo.is_symlink() or any(repo.iterdir()):raise RuntimeError('canary identity directory is not empty and isolated')
+            os.chown(repo,config['operator_uid'],config['operator_gid'])
+            provision_worktree(config,canary,current)
+            registry.set_intent(repo,'maintenance',goal_revision=canary['goal_revision'])
+            state=ROOT/'state'/canary['key'];secure_directory(state,0o700)
+            parent=next(p for p in config['projects'] if p['account']=='_doagain_da')
+            token=ROOT/'state'/parent['key']/'github-token'
+            if token.is_symlink() or token.stat().st_uid!=0 or token.stat().st_nlink!=1 or token.stat().st_mode&0o077:
+                raise RuntimeError('canary requires the existing protected Do Again repository credential')
+            with (state/'github-token').open('x') as stream:stream.write(token.read_text())
+            (state/'github-token').chmod(0o600)
+            base=Path(config['operator_home'])/'.do_again/projects'/canary['key'][:12]
+            for path in (base,base/'state'):
+                if path.exists():raise RuntimeError('existing canary state requires reconciliation; no replacement')
+                path.mkdir(mode=0o700);os.chown(path,config['operator_uid'],config['operator_gid'])
+
         definition={'Label':LABEL,'ProgramArguments':[config['python'],'-I','-S','-B',str(current/'bootstrap.py')],
                     'UserName':'root','RunAtLoad':True,'KeepAlive':{'SuccessfulExit':False},
                     'WorkingDirectory':str(current),'EnvironmentVariables':{'PATH':'/usr/bin:/bin'},

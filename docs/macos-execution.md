@@ -425,3 +425,48 @@ the observation separately from engineering progress and browser acknowledgment.
 The installed runtime remains unchanged and production stays disabled. These
 regressions do not establish a live canary, authorize jobpipe execution, or
 start acceptance windows.
+
+
+## Restricted live autonomous canary
+
+Production admission remains disabled. An optional immutable `live_canary` grant
+permits one dedicated sealed worker to run two synthetic tasks against a fresh
+engineering worktree and one exact ChatGPT conversation. The grant identifies
+a 24-hex nonce, exact public Do Again baseline, parent maintenance epoch,
+conversation URL and binding identity. Prepare with `--canary-grant`; installing
+this new protected runtime still requires separate administrator authorization.
+Do not retrofit the grant into a running installation.
+
+The derived child scope shares Do Again's existing nonlogin execution identity
+but has its own native worktree, journal, control branch and admission fence.
+It does not activate either original project. Parent pause or epoch change
+revokes child admission under the parent fence. Authorization expires after two
+hours, cannot be reactivated, and allows only fixed edit/test/commit/publication/CI
+request IDs for tasks 1 and 2. Publication contains exactly two nonce-named
+regular synthetic files; workflow changes and unrelated files are rejected.
+Dependencies, arbitrary broker capabilities and production authority are absent.
+The existing repository CI executes on the worker-created draft PR.
+
+Stage the child service, qualify only its new native scope, activate the grant,
+and start the immutable worker. The worker delivers the objective through the
+normal durable browser outbox and processes normal control requests using the
+authenticated broker. Task 2 is withheld until task 1's exact publication head
+has successful CI and its original receipt has visible user-message evidence
+and exact assistant acknowledgment in the sealed conversation binding.
+Completion withdraws child admission; original Do Again and jobpipe remain in
+maintenance. Fixture tests do not establish live acceptance.
+
+`restart-canary` permits one guarded launchd restart after all outstanding effects
+have reconciled. It checks sealed source, epoch, plist, process birth identity
+and worker registration, and records the restart before its single gesture.
+Lost responses cannot cause a second restart. Startup reconciles durable broker
+intents read-only; terminal receipt notifications recover without reexecuting
+the request. Reconciled notification reservations cannot enqueue another send.
+Browser submissions use one explicit Send gesture because the current composer
+can interpret Enter as a newline. Missing confirmation remains uncertain; there
+is no fallback click, replay, implicit conversation rollover or binding change.
+
+Before reporting success, retain real broker execution IDs, protected receipts,
+worker-created draft PRs, exact-head CI, original conversation delivery and
+acknowledgment evidence, task-2 admission evidence and restart/pause observations.
+No canary result enables production or starts a 24-hour jobpipe run.

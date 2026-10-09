@@ -42,9 +42,10 @@ def api_for(broker):
 
 
 def gate(broker,epoch):
+    from .live_canary import effect_authorized
     status=broker.registry.status(broker.project.repo)
     if (type(epoch) is not int or epoch<1 or status['epoch']!=epoch or status['intent']!='active'
-            or broker.config.get('production_ready') is not True or not broker._verified()
+            or not effect_authorized(broker) or not broker._verified()
             or not status.get('goal_revision')):
         raise ExecutionBlocked('control history admission is closed')
 
@@ -110,10 +111,15 @@ def sync_control(broker,packet,*,api=None):
             head,commit,entries=snapshot(api)
             broker.control_cache=(time.monotonic(),head,entries,binding)
         else:_,head,entries,_=cached
+        if getattr(broker,'canary',None) is not None:
+            entries=canary_entries(broker,entries)
         changed=[path for path,sha in entries.items() if known.get(path)!=sha]
         files={};used=0
         for path in sorted(changed)[:16]:
-            value=read_json_blob(api,entries[path]);size=len(canonical_json(value))
+            value=read_json_blob(api,entries[path])
+            if getattr(broker,'canary',None) is not None and '/requests/' in path:
+                broker.canary.request(value,path)
+            size=len(canonical_json(value))
             if files and used+size>MAX_JSON:break
             used+=size;files[path]={'sha':entries[path],'value':value}
         return {'head':head,'files':files,'removed':sorted(set(known)-set(entries)),
@@ -216,3 +222,15 @@ def publish_control(broker,packet,*,api=None):
         broker.ledger.finish(broker.project.key,packet['request_id'],result)
         broker.control_cache=None
         return result
+
+
+def canary_entries(broker,entries):
+    result={}
+    for path,sha in entries.items():
+        if '/requests/' in path:
+            try:
+                task,stage=broker.canary.task(path.rsplit('/',1)[1][:-5])
+                if task==2:broker.canary.second_ready()
+            except (ExecutionBlocked,OSError,ValueError,KeyError):continue
+        result[path]=sha
+    return result

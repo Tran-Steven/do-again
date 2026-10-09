@@ -75,11 +75,11 @@ class ContinuationOutboxTests(unittest.TestCase):
         self.assertEqual(daemon._pending_outbox(self.state),[])
 
     def test_reservation_crash_before_queue_does_not_replay(self):
-        original = daemon._queue_receipt
-        with patch.object(daemon,'_queue_receipt',side_effect=OSError('injected queue failure')):
+        original = daemon._queue_receipt_locked
+        with patch.object(daemon,'_queue_receipt_locked',side_effect=OSError('injected queue failure')):
             with self.assertRaises(OSError):
                 self.enqueue()
-        with patch.object(daemon,'_queue_receipt',wraps=original) as create:
+        with patch.object(daemon,'_queue_receipt_locked',wraps=original) as create:
             with self.assertRaises(BrowserSubmissionUncertain):
                 self.enqueue()
             create.assert_not_called()

@@ -33,6 +33,40 @@ class WorkerServiceTests(unittest.TestCase):
             ('do_again.supervisor.macos_server.verify_installation',{})]:
             p=patch(target,**kwargs);p.start();self.addCleanup(p.stop)
 
+    def test_canary_restart_is_one_owned_gesture_and_never_replays(self):
+        self.broker.canary=SimpleNamespace(check=lambda:None)
+        self.broker.config['production_ready']=False
+        label,spec=service.service_spec(self.broker,2)
+        self.target.write_bytes(plistlib.dumps(spec))
+        self.record['phase']='running'
+        (self.state/'worker-deployment.json').write_text(json.dumps(self.record))
+        identity=[123,501,99,1]
+        (self.state/'worker-instance.json').write_text(json.dumps({'epoch':2,'pid':123,'identity':identity}))
+        with patch('do_again.supervisor.macos_execution.MacOSProcesses.identity',return_value=tuple(identity)), \
+             patch.object(service,'verified_worker_pid',return_value=123), \
+             patch.object(service,'launchctl',return_value=SimpleNamespace(returncode=0)) as effect:
+            result=service.restart_canary(self.broker)
+            self.assertFalse(result['production_ready']);self.assertFalse(result['replay'])
+            effect.assert_called_once_with(self.broker,'kickstart','-k',f'gui/501/{label}')
+            with self.assertRaises(ExecutionBlocked):service.restart_canary(self.broker)
+            self.assertEqual(effect.call_count,1)
+
+    def test_canary_restart_rejects_pending_effects_and_pid_reuse(self):
+        self.broker.canary=SimpleNamespace(check=lambda:None)
+        self.broker.config['production_ready']=False
+        self.broker.ledger.pending=lambda key:['uncertain']
+        with patch.object(service,'launchctl') as effect:
+            with self.assertRaises(ExecutionBlocked):service.restart_canary(self.broker)
+            effect.assert_not_called()
+        self.broker.ledger.pending=lambda key:[]
+        _,spec=service.service_spec(self.broker,2);self.target.write_bytes(plistlib.dumps(spec))
+        self.record['phase']='running';(self.state/'worker-deployment.json').write_text(json.dumps(self.record))
+        (self.state/'worker-instance.json').write_text(json.dumps({'epoch':2,'pid':123,'identity':[123,501,99,1]}))
+        with patch('do_again.supervisor.macos_execution.MacOSProcesses.identity',return_value=(123,501,100,1)), \
+             patch.object(service,'launchctl') as effect:
+            with self.assertRaises(ExecutionBlocked):service.restart_canary(self.broker)
+            effect.assert_not_called()
+
     def test_staging_writes_actual_exclusive_plist_and_refuses_pending_alias(self):
         self.status['intent']='maintenance';self.status['epoch']=1
         self.target.unlink();(self.state/'worker-deployment.json').unlink()

@@ -380,3 +380,16 @@ def press_enter(target: Target) -> None:
         },
         timeout=10.0,
     )
+
+
+def click_send(target: Target) -> None:
+    """One explicit submit gesture; never follow it with Enter or another click."""
+    result = evaluate(target, r"""(() => {
+const visible = el => { const r=el.getBoundingClientRect(); const s=getComputedStyle(el);
+  return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden'; };
+const buttons=Array.from(document.querySelectorAll('button[data-testid="send-button"],button[aria-label="Send"],button[aria-label="Send prompt"]')).filter(visible);
+if(buttons.length!==1 || buttons[0].disabled) return 'send_unavailable';
+buttons[0].click(); return 'clicked';
+})()""", timeout=10.0, user_gesture=True)
+    if result != 'clicked':
+        raise BrowserError('ChatGPT Send button was unavailable or ambiguous')

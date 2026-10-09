@@ -33,6 +33,8 @@ def browser_tick(broker,packet):
             from .worker_service import verified_worker_pid
             worker_pid=verified_worker_pid(broker,packet['epoch'])
             ci=ci_evidence(broker,base/'sealed-control')
+            if getattr(broker,'canary',None) is not None:
+                broker.canary.check_binding()
             broker.ledger.reserve(broker.project.key,packet['request_id'],fingerprint,
                 intent={'operation':'browser_tick','source_sha':broker.config['source_sha'],'repo':str(repo),
                         'epoch':packet['epoch']})
@@ -61,6 +63,7 @@ def browser_tick(broker,packet):
             if observed!=result:
                 raise ExecutionBlocked('browser stdout and durable terminal evidence differ')
             broker.ledger.finish(broker.project.key,packet['request_id'],result)
+            if getattr(broker,'canary',None) is not None:broker.canary.browser(result)
             return result
 
 
@@ -69,6 +72,23 @@ def ci_evidence(broker,control):
     from ..service.liveness import _latest_goal
     from .control_history import api_for
     from .macos_server import worktree_authority
+    if getattr(broker,'canary',None) is not None:
+        from .ci_observation import observe_ci
+        # Caller already holds broker.lock and the parent pause fence. The
+        # observation shares that ownership rather than recursively locking.
+        from contextlib import nullcontext
+        from types import SimpleNamespace
+        observing=SimpleNamespace(**broker.__dict__)
+        observing.lock=nullcontext();observing.admission=nullcontext
+        for task in (2,1):
+            rid=broker.canary.rid(task,'publish')
+            intent=broker.ledger.intent(broker.project.key,rid)
+            if intent:
+                if intent.get('head')!=worktree_authority(broker.project.worktree)['repo_head']:
+                    return {'state':'waiting','canary_nonce':broker.canary.grant['nonce']}
+                value=observe_ci(observing,{'operation':'ci_observe','request_id':rid})
+                return dict(value,canary_nonce=broker.canary.grant['nonce'],task=task,publication_request_id=rid)
+        return {'state':'waiting','canary_nonce':broker.canary.grant['nonce']}
     goal=_latest_goal(control)
     ci=goal.get('ci') if goal.get('goal_state')=='waiting_for_ci' else None
     if not isinstance(ci,dict):return {'state':'invalid','error':'no durable CI wait'}
@@ -114,8 +134,11 @@ def terminal_browser_evidence(broker, request_id):
     result=record.get('result')
     if (not isinstance(result,dict) or result.get('state')!='completed'
             or type(result.get('delivered')) is not int or not 0<=result['delivered']<=20
-            or set(result)-{'state','delivered','liveness','delivery_acknowledged','outbox_preserved'}):
+            or set(result)-{'state','delivered','liveness','delivery_acknowledged','outbox_preserved','acknowledgments'}):
         raise ExecutionBlocked('browser terminal result is invalid')
+    acks=result.get('acknowledgments',[])
+    if not isinstance(acks,list) or len(acks)>20 or any(not isinstance(ack,dict) for ack in acks):
+        raise ExecutionBlocked('browser acknowledgment evidence is invalid')
     return result
 
 
@@ -131,4 +154,5 @@ def reconcile_browser(broker,packet):
         result=terminal_browser_evidence(broker,packet['request_id'])
         if result is None:return {'state':'post_dispatch_uncertain','replay':False}
         broker.ledger.finish(broker.project.key,packet['request_id'],result)
+        if getattr(broker,'canary',None) is not None:broker.canary.browser(result)
         return dict(result,reconciled_read_only=True)

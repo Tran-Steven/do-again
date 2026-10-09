@@ -560,6 +560,9 @@ class Agent:
         return value if isinstance(value, dict) else None
 
     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:
+        if (value.get('state')=='terminal' and isinstance(value.get('receipt'),dict)
+                and self.receipt_callback is not None and 'notification_pending' not in value):
+            value=dict(value,notification_pending=True)
         atomic_json(self.ledger_path(request_id), value)
 
     def record_operator_progress(
@@ -666,6 +669,9 @@ class Agent:
             return
         try:
             self.receipt_callback(receipt)
+            local=self.local_ledger(str(receipt['request_id']))
+            if local and local.get('notification_pending') is True and local.get('receipt')==receipt:
+                self.write_ledger(str(receipt['request_id']),dict(local,notification_pending=False))
         except Exception as exc:
             atomic_json(
                 self.state_dir / "receipt_callback_error.json",
@@ -715,6 +721,9 @@ class Agent:
                 existing_receipt.get("request_fingerprint") or ""
             )
             if self._request_matches_fingerprint(raw, existing_fingerprint):
+                local=self.local_ledger(request_id)
+                if local and local.get('notification_pending') is True and local.get('receipt')==existing_receipt:
+                    self.notify_receipt(existing_receipt)
                 return False
             return self.publish_conflict(
                 request=raw,
@@ -732,6 +741,9 @@ class Agent:
                     existing_receipt.get("request_fingerprint") or ""
                 )
                 if self._request_matches_fingerprint(raw, existing_fingerprint):
+                    local=self.local_ledger(request_id)
+                    if local and local.get('notification_pending') is True and local.get('receipt')==existing_receipt:
+                        self.notify_receipt(existing_receipt)
                     return False
                 return self.publish_conflict(
                     request=raw,
@@ -755,6 +767,7 @@ class Agent:
                 stored_receipt = ledger.get("receipt")
                 if ledger_state == "terminal" and isinstance(stored_receipt, dict):
                     self.publish_receipt(stored_receipt)
+                    if ledger.get('notification_pending') is True:self.notify_receipt(stored_receipt)
                     return True
                 if ledger_state == "started":
                     started_at = str(

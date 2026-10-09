@@ -23,6 +23,7 @@ def read_credential(broker) -> str:
 
 
 def publish_via_broker(broker, packet: dict) -> dict:
+    from .live_canary import effect_authorized
     from .macos_server import verify_installation, worktree_authority
     if sys.platform != 'darwin' or os.geteuid() != 0:
         raise ExecutionBlocked('publication requires the immutable macOS broker')
@@ -46,7 +47,7 @@ def publish_via_broker(broker, packet: dict) -> dict:
             branch = 'do-again/task-' + hashlib.sha256((broker.project.key+':'+str(status.get('goal_revision'))).encode()).hexdigest()[:20]
             authority = worktree_authority(broker.project.worktree)
             if (status['intent']!='active' or status['epoch']!=packet['expected_epoch']
-                    or not status.get('goal_revision') or broker.config.get('production_ready') is not True
+                    or not status.get('goal_revision') or not effect_authorized(broker)
                     or not broker._verified() or authority != {'repo_head':packet['expected_head'],'repo_branch':branch}):
                 raise ExecutionBlocked('authority or broker-owned branch blocks publication')
             return branch
@@ -85,6 +86,7 @@ def publish_via_broker(broker, packet: dict) -> dict:
             export = json.loads(outcome['stdout'])
             if export['head'] != packet['expected_head']:raise ExecutionBlocked('exported commit changed')
             validate_publication_paths(export)
+            if getattr(broker,'canary',None) is not None:broker.canary.export(export)
         except Exception:
             result = {'operation':'git_publish','returncode':1,'state':'failed_pre_publication',
                       'error':'local publication preparation failed','source_sha':broker.config['source_sha']}

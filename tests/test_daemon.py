@@ -61,9 +61,10 @@ class BrowserOutboxTests(unittest.TestCase):
             second = {"request_id": "req-1", "state": "failed"}
             path = _queue_receipt(state, first)
             self.assertTrue(path.is_file())
-            _queue_receipt(state, second)
+            self.assertEqual(_queue_receipt(state,first),path)
+            with self.assertRaises(BrowserSubmissionUncertain):_queue_receipt(state, second)
             saved = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(saved["state"], "failed")
+            self.assertEqual(saved["state"], "succeeded")
             self.assertEqual(len(_pending_outbox(state)), 1)
 
     def test_failed_delivery_stays_queued_for_retry(self) -> None:

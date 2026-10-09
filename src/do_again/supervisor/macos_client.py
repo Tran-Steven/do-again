@@ -51,7 +51,7 @@ def _request(path: Path, packet: dict) -> dict:
 
 
 def worker_service_request(repo: Path,operation: str,*,epoch: int | None = None) -> dict:
-    if operation not in {'stage_worker','start_worker','withdraw_worker'}:
+    if operation not in {'stage_worker','start_worker','withdraw_worker','activate_canary','restart_canary'}:
         raise ExecutionBlocked('unknown worker lifecycle operation')
     packet={'operation':operation,'project':project_identity(repo)}
     if operation=='start_worker':packet['epoch']=epoch

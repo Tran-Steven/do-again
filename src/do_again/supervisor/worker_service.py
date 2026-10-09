@@ -20,7 +20,8 @@ def service_spec(broker,epoch):
     if name is None:raise ExecutionBlocked('worker service project is excluded')
     return label,{'Label':label,'ProgramArguments':[broker.config['python'],'-I','-S','-B',
         str(INSTALL_ROOT/'current/worker-bootstrap.py'),'--project',name,
-        '--expected-source',broker.config['source_sha'],'--expected-epoch',str(epoch)],
+        '--expected-source',broker.config['source_sha'],'--expected-epoch',str(epoch),
+        *(['--canary'] if getattr(broker,'canary',None) is not None else [])],
         'RunAtLoad':False,'KeepAlive':False,'ThrottleInterval':30,
         'WorkingDirectory':str(INSTALL_ROOT/'current'),
         'EnvironmentVariables':{'HOME':broker.config['operator_home'],'PATH':'/usr/bin:/bin'}}
@@ -208,3 +209,36 @@ def verified_worker_pid(broker,epoch):
         return pid
     except (OSError,ValueError,KeyError,TypeError):
         raise ExecutionBlocked('browser worker ownership evidence is invalid') from None
+
+
+def restart_canary(broker):
+    """One guarded service restart; no new task, authority, or effect replay."""
+    native_root()
+    if getattr(broker,'canary',None) is None:raise ExecutionBlocked('restart is limited to the sealed live canary')
+    from .macos_server import verify_installation
+    from .macos_execution import MacOSProcesses
+    with broker.lock,broker.admission():
+        status=broker.registry.status(broker.project.repo)
+        gate(broker,status['epoch']);verify_installation(broker.config)
+        if broker.ledger.pending(broker.project.key):raise ExecutionBlocked('uncertain effects must reconcile before restart')
+        record=json.loads((broker.state/'worker-deployment.json').read_text())
+        lease=json.loads((broker.state/'worker-instance.json').read_text())
+        label,spec=service_spec(broker,status['epoch']);target=AGENTS/(label+'.plist')
+        private_root_file(target)
+        if (record.get('phase')!='running' or record.get('source_sha')!=broker.config['source_sha']
+                or record.get('epoch')!=status['epoch'] or plistlib.loads(target.read_bytes())!=spec
+                or lease.get('epoch')!=status['epoch']):
+            raise ExecutionBlocked('canary restart service ownership differs')
+        observed=MacOSProcesses().identity(lease['pid'])
+        alive=observed is not None and observed[3]!=5
+        if alive and (list(observed)!=lease['identity'] or verified_worker_pid(broker,status['epoch'])!=lease['pid']):
+            raise ExecutionBlocked('canary restart kernel ownership differs')
+        journal=broker.state/'canary-restart.json'
+        if journal.exists():raise ExecutionBlocked('canary restart already reserved; inspect registration instead of retrying')
+        atomic_json(journal,{'state':'dispatch_started','source_sha':broker.config['source_sha'],
+                           'epoch':status['epoch'],'previous_identity':lease['identity']})
+        record['phase']='start_started';atomic_json(broker.state/'worker-deployment.json',record)
+        launchctl(broker,'kickstart',*(['-k'] if alive else []),f"gui/{broker.config['operator_uid']}/{label}")
+        atomic_json(journal,{'state':'started_unverified','source_sha':broker.config['source_sha'],
+                           'epoch':status['epoch'],'previous_identity':lease['identity']})
+        return {'state':'started_unverified','epoch':status['epoch'],'production_ready':False,'replay':False}

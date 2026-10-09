@@ -71,13 +71,30 @@ def _record_browser_state(
 
 
 def _queue_receipt(state_dir: Path, receipt: dict[str, Any]) -> Path:
+    with _file_lock(state_dir/'browser_delivery.lock',timeout=5.0):
+        return _queue_receipt_locked(state_dir,receipt)
+
+
+def _queue_receipt_locked(state_dir: Path, receipt: dict[str, Any]) -> Path:
     request_id = str(receipt.get("request_id") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,160}", request_id) or request_id in {".", ".."}:
         raise BrowserError("cannot queue browser receipt with invalid request_id")
     outbox = _browser_outbox_dir(state_dir)
     outbox.mkdir(parents=True, exist_ok=True)
     path = outbox / f"{request_id}.json"
+    reservation=state_dir/'browser_reservations'/path.name
+    if reservation.exists():
+        reserved=_read_outbox(reservation)
+        if reserved.get('item')!=receipt:raise BrowserSubmissionUncertain('receipt reservation payload conflicts')
+        if reserved.get('state')=='reconciled':return reservation
+        if not path.exists() and reserved.get('state')!='prepared':
+            raise BrowserSubmissionUncertain('receipt reservation lacks outbox evidence; no automatic replay')
+    if path.exists():
+        if _read_outbox(path)!=receipt:raise BrowserSubmissionUncertain('receipt payload conflicts')
+        return path
+    atomic_json(reservation,{'item':receipt,'state':'prepared'})
     atomic_json(path, receipt)
+    atomic_json(reservation,{'item':receipt,'state':'queued'})
     return path
 
 
@@ -107,7 +124,7 @@ def _queue_continuation(state_dir: Path, prompt: str, *, purpose: str, marker: s
                 raise BrowserSubmissionUncertain('continuation identity already binds a different payload')
             return path
         atomic_json(reservation, {'item': item, 'state': 'prepared'})
-        result = _queue_receipt(state_dir, item)
+        result = _queue_receipt_locked(state_dir, item)
         atomic_json(reservation, {'item': item, 'state': 'queued'})
         return result
 
@@ -129,9 +146,9 @@ def _read_outbox(path: Path) -> dict[str, Any]:
     return value
 
 
-def _drain_browser_outbox(repo: Path, state_dir: Path, *, daemon_pid: int | None = None) -> int:
+def _drain_browser_outbox(repo: Path, state_dir: Path, *, daemon_pid: int | None = None, binding_guard: dict | None = None) -> int:
     with _file_lock(state_dir / "browser_delivery.lock", timeout=600.0):
-        return _drain_browser_outbox_locked(repo, state_dir, daemon_pid=daemon_pid)
+        return _drain_browser_outbox_locked(repo, state_dir, daemon_pid=daemon_pid, binding_guard=binding_guard)
 
 
 def _uncertain_delivery_path(state_dir: Path) -> Path:
@@ -238,7 +255,11 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
     )
 
 
-def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int | None = None) -> int:
+def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int | None = None, binding_guard: dict | None = None) -> int:
+    if binding_guard is not None:
+        record=browser_runtime.project_record(repo)
+        if record.get('chat_url')!=binding_guard['chat_url'] or browser_runtime.binding_identity(record)!=binding_guard['binding_identity']:
+            raise BrowserSubmissionUncertain('sealed canary binding changed before browser work')
     activate_project(repo, daemon_pid=daemon_pid)
     ensure_browser_running(verify_auth=True)
 
@@ -286,7 +307,8 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
             raise BrowserSubmissionUncertain('receipt intent changed before dispatch; no automatic replay')
         atomic_json(_uncertain_delivery_path(state_dir),dict(original,**evidence))
     try:
-        outcome = notify_receipts(repo, receipts,before_dispatch=commit_dispatch)
+        options={'binding_guard':binding_guard} if binding_guard is not None else {}
+        outcome = notify_receipts(repo, receipts,before_dispatch=commit_dispatch,**options)
         if not isinstance(outcome, dict) or outcome.get("response") != "already_delivered":
             # A browser submitted result is just a click, not in-chat proof.
             raise BrowserSubmissionUncertain(

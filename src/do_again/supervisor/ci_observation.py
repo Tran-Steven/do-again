@@ -68,13 +68,15 @@ def observe_ci(broker, packet: dict) -> dict:
             raise ExecutionBlocked('CI status is unrecognized')
         if status == 'completed' and not isinstance(conclusion,str):
             raise ExecutionBlocked('completed CI lacks a conclusion')
-        return {'state':'terminal' if status=='completed' else 'waiting',
+        result = {'state':'terminal' if status=='completed' else 'waiting',
                 'returncode':int(status=='completed' and conclusion!='success'),
                 'repository':repository,'head_sha':head,'pull_request':number,
                 'run_id':run['id'],'run_attempt':run['run_attempt'],
                 'status':status,'conclusion':conclusion,
                 'url':'https://github.com/'+repository+'/actions/runs/'+str(run['id']),
                 'replay':False}
+        if getattr(broker,'canary',None) is not None:broker.canary.ci(result,packet['request_id'])
+        return result
 
 
 def validate_run(run, repository, head, branch, number):

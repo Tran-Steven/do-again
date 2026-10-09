@@ -124,8 +124,8 @@ const document={querySelectorAll:selector=>selector==='h1,h2,h3,h4,h5,h6'?[]:
                 self.assertEqual(browser.receipt_acknowledgment(object(), marker, token)['acknowledged'], expected)
 
     def test_dispatch_started_cannot_be_erased_by_a_busy_error(self):
-        self.path.unlink()
-        self.path = daemon._queue_receipt(self.state, {'request_id':'receipt-1','state':'succeeded'})
+        # Keep the original immutable queued item; this case injects a new
+        # dispatch failure, not deletion/recreation of an uncertain receipt.
         daemon._uncertain_delivery_path(self.state).unlink()
         def send(repo, receipts, *, before_dispatch):
             before_dispatch({key:self.intent[key] for key in

@@ -108,7 +108,7 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None):
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if git(source,'status','--porcelain'):raise ValueError('commit and validate supervisor source before preparation')
@@ -212,6 +212,24 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         status=legacy.status(Path(project['repo']))
         if status['intent'] != 'maintenance':raise ValueError('installation requires closed project admission')
         project['goal_revision']=status['goal_revision']
+    if canary_grant is not None:
+        grant_path=Path(canary_grant).resolve(strict=True)
+        if (Path(canary_grant).is_symlink() or grant_path.stat().st_uid!=uid
+                or grant_path.stat().st_nlink!=1 or grant_path.stat().st_mode&0o022):
+            raise ValueError('canary grant must be privately controlled by the operator')
+        config['live_canary']=json.loads(grant_path.read_text())
+        from do_again.supervisor.live_canary import scope
+        _,_,canary=scope(config)
+        # Only public Do Again main is copied as scaffold. The model creates
+        # the two synthetic files later through confined execution.
+        with tempfile.TemporaryDirectory() as tmp:
+            bare=Path(tmp)/'public.git'
+            subprocess.run(['git','init','--bare',str(bare)],check=True,capture_output=True)
+            subprocess.run(['git','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
+                '-c','credential.helper=','-C',str(bare),'fetch','--no-tags',
+                'https://github.com/Tran-Steven/do-again.git',
+                canary['source_sha']+':refs/heads/baseline'],check=True,capture_output=True)
+            git(bare,'bundle','create',str(payload/canary['bundle']),'refs/heads/baseline')
     (payload/'config.json').write_text(json.dumps(config,sort_keys=True,indent=2)+'\n')
     files={}
     for p in sorted(payload.rglob('*')):
@@ -265,6 +283,7 @@ if __name__=='__main__':
     parser.add_argument('--jobpipe-repo',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--dependency-lock',type=Path)
+    parser.add_argument('--canary-grant',type=Path)
     args=parser.parse_args()
     print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
-                             dependency_lock=args.dependency_lock),indent=2))
+                             dependency_lock=args.dependency_lock,canary_grant=args.canary_grant),indent=2))

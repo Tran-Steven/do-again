@@ -154,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Immutable Do Again operator worker")
     parser.add_argument("--project", choices=sorted(PROJECT_ACCOUNTS), required=True)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--canary", action="store_true")
     parser.add_argument("--expected-source")
     parser.add_argument("--expected-epoch",type=int)
     args = parser.parse_args(argv)
@@ -168,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
         raise OperatorError('worker operator group differs from the sealed identity')
     from .macos_server import verify_installation
     verify_installation(config)
+    if args.canary:
+        from .live_canary_worker import main as canary_main
+        return canary_main(config,args)
     project = next(
         (p for p in config.get("projects", []) if isinstance(p, dict)
          and p.get("account") == PROJECT_ACCOUNTS[args.project]),

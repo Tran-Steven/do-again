@@ -123,12 +123,15 @@ class ProjectBroker:
     def _dispatch(self, packet: dict, uid: int) -> dict:
         if uid != self.config['operator_uid']:
             raise ExecutionBlocked('peer is not the trusted operator identity')
+        if getattr(self,'canary',None) is not None:
+            self.canary.packet(packet)
         if packet == {'operation': 'status'}:
             status = self.registry.status(self.project.repo)
             return {'operator_intent': status['intent'], 'epoch': status['epoch'],
                     'source_sha': self.config['source_sha'], 'uid': self.project.uid,
                     'worktree': str(self.project.worktree),
                     'production_ready': self.config.get('production_ready', False),
+                    'canary_authorized': self._canary_authorized(),
                     'executables': [str(p) for p in self.project.executables],
                     'authority': worktree_authority(self.project.worktree),
                     'goal_revision': status['goal_revision'],
@@ -145,6 +148,10 @@ class ProjectBroker:
                 raise ExecutionBlocked('execution observation accepts original identity only')
             verify_installation(self.config)
             return self.ledger.observe_request(self.project.key,packet['request_id'],packet['request_fingerprint'])
+        if packet == {'operation':'canary_reconcile'}:
+            if getattr(self,'canary',None) is None:raise ExecutionBlocked('no sealed canary scope')
+            from .live_canary import reconcile
+            return reconcile(self)
         if packet.get('operation') == 'ci_observe':
             from .ci_observation import observe_ci
             return observe_ci(self,packet)
@@ -230,7 +237,8 @@ class ProjectBroker:
             with self.admission():
                 if self.registry.status(self.project.repo)['intent'] != 'active':
                     raise ExecutionBlocked('operator authority changed before launch')
-                if not self.config.get('production_ready', False):
+                from .live_canary import effect_authorized
+                if not effect_authorized(self):
                     raise ExecutionBlocked('production entrypoint migration is incomplete')
                 if 'expected_head' in packet or 'expected_authority' in packet:
                     actual = worktree_authority(self.project.worktree)
@@ -270,6 +278,9 @@ class ProjectBroker:
     @contextmanager
     def probe_admission(self):
         with self.admission():
+            child=getattr(self,'live_canary_child',None)
+            if child is not None and (child.registry.status(child.project.repo)['intent']=='active' or child.ledger.pending(child.project.key)):
+                raise ExecutionBlocked('live canary owns the dedicated execution identity')
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('operator intent changed before installation probe')
             yield
@@ -306,6 +317,13 @@ class ProjectBroker:
             finally:
                 temporary.unlink(missing_ok=True)
             return {'registered':True,'repository':project_config['github_repository']}
+
+    def _canary_authorized(self):
+        if getattr(self,'canary',None) is None:return False
+        try:
+            self.canary.check()
+            return True
+        except (ExecutionBlocked,OSError,ValueError,KeyError):return False
 
     def _probe_blocker(self) -> dict | None:
         try:
@@ -388,6 +406,13 @@ def serve_operator(config: dict, brokers: dict) -> None:
                         result=broker.operator_intent(packet['intent'])
                     elif set(packet)=={'operation','project','token'} and packet['operation']=='set_github_token':
                         result=broker.operator_github_token(packet['token'])
+                    elif set(packet)=={'operation','project'} and packet['operation']=='restart_canary':
+                        from .worker_service import restart_canary
+                        result=restart_canary(broker)
+                    elif set(packet)=={'operation','project'} and packet['operation']=='activate_canary':
+                        if getattr(broker,'canary',None) is None:raise ExecutionBlocked('project has no sealed canary scope')
+                        from .live_canary import activate
+                        result=activate(broker)
                     elif set(packet)=={'operation','project'} and packet['operation'] in {'stage_worker','withdraw_worker'}:
                         from .worker_service import stage_worker,withdraw_worker
                         result={'stage_worker':stage_worker,'withdraw_worker':withdraw_worker}[packet['operation']](broker)
@@ -411,8 +436,14 @@ def main() -> None:
     SOCKET_ROOT.mkdir(mode=0o755, parents=True, exist_ok=True)
     os.chmod(SOCKET_ROOT, 0o755)
     brokers={project['key']:ProjectBroker(config,project) for project in config['projects']}
+    projects=list(config['projects'])
+    if config.get('live_canary') is not None:
+        from .live_canary import create_broker
+        parent=next(b for b in brokers.values() if b.project.account=='_doagain_da')
+        child=create_broker(config,parent);brokers[child.project.key]=child
+        projects.append(next(p for p in child.config['projects']))
     threads = [threading.Thread(target=serve_project, args=(config,project,brokers[project['key']]))
-               for project in config['projects']]
+               for project in projects]
     threads.append(threading.Thread(target=serve_operator,args=(config,brokers)))
     for thread in threads:thread.start()
     for thread in threads:thread.join()

@@ -115,3 +115,37 @@ class BrokerReceiptRecoveryTests(unittest.TestCase):
         with patch.object(self.executor,'recover',side_effect=ExecutionBlocked('unavailable')):
             with self.assertRaises(ExecutionBlocked):agent.process_path(path)
         self.assertEqual(read_json(ledger)['state'],'started');self.assertEqual(published,[])
+
+    def test_crash_after_publication_recovers_pending_notification_without_execution(self):
+        from types import MethodType
+        from do_again.service.daemon import _queue_receipt,_pending_outbox
+        self.finish();agent,path,ledger,published,_=self.restarted_agent()
+        agent.state_dir=self.root/'operator-state';agent.state_dir.mkdir()
+        agent.ledger_path=lambda rid:ledger
+        agent.write_ledger=MethodType(Agent.write_ledger,agent)
+        agent.notify_receipt=MethodType(Agent.notify_receipt,agent)
+        notifications=[]
+        def notify(receipt):
+            notifications.append(receipt)
+            if len(notifications)==1:raise OSError('crash before queue')
+            _queue_receipt(agent.state_dir,receipt)
+        agent.receipt_callback=notify
+        agent.receipt_payload=lambda rid:published[0] if published else None
+        with patch.object(self.executor,'execute',side_effect=AssertionError('execution replay')):
+            self.assertTrue(agent.process_path(path))
+            self.assertTrue(read_json(ledger)['notification_pending'])
+            self.assertFalse(agent.process_path(path))
+            self.assertFalse(read_json(ledger)['notification_pending'])
+            self.assertFalse(agent.process_path(path))
+        self.assertEqual(len(notifications),2);self.assertEqual(len(_pending_outbox(agent.state_dir)),1)
+        self.assertEqual(notifications[0],notifications[1])
+
+    def test_recovered_notification_never_requeues_a_reconciled_delivery(self):
+        from do_again.service.daemon import _queue_receipt,_pending_outbox
+        state=self.root/'delivered-state';receipt={'request_id':'completed-receipt','state':'succeeded'}
+        path=_queue_receipt(state,receipt)
+        reservation=state/'browser_reservations'/path.name
+        value=read_json(reservation);atomic_json(reservation,dict(value,state='reconciled'))
+        path.unlink()
+        self.assertEqual(_queue_receipt(state,receipt),reservation)
+        self.assertEqual(_pending_outbox(state),[])
