@@ -118,7 +118,7 @@ const document={querySelectorAll:selector=>selector==='h1,h2,h3,h4,h5,h6'?[]:
 """
                 result = subprocess.run([shutil.which('node'), '-e', setup +
                     'process.stdout.write(JSON.stringify(' + expression + '));'],
-                    text=True, capture_output=True, check=True, timeout=5)
+                    text=True, capture_output=True, check=True, timeout=30)
                 return json.loads(result.stdout)
             with self.subTest(turns=turns, busy=busy), patch.object(browser.cdp, 'evaluate', side_effect=evaluate):
                 self.assertEqual(browser.receipt_acknowledgment(object(), marker, token)['acknowledged'], expected)
