@@ -26,6 +26,20 @@ class BrokerExecutionTests(unittest.TestCase):
                        'authority':{'repo_head':'a'*40,'repo_branch':'main'}}
         self.request = {'request_id':'request-0001','operation':'scratch_script','args':{'language':'python','content':'print(1)'},'expected':{'repo_head':'a'*40}}
 
+    def test_git_commit_is_a_typed_capability_with_no_model_selected_branch(self):
+        self.executor.policy['allowed_operations'].append('git_commit')
+        self.status['epoch']=7
+        request=self.request|{'operation':'git_commit','args':{'paths':['src/example.py'],'message':'fix example'}}
+        with patch('do_again.core.broker_executor.sys.platform','darwin'), patch('do_again.core.broker_executor.broker_request',side_effect=[self.status,{'state':'succeeded','returncode':0},self.status]) as broker:
+            self.executor.execute(request)
+        packet=broker.call_args_list[1].args[1]
+        self.assertEqual(packet['operation'],'git_commit')
+        self.assertEqual(packet['expected_epoch'],7)
+        self.assertEqual(packet['expected_head'],'a'*40)
+        self.assertNotIn('branch',packet);self.assertNotIn('argv',packet)
+        for extra in ({'branch':'main'},{'repo':'other'},{'argv':['git','push']},{'env':{}}):
+            with self.assertRaises(OperatorError):self.executor._packet(request|{'args':request['args']|extra},self.status)
+
     def test_agent_defaults_to_broker_without_local_executor(self):
         agent = Agent(repo=self.repo, control_worktree=self.repo, branch='operator-control', policy_path=self.policy, state_dir=self.repo/'state')
         self.assertIsInstance(agent.executor, BrokerExecutor)
