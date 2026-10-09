@@ -253,7 +253,7 @@ class RuntimeAttestationTests(unittest.TestCase):
             python=root/'python';python.write_bytes(b'fixed interpreter')
             original=Path.read_bytes
             def read(path):
-                return b'fixture sandbox' if str(path)=='/usr/bin/sandbox-exec' else original(path)
+                return b'fixture sandbox' if path==Path('/usr/bin/sandbox-exec') else original(path)
             with patch.object(macos_server,'INSTALL_ROOT',root), \
                     patch.object(macos_server.sys,'executable',str(python)), \
                     patch.object(Path,'read_bytes',read):
