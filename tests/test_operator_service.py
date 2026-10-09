@@ -67,3 +67,91 @@ class OperatorServiceTests(unittest.TestCase):
             with self.assertRaises(ExecutionBlocked):
                 operator_service.run_operator_service(self.broker,self.root,self.binding,self.nonce,nullcontext)
             effects.assert_not_called()
+
+
+    def test_root_xpcproxy_handoff_accepts_only_same_pid_and_birth(self):
+        calls=[]
+        def launch(broker,*args,**kwargs):
+            calls.append(args[0])
+            if args[0]=='kickstart':
+                (self.root/'trusted-state/agent/service.stdout').write_text(json.dumps({
+                    'controller_uid':501,'source_sha':'b'*40,'engine':'sealed_daemon','tasks':3}))
+            return SimpleNamespace(stdout=' pid = 123\n' if args[0]=='print' else '')
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.sleep'), \
+             patch('do_again.supervisor.worker_service.service_present',return_value=False), \
+             patch('do_again.supervisor.worker_service.launchctl',side_effect=launch), \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn') as withdrawal:
+            processes.return_value.identity.side_effect=[(0,10,20,1),(501,10,20,1)]
+            result=operator_service.run_operator_service(
+                self.broker,self.root,self.binding,self.nonce,nullcontext)
+            self.assertTrue(result['launchd_service'])
+            self.assertEqual(calls,['bootstrap','kickstart','print','print','bootout'])
+            withdrawal.assert_called_once_with(123,(501,10,20,1))
+        evidence=json.loads((self.root/'operator-service.json').read_text())
+        self.assertTrue(evidence['root_proxy_observed'])
+
+    def test_xpcproxy_changed_kernel_birth_fails_closed(self):
+        calls=[]
+        def launch(broker,*args,**kwargs):
+            calls.append(args[0])
+            return SimpleNamespace(stdout=' pid = 123\n')
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.sleep'), \
+             patch('do_again.supervisor.worker_service.service_present',return_value=False), \
+             patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
+            processes.return_value.identity.side_effect=[(0,10,20,1),(501,11,20,1)]
+            with self.assertRaisesRegex(ExecutionBlocked,'birth identity changed'):
+                operator_service.run_operator_service(
+                    self.broker,self.root,self.binding,self.nonce,nullcontext)
+        self.assertEqual(calls,['bootstrap','kickstart','print','print','bootout'])
+        self.assertEqual(json.loads((self.root/'operator-service.json').read_text())['phase'],'dispatch_started')
+
+    def test_unexpected_uid_fails_without_wait_or_second_start(self):
+        calls=[]
+        def launch(broker,*args,**kwargs):
+            calls.append(args[0])
+            return SimpleNamespace(stdout=' pid = 123\n')
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.sleep') as sleep, \
+             patch('do_again.supervisor.worker_service.service_present',return_value=False), \
+             patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
+            processes.return_value.identity.return_value=(502,10,20,1)
+            with self.assertRaisesRegex(ExecutionBlocked,'unexpected kernel UID'):
+                operator_service.run_operator_service(
+                    self.broker,self.root,self.binding,self.nonce,nullcontext)
+            sleep.assert_not_called()
+        self.assertEqual(calls,['bootstrap','kickstart','print','bootout'])
+
+    def test_root_xpcproxy_timeout_fails_closed(self):
+        calls=[]
+        def launch(broker,*args,**kwargs):
+            calls.append(args[0])
+            return SimpleNamespace(stdout=' pid = 123\n')
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.monotonic',side_effect=[0,4]), \
+             patch('do_again.supervisor.operator_service.time.sleep') as sleep, \
+             patch('do_again.supervisor.worker_service.service_present',return_value=False), \
+             patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
+            processes.return_value.identity.return_value=(0,10,20,1)
+            with self.assertRaisesRegex(ExecutionBlocked,'handoff timed out'):
+                operator_service.run_operator_service(
+                    self.broker,self.root,self.binding,self.nonce,nullcontext)
+            sleep.assert_not_called()
+        self.assertEqual(calls,['bootstrap','kickstart','print','bootout'])
+
+    def test_launchd_pid_change_after_root_probe_fails_closed(self):
+        calls=[]
+        pid_values=iter([123,124])
+        def launch(broker,*args,**kwargs):
+            calls.append(args[0])
+            return SimpleNamespace(stdout=(' pid = %s\n' % next(pid_values)) if args[0]=='print' else '')
+        with patch('do_again.supervisor.operator_service.MacOSProcesses') as processes, \
+             patch('do_again.supervisor.operator_service.time.sleep'), \
+             patch('do_again.supervisor.worker_service.service_present',return_value=False), \
+             patch('do_again.supervisor.worker_service.launchctl',side_effect=launch):
+            processes.return_value.identity.return_value=(0,10,20,1)
+            with self.assertRaisesRegex(ExecutionBlocked,'PID changed'):
+                operator_service.run_operator_service(
+                    self.broker,self.root,self.binding,self.nonce,nullcontext)
+        self.assertEqual(calls,['bootstrap','kickstart','print','print','bootout'])
