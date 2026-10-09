@@ -122,6 +122,7 @@ print(json.dumps(result),flush=True)
         git_scratch, git_cache = git_proof_directories(root, project.uid, project.gid)
         git_evidence = verify_native_git(config, project, git_scratch, git_cache, nonce, start_guard=start_guard)
         result['git_transaction'] = True
+        result['git_broker_promotion'] = True
         return {'verified': True, 'git': git_evidence, 'checks': sorted(result), 'detached_descendants_drained': True,
                 'execution_uid': project.uid, 'fixture': label}
     finally:
@@ -189,6 +190,67 @@ def verify_native_git(config: dict, project, scratch: Path, cache: Path, nonce: 
         raise ExecutionBlocked('native Git proof changed an unreserved path or authority')
     if MacOSProcesses().owned(project.uid):
         raise ExecutionBlocked('native Git descendants survived the transaction proof')
+    broker_evidence = verify_native_git_broker(config, project, fixture, scratch.parent, before,
+                                              nonce, start_guard=start_guard)
     return {'verified':True, 'base_sha':before, 'candidate_sha':head,
             'exact_paths':['selected.txt'], 'authoritative_metadata_unchanged':True,
-            'execution_uid':project.uid, 'commands':sequence}
+            'execution_uid':project.uid, 'commands':sequence, 'broker':broker_evidence}
+
+
+def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, base: str,
+                             nonce: str, *, start_guard) -> dict:
+    """Installed promotion/replay proof; only the root-created synthetic tree changes.
+
+    The live configuration stays maintenance-only. A private fixture authority and
+    journal admit only this fixed synthetic transaction through the actual broker
+    implementation. No socket operation exposes fixture bindings or this authority.
+    """
+    import sys
+    import re
+    import threading
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from .git_broker import commit_via_broker
+    from .macos_execution import ExecutionLedger, MacOSProcesses
+    from .macos_server import worktree_authority
+    expected_root = EXECUTION_ROOT / project.key / 'probes' / nonce
+    if (sys.platform != 'darwin' or os.geteuid() != 0 or config.get('production_ready') is not False
+            or not re.fullmatch('[0-9a-f]{32}', nonce)
+            or root != expected_root or fixture != root / 'git-scratch/git-fixture'
+            or root.is_symlink() or root.stat().st_uid != 0 or root.stat().st_mode & 0o022):
+        raise ExecutionBlocked('broker qualification requires a protected synthetic maintenance fixture')
+    real_authority = worktree_authority(project.worktree)
+    private = root / 'broker-state';private.mkdir(mode=0o700)
+    ledger = ExecutionLedger(private / 'proof.sqlite')
+    status = {'intent':'active','epoch':1,'goal_revision':'synthetic-native-proof-' + nonce}
+    # All spawn and promotion decisions still hold the real maintenance fence.
+    fixture_broker = SimpleNamespace(
+        project=replace(project, worktree=fixture),
+        config=dict(config, production_ready=True),
+        registry=SimpleNamespace(status=lambda repo:dict(status)),
+        ledger=ledger, lock=threading.Lock(), admission=start_guard, _verified=lambda:True)
+    packet = {'operation':'git_commit','request_id':'native-broker-' + nonce,
+              'expected_head':base,'expected_epoch':1,'paths':['selected.txt'],
+              'message':'synthetic broker selected change'}
+    receipt = commit_via_broker(fixture_broker, packet)
+    if receipt.get('state') != 'succeeded' or receipt.get('paths') != ['selected.txt']:
+        raise BoundaryProbeBlocked('installed Git broker promotion failed', {'phase':'git_broker','receipt':receipt})
+    promoted = worktree_authority(fixture)
+    if promoted != receipt['authority'] or promoted['repo_head'] == base:
+        raise ExecutionBlocked('synthetic Git promotion lacks independent authority evidence')
+    for path in (fixture / '.git', *(fixture / '.git').rglob('*')):
+        info = path.lstat()
+        if path.is_symlink() or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ExecutionBlocked('promoted Git metadata is mutable or aliased')
+    # Return the identical terminal receipt without entering candidate execution.
+    replay = commit_via_broker(fixture_broker, packet)
+    if replay != receipt or worktree_authority(fixture) != promoted or ledger.pending(project.key):
+        raise ExecutionBlocked('installed broker receipt replay changed authority')
+    if (config.get('production_ready') is not False
+            or worktree_authority(project.worktree) != real_authority
+            or (fixture / 'excluded.txt').read_text() != 'excluded change\n'
+            or MacOSProcesses().owned(project.uid)):
+        raise ExecutionBlocked('installed broker proof changed live authority, excluded edits or left descendants')
+    return {'verified':True,'promoted_sha':promoted['repo_head'], 'base_sha':base,
+            'metadata_root_owned':True,'terminal_receipt_replayed':True,
+            'live_authority_unchanged':True,'production_configuration_unchanged':True}

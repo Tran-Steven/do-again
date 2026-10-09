@@ -88,3 +88,13 @@ installed runtime, and guarded upgrades must accept proven broker-owned metadata
 and its audited new HEAD instead of assuming the initial operator-owned snapshot.
 This migration, immutable worker integration, publication/dependencies and live
 acceptance remain release gates.
+
+
+The installed enforcement probe additionally exercises this broker against its
+own synthetic repository and private proof journal. It verifies atomic promotion,
+root-owned metadata, identical receipt replay and unchanged live HEAD/excluded
+edits. A root-created fixture authority admits only that synthetic transaction;
+the real maintenance fence guards every command and promotion. The live sealed
+production flag is never changed. This proves the installed implementation's
+local commit boundary; it does not resume the worker, qualify publication or
+start a production acceptance window.
