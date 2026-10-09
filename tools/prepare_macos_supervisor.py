@@ -150,6 +150,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         target=package/relative;target.parent.mkdir(parents=True,exist_ok=True)
         target.write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':'+name]))
     (payload/'bootstrap.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_bootstrap.py']))
+    (payload/'worker-bootstrap.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_worker_bootstrap.py']))
     (payload/'install.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_install.py']))
     runtime=seal_runtime(payload)
     native_git=seal_git(payload)

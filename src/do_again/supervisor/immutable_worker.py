@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.schema import OperatorError
-from .macos_execution import INSTALL_ROOT, load_configuration
+from .macos_execution import INSTALL_ROOT, EXECUTION_ROOT, private_root_file
 from .macos_client import broker_request
 
 PROJECT_ACCOUNTS = {"do-again": "_doagain_da", "jobpipe": "_doagain_jp"}
@@ -45,6 +45,10 @@ def validate_worker_context(
         raise OperatorError("worker requires its unprivileged operator identity")
     if config.get("operator_uid") != uid:
         raise OperatorError("worker operator identity differs from the installed supervisor")
+    if (config.get('schema_version') != 1 or config.get('production_ready') is not True
+            or not isinstance(config.get('source_sha'), str)
+            or SHA40.fullmatch(config['source_sha']) is None):
+        raise OperatorError('installed production authority or source identity is invalid')
     current = installed_root / "current"
     if module_path != current / "package/do_again/supervisor/immutable_worker.py":
         raise OperatorError("worker module was not loaded from the sealed installation")
@@ -64,6 +68,15 @@ def validate_worker_context(
     if not isinstance(home_value, str) or not Path(home_value).is_absolute():
         raise OperatorError("worker home is not an exact absolute installation binding")
     repo = Path(repo_value)
+    if repo != Path(home_value) / project_name or '..' in repo.parts:
+        raise OperatorError('worker repository differs from its canonical project scope')
+    from .authority import project_identity
+    full_key = project_identity(repo)
+    if (project.get('key') != full_key or project.get('worktree') != str(EXECUTION_ROOT/full_key/'worktree')
+            or type(project.get('uid')) is not int or project.get('gid') != project['uid']
+            or not 400 <= project['uid'] < 500 or project['uid'] == uid
+            or len({p.get('uid') for p in projects}) != 2):
+        raise OperatorError('dedicated project identity or workspace binding differs')
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     base = Path(home_value) / ".do_again" / "projects" / key
     control, state = base / "control", base / "state"
@@ -82,7 +95,8 @@ def validate_worker_context(
             or status.get("unresolved_executions") != []):
         raise OperatorError("production admission or native proof is incomplete")
     goal_revision = status.get("goal_revision")
-    if not isinstance(goal_revision, str) or not goal_revision.strip():
+    if (not isinstance(goal_revision, str) or not goal_revision.strip()
+            or type(status.get('epoch')) is not int or status['epoch'] < 1):
         raise OperatorError("worker has no accepted durable project goal")
     authority = status.get("authority")
     if (not isinstance(authority, dict)
@@ -94,6 +108,29 @@ def validate_worker_context(
     return repo, control, state, policy_path
 
 
+def read_worker_configuration() -> dict:
+    """Read sealed public configuration as the operator, without root authority."""
+    path = INSTALL_ROOT/'current/config.json'
+    private_root_file(path)
+    try:
+        value = json.loads(path.read_text())
+    except (OSError,ValueError) as exc:
+        raise OperatorError('sealed worker configuration is unavailable') from exc
+    if not isinstance(value,dict):raise OperatorError('sealed worker configuration is invalid')
+    return value
+
+
+def validate_control_paths(control: Path, state: Path, uid: int) -> None:
+    for path in (control,state):
+        for ancestor in (path,*path.parents):
+            if ancestor.is_symlink():raise OperatorError('control state ancestor is aliased')
+            info = ancestor.stat()
+            if info.st_uid not in {0,uid} or info.st_mode & 0o022:
+                raise OperatorError('control state ancestor ownership is unsafe')
+        if not path.is_dir() or path.stat().st_uid != uid:
+            raise OperatorError('pre-existing operator control state is missing or unsafe')
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Immutable Do Again operator worker")
     parser.add_argument("--project", choices=sorted(PROJECT_ACCOUNTS), required=True)
@@ -103,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
         raise OperatorError("installed worker requires verified macOS confinement")
     if not hasattr(os, "getuid") or not hasattr(os, "geteuid"):
         raise OperatorError("operator identity is unavailable")
-    config = load_configuration(INSTALL_ROOT / "current/config.json")
+    config = read_worker_configuration()
     from .macos_server import verify_installation
     verify_installation(config)
     project = next(
@@ -125,12 +162,15 @@ def main(argv: list[str] | None = None) -> int:
         installed_root=INSTALL_ROOT, module_path=Path(__file__),
         interpreter=Path(sys.executable), uid=os.getuid(), euid=os.geteuid(),
     )
-    for path in (control, state):
-        if path.is_symlink() or not path.is_dir():
-            raise OperatorError("pre-existing control or state directory is missing or aliased")
-        info = path.stat()
-        if info.st_uid != os.getuid() or info.st_mode & 0o022:
-            raise OperatorError("operator control state ownership is unsafe")
+    validate_control_paths(control,state,os.getuid())
+    # Recheck the original authority after filesystem validation. A pause/resume
+    # or changed goal during startup invalidates this worker admission.
+    latest = broker_request(repo, {'operation':'status'})
+    validate_worker_context(args.project,config,latest,policy,
+        installed_root=INSTALL_ROOT,module_path=Path(__file__),
+        interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid())
+    if any(latest.get(k) != status.get(k) for k in ('epoch','goal_revision','authority')):
+        raise OperatorError('worker authority changed during admission')
     from ..service.daemon import main as daemon_main
     argv = [
         "--repo", str(repo),
