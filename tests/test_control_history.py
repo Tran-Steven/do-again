@@ -127,6 +127,16 @@ class ControlHistoryTests(unittest.TestCase):
             'request_id':self.packet['request_id']})['reconciled_read_only'])
         self.assertEqual(self.remote.writes,writes)
 
+    def test_terminal_receipt_is_not_reused_under_changed_control_binding(self):
+        original=publish_control(self.broker,self.packet)
+        writes=copy.deepcopy(self.remote.writes)
+        self.remote.control_branch='do-again/canary-'+('c'*24)+'/control'
+        with self.assertRaises(ExecutionBlocked):publish_control(self.broker,self.packet)
+        self.assertEqual(self.remote.writes,writes)
+        self.remote.control_branch='operator-control'
+        self.assertEqual(publish_control(self.broker,self.packet),original)
+        self.assertEqual(self.remote.writes,writes)
+
     def test_sync_cache_is_bound_to_repository_and_control_branch(self):
         packet={'operation':'control_sync','epoch':2,'known':{}}
         first=sync_control(self.broker,packet)

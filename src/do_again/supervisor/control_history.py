@@ -165,9 +165,13 @@ def publish_control(broker,packet,*,api=None):
         verify_installation(broker.config)
         with broker.admission():
             gate(broker,packet['epoch'])
+            api=api or api_for(broker)
+            original=broker.ledger.intent(broker.project.key,packet['request_id'])
+            if original and control_branch(api)!=original.get('control_branch','operator-control'):
+                raise ExecutionBlocked('original control branch changed; terminal evidence is not transferable')
             recovered=broker.ledger.lookup(broker.project.key,packet['request_id'],fingerprint)
             if recovered is not None:return recovered
-            api=api or api_for(broker);base,commit,entries=snapshot(api)
+            base,commit,entries=snapshot(api)
             sha=blob_sha(data)
             if entries.get(packet['path'])==sha:
                 return {'state':'succeeded','returncode':0,'head':base,'path':packet['path'],'blob':sha,'already_visible':True}
