@@ -60,7 +60,8 @@ def publish_via_broker(broker, packet: dict) -> dict:
             broker.ledger.reserve(broker.project.key,packet['request_id'],fingerprint,
                     intent={'operation':'git_publish','repository':repository,'head':packet['expected_head'],
                             'branch':branch,'source_sha':broker.config['source_sha'],
-                            'title':packet['title'],'body':packet['body']})
+                            'title':packet['title'],'body':packet['body'],
+                            'request_fingerprint':packet['request_fingerprint']})
         root = EXECUTION_ROOT / broker.project.key / 'requests' / packet['request_id']
         scratch, cache = root/'scratch',root/'cache'
         for path in (scratch,cache):

@@ -41,6 +41,25 @@ class BrokerExecutor:
                 'authority_before': actual, 'authority_after': after.get('authority', {}),
                 'result': result}
 
+    def recover(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        """Only an authenticated, original terminal result can repair a receipt."""
+        if sys.platform!='darwin':
+            raise OperatorError('native recovery unavailable; no local fallback')
+        if request['operation'] not in self.policy.get('allowed_operations',[]):
+            raise OperatorError('recovery operation is not allowed')
+        rpc=self.rpc or broker_request
+        fingerprint=request_fingerprint(request)
+        result=rpc(self.repo,{'operation':'execution_observe','request_id':request['request_id'],
+                             'request_fingerprint':fingerprint})
+        if result.get('state')!='terminal':return None
+        if result.get('request_fingerprint')!=fingerprint or result.get('replay') is not False:
+            raise OperatorError('broker recovery identity differs')
+        if not isinstance(result.get('result'),dict):
+            raise OperatorError('broker terminal evidence is invalid')
+        return {'operation':request['operation'],'request_fingerprint':fingerprint,
+                'result':result['result'],'recovered_read_only':True,
+                'source_sha':result['source_sha']}
+
     def _packet(self, request: dict[str, Any], status: dict[str, Any]) -> dict:
         args = request.get('args', {})
         if args.get('env'):

@@ -380,3 +380,21 @@ requests. A real live canary additionally requires a sealed disposable target,
 a dedicated conversation binding, and separate bounded authority before any
 worker or browser effect. Fixture task handoffs and manually published PRs are
 not live autonomous acceptance evidence.
+
+### Read-only repair after a lost execution response
+
+New native execution, commit, publication, and dependency reservations retain
+the original request fingerprint and installed source identity in the existing
+supervisor effect journal. `execution_observe` accepts only that original
+request identity through the authenticated project socket. It reads a single
+transactional execution/intent snapshot; it cannot reserve, finish, replay, or
+select another project. A terminal result with matching source and original
+fingerprint can repair an Agent receipt after a crash before receipt creation.
+Failed executions remain failed. Started effects remain uncertain. Missing
+records never authorize replay; legacy records without provenance fail closed.
+
+The sealed executor's restart repair calls this observation operation rather
+than execution. Once the repaired receipt is durable, another restart republishes
+the stored receipt without invoking the executor. Unavailable or conflicting
+broker evidence preserves the started local journal. This is source regression
+evidence, not a new installed qualification or live autonomous cycle.

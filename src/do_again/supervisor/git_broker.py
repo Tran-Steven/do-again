@@ -114,7 +114,9 @@ def commit_via_broker(broker, packet: dict) -> dict:
             gate()
             if processes.owned(broker.project.uid):
                 raise ExecutionBlocked('dedicated identity has unresolved processes')
-            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint)
+            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint,
+                intent={'operation':packet['operation'],'source_sha':broker.config['source_sha'],
+                        'request_fingerprint':packet.get('request_fingerprint')})
         # No authoritative effect occurs in the candidate phase.
         try:
             for path in (scratch, cache):

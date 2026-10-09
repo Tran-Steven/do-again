@@ -760,6 +760,17 @@ class Agent:
                     started_at = str(
                         ledger.get("started_at_utc") or utc_now().isoformat()
                     )
+                    recover=getattr(self.executor,'recover',None)
+                    recovered=recover(raw) if callable(recover) else None
+                    if recovered is not None:
+                        receipt=self.make_receipt(request=raw,
+                            state='succeeded' if self.result_succeeded(recovered) else 'failed',
+                            started_at=started_at,result=recovered)
+                        self.write_ledger(request_id,{'state':'terminal',
+                            'request_fingerprint':fingerprint,'receipt':receipt})
+                        self.publish_receipt(receipt)
+                        self.notify_receipt(receipt)
+                        return True
                     receipt = self.make_receipt(
                         request=raw,
                         state="blocked_ambiguous_replay",

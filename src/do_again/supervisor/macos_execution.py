@@ -251,6 +251,30 @@ class ExecutionLedger:
             raise ExecutionBlocked('ambiguous started execution cannot replay')
         return json.loads(row[2])
 
+    def observe_request(self, project: str, request: str, original_fingerprint: str) -> dict:
+        """Read original terminal evidence without reserving or finishing effects."""
+        if not isinstance(original_fingerprint,str) or not re.fullmatch('[0-9a-f]{64}',original_fingerprint):
+            raise ExecutionBlocked('invalid original request fingerprint')
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            row=db.execute('SELECT e.state,e.result,i.payload FROM execution e '
+                'LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request '
+                'WHERE e.project=? AND e.request=?',(project,request)).fetchone()
+        if row is None:return {'state':'not_started','replay':False}
+        intent=json.loads(row[2]) if row[2] else {}
+        if intent.get('request_fingerprint')!=original_fingerprint:
+            raise ExecutionBlocked('original request identity is absent or conflicting')
+        if row[0]!='terminal':return {'state':'post_dispatch_uncertain','replay':False}
+        result=json.loads(row[1])
+        if (not isinstance(result,dict) or type(result.get('returncode')) is not int
+                or type(result.get('timed_out',False)) is not bool
+                or intent.get('operation') not in {'execute','git_commit','git_publish','dependency_install'}
+                or result.get('source_sha')!=intent.get('source_sha')
+                or not isinstance(intent.get('source_sha'),str)
+                or not re.fullmatch('[0-9a-f]{40}',intent['source_sha'])):
+            raise ExecutionBlocked('terminal execution source evidence differs')
+        return {'state':'terminal','replay':False,'request_fingerprint':original_fingerprint,
+                'source_sha':intent['source_sha'],'result':result}
+
     def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')

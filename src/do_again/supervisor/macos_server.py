@@ -137,6 +137,14 @@ class ProjectBroker:
                     'effect_journal': self.ledger.evidence(self.project.key),
                     'unresolved_executions': self.ledger.pending(self.project.key),
                     'inflight_request_ids':self._inflight()}
+        if packet.get('operation') == 'execution_observe':
+            import re
+            if (set(packet)!={'operation','request_id','request_fingerprint'}
+                    or not isinstance(packet['request_id'],str)
+                    or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{7,159}',packet['request_id'])):
+                raise ExecutionBlocked('execution observation accepts original identity only')
+            verify_installation(self.config)
+            return self.ledger.observe_request(self.project.key,packet['request_id'],packet['request_fingerprint'])
         if packet == {'operation': 'probe'}:
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('installation probes require maintenance intent')
@@ -228,7 +236,9 @@ class ProjectBroker:
                         raise ExecutionBlocked('assigned worktree authority changed before launch')
                     if 'expected_head' in packet and packet['expected_head'] != actual['repo_head']:
                         raise ExecutionBlocked('assigned worktree head changed before launch')
-                recovered = self.ledger.reserve(self.project.key, request_id, fingerprint)
+                recovered = self.ledger.reserve(self.project.key, request_id, fingerprint,
+                    intent={'operation':'execute','source_sha':self.config['source_sha'],
+                            'request_fingerprint':packet.get('request_fingerprint')})
                 if recovered is not None:
                     return recovered
                 from .macos_execution import MacOSProcesses
