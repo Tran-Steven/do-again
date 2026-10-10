@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "do-again"
-version = "1.0.0"
+version = "0.3.0"
 description = "Policy-controlled local execution for agent-driven development workflows"
 readme = "README.md"
 requires-python = ">=3.11"
