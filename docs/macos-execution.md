@@ -470,3 +470,10 @@ Before reporting success, retain real broker execution IDs, protected receipts,
 worker-created draft PRs, exact-head CI, original conversation delivery and
 acknowledgment evidence, task-2 admission evidence and restart/pause observations.
 No canary result enables production or starts a 24-hour jobpipe run.
+
+The root supervisor reads canary binding evidence only from the configured
+operator's exact browser project-record path, with ownership and alias checks.
+Root HOME and DO_AGAIN_HOME cannot select a different authority record.
+A live attempt refused before dispatch is withdrawn with its journals intact;
+a consumed one-shot grant is replaced by a fresh isolated grant rather than
+reactivated or replayed.

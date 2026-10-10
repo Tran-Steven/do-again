@@ -71,8 +71,19 @@ class CanaryAuthority:
             raise ExecutionBlocked('canary authorization is revoked, expired, or changed')
 
     def check_binding(self):
-        from ..browser.runtime import project_record,binding_identity
-        record=project_record(self.broker.project.repo)
+        from ..browser.runtime import binding_identity
+        # The supervisor runs as root; HOME and DO_AGAIN_HOME are not the
+        # operator's browser authority. Derive this exact read-only path.
+        path=Path(self.broker.config['operator_home'])/'.do_again/browser/projects'/(self.broker.project.key[:12]+'.json')
+        try:
+            if any(p.is_symlink() for p in (path,*path.parents)):
+                raise ExecutionBlocked('canary binding record is aliased')
+            info=path.stat()
+            if info.st_uid!=self.broker.config['operator_uid'] or info.st_nlink!=1 or info.st_mode&0o022:
+                raise ExecutionBlocked('canary binding record ownership is unsafe')
+            record=json.loads(path.read_text())
+        except (OSError,ValueError) as exc:
+            raise ExecutionBlocked('operator canary binding record is unavailable') from exc
         if (record.get('chat_url')!=self.grant['chat_url']
                 or binding_identity(record)!=self.grant['binding_identity']):
             raise ExecutionBlocked('canary conversation binding changed')

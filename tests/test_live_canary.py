@@ -127,6 +127,23 @@ class LiveCanaryTests(unittest.TestCase):
         atomic_json(saved,{**self.ack,'source_sha':self.source,'binding_identity':'changed'})
         with self.assertRaises(ExecutionBlocked):self.authority.packet(packet)
 
+    @unittest.skipUnless(os.name=='posix','operator record ownership is a POSIX production gate')
+    def test_root_lookup_uses_configured_operator_record_without_home_override(self):
+        from do_again.browser.runtime import binding_identity
+        path=self.root/'.do_again/browser/projects'/(self.broker.project.key[:12]+'.json')
+        path.parent.mkdir(parents=True)
+        record={'chat_url':self.grant['chat_url'],'binding_generation':'original'}
+        atomic_json(path,record);path.chmod(0o600)
+        self.broker.config['operator_uid']=os.getuid()
+        self.grant['binding_identity']=binding_identity(record)
+        with patch.dict(os.environ,{'HOME':'/var/root','DO_AGAIN_HOME':'/wrong/authority'}), \
+             patch('do_again.browser.runtime.project_record',side_effect=AssertionError('root HOME must not select browser state')):
+            self.authority.check_binding()
+            atomic_json(path,{**record,'binding_generation':'changed'});path.chmod(0o600)
+            with self.assertRaises(ExecutionBlocked):self.authority.check_binding()
+        path.unlink();path.symlink_to(self.broker.state/'absent')
+        with self.assertRaises(ExecutionBlocked):self.authority.check_binding()
+
     def test_changed_browser_binding_and_wrong_ack_never_release_second_task(self):
         with patch('do_again.browser.runtime.project_record',return_value={'chat_url':self.grant['chat_url'],
                                                                          'binding_generation':'changed'}):
