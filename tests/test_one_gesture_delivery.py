@@ -82,10 +82,27 @@ class OneGestureDeliveryTests(unittest.TestCase):
         stack.enter_context(patch.object(browser, "_assistant_snapshot", return_value={"busy": False}))
         stack.enter_context(patch.object(browser, "_context_limit_warning", return_value=""))
         stack.enter_context(patch.object(browser.time, "sleep"))
-        evaluate = stack.enter_context(patch.object(cdp, "evaluate", side_effect=["ready"] + [False]*20))
+        evaluate = stack.enter_context(patch.object(cdp, "evaluate", side_effect=["ready", True] + [False]*20))
         insert = stack.enter_context(patch.object(cdp, "insert_text"))
         enter = stack.enter_context(patch.object(cdp, "click_send"))
         return evaluate, insert, enter
+
+    def test_composer_hydration_waits_before_the_only_send_gesture(self):
+        evaluate,_,gesture=self.mocks()
+        evaluate.side_effect=["ready",False,False,True]+[False]*20
+        with self.assertRaises(BrowserSubmissionUncertain):
+            browser.send_message(self.target,"DO_AGAIN_NEW_COMPOSER_READY",wait_for_response=False)
+        self.assertEqual(gesture.call_count,1)
+        self.assertGreaterEqual(evaluate.call_count,4)
+        self.assertIn('disabled',evaluate.call_args_list[1].args[1])
+
+    def test_composer_never_ready_fails_without_the_send_gesture(self):
+        evaluate,_,gesture=self.mocks()
+        evaluate.side_effect=["ready",False]
+        with patch.object(browser.time,'monotonic',side_effect=[0,11]):
+            with self.assertRaisesRegex(BrowserError,'did not become enabled'):
+                browser.send_message(self.target,"DO_AGAIN_NO_SEND_IF_DISABLED",wait_for_response=False)
+        gesture.assert_not_called()
 
     def test_missing_acceptance_never_clicks_or_sends_again(self):
         evaluate, _, enter = self.mocks()
@@ -96,7 +113,7 @@ class OneGestureDeliveryTests(unittest.TestCase):
 
     def test_generic_error_after_gesture_is_uncertain(self):
         evaluate, _, enter = self.mocks()
-        evaluate.side_effect = ["ready", BrowserError("renderer lost")]
+        evaluate.side_effect = ["ready", True, BrowserError("renderer lost")]
         with self.assertRaises(BrowserSubmissionUncertain):
             browser.send_message(self.target, "synthetic", wait_for_response=False)
         enter.assert_called_once()
