@@ -1,0 +1,68 @@
+# Copy into a SEPARATE PRIVATE repository:
+#   Tran-Steven/do-again-mac-control/.github/workflows/mac-health.yml
+# Never place this workflow in the PUBLIC Tran-Steven/do-again workflows directory.
+#
+# Run only with the explicitly registered self-hosted macOS ARM64 runner
+# labeled do-again-control. The workflow has no parameters, write permissions,
+# checkout, shell commands supplied remotely, or privileged installation.
+name: Mac maintenance health (read only)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: do-again-mac-health
+  cancel-in-progress: false
+
+jobs:
+  status:
+    if: github.repository == 'Tran-Steven/do-again-mac-control' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, ARM64, do-again-control]
+    timeout-minutes: 5
+    steps:
+      - name: Read installed supervisor identity and maintenance state
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 - <<'PY'
+          import json, os, pathlib, sys
+          config_path=pathlib.Path("/Library/Application Support/DoAgainSupervisor/current/config.json")
+          if not config_path.is_file() or config_path.is_symlink():
+              raise SystemExit("protected-supervisor-config-unavailable")
+          config=json.loads(config_path.read_text())
+          if config.get("production_ready") is not False:
+              raise SystemExit("production-mode-is-not-a-maintenance-diagnostic")
+          print(json.dumps({
+              "source_sha":config.get("source_sha"),
+              "production_ready":False,
+              "canary_grant_present":config.get("live_canary") is not None,
+              "operator_identity_matches":os.getuid()==config.get("operator_uid"),
+              "project_count":len(config.get("projects",[])),
+          },sort_keys=True))
+          # The runner is intentionally unprivileged. A separate runner UID must
+          # never be given filesystem permissions or sudo authority to bypass
+          # the root broker's peer-UID enforcement. Status may be queried only
+          # when the registered operator identity already owns the process.
+          if os.getuid()!=config.get("operator_uid"):
+              print("broker_status=not_requested_runner_identity_isolated")
+              sys.exit(0)
+          package=pathlib.Path("/Library/Application Support/DoAgainSupervisor/current/package")
+          if package.is_symlink() or not package.is_dir():
+              raise SystemExit("installed-sealed-package-unavailable")
+          sys.path.insert(0,str(package))
+          from do_again.supervisor.macos_client import broker_request
+          for project in config.get("projects",[]):
+              if project.get("account") not in ("_doagain_da","_doagain_jp"):
+                  raise SystemExit("unexpected-project-scope")
+              result=broker_request(pathlib.Path(project["repo"]),{"operation":"status"})
+              print(json.dumps({
+                  "project":project["account"],
+                  "operator_intent":result.get("operator_intent"),
+                  "source_sha":result.get("source_sha"),
+                  "enforcement_verified":result.get("enforcement_verified"),
+                  "canary_authorized":result.get("canary_authorized"),
+                  "unresolved_executions_count":len(result.get("unresolved_executions",[])),
+              },sort_keys=True))
+          PY
