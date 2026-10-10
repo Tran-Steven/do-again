@@ -96,6 +96,45 @@ to restore ordinary usage.
 Output schemas use provider-supported JSON Schema syntax while preserving
 the stricter local length checks for model-returned text.
 
+## Separate, sealed Codex canary development (not installed)
+
+The browser-bound `live_canary` grant must never be reinterpreted as Codex
+authority. The new **`codex_canary`** grant contract is distinct and rejects
+coexistence with a browser grant, production-enabled configuration, unexpected
+fields, invalid pinned binary digests, noncanonical parent identities, an
+expired grant, or more than two synthetic model-call permissions. Its maximum
+wall-clock lifetime is two hours.
+
+The following components are now available as draft source and tested using
+offline fakes, **not** as an installed or live model-to-broker integration:
+
+- `model_admission`: checks both protected parent projects' authenticated
+  broker **status** (maintenance, native enforcement, source SHA, epoch,
+  absence of pending or inflight work) before preparing a model proposal.
+- `model_attempt`: pins the isolated Codex executable's SHA-256, preflights
+  sign-in and account usage, reserves one task-one inference in a private,
+  fsynced, exclusive one-shot journal, and rejects automatic retry after a
+  started or uncertain call. An original successful proposal can only be
+  recovered read-only after its canonical request hash is rechecked.
+- `model_canary.validate_prepared_edit`: parses the generated writer without
+  running it, extracts the two fixed source literals, reconstructs the entire
+  expected request, and rejects scripts, arguments, paths or time bounds that
+  differ from the approved deterministic format.
+- `model_watch` and `model_receipts`: use the isolated control branch's
+  original request and broker receipt Git blobs to observe edit, test, commit,
+  draft publication and CI stages without mutations. A zero-return CI **waiting**
+  observation is not accepted as successful CI; exact completed CI, run,
+  attempt, PR, repository, and head are required.
+- `model_stages`: constructs bounded subsequent requests from exact
+  matching stage receipts but **cannot publish** any request.
+
+The current protected runtime does **not** install this new grant, start a
+Codex worker, or expose a model request-publishing operation. Only task-one
+candidate preparation has a durable model-call journal; task-two generation
+must not start until a separately broker-verified first-task checkpoint and
+new authority are implemented. A local file alone never grants broker
+execution authority.
+
 ## Acceptance boundaries
 
 **This is a transport foundation, not completed autonomous release
