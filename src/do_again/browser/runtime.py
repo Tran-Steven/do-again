@@ -23,7 +23,7 @@ from typing import Any
 
 from ..platforms.process import pid_alive
 from . import cdp
-from .errors import BrowserAuthRequired, BrowserError, BrowserSubmissionUncertain
+from .errors import BrowserAuthRequired, BrowserError, BrowserPreDispatchBlocked, BrowserSubmissionUncertain
 
 
 CHATGPT_URL = "https://chatgpt.com/"
@@ -832,7 +832,7 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     if (config.get("preferred_mode") == "auto"
             and config.get("allow_visible_fallback") is not True
             and state.get("mode") == "background"):
-        raise BrowserError("unattended auto mode refuses GUI tab focus; no browser submission was attempted")
+        raise BrowserPreDispatchBlocked("unattended auto mode refuses GUI tab focus; no browser submission was attempted")
     probe = r"""(() => ({
         focused: document.hasFocus(),
         visibility: document.visibilityState
@@ -846,7 +846,7 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     if not (isinstance(observed, dict)
             and observed.get("focused") is True
             and observed.get("visibility") == "visible"):
-        raise BrowserError(
+        raise BrowserPreDispatchBlocked(
             "ChatGPT automation tab lacks visible document focus before Send; "
             "no browser submission was attempted"
         )
@@ -863,9 +863,9 @@ def send_message(
     _require_send_target_focus(target)
     baseline = _assistant_snapshot(target)
     if baseline.get("busy"):
-        raise BrowserError("ChatGPT is still generating; retry delivery later")
+        raise BrowserPreDispatchBlocked("ChatGPT is still generating; retry delivery later")
     if _context_limit_warning(target):
-        raise BrowserError("ChatGPT conversation reached its context limit")
+        raise BrowserPreDispatchBlocked("ChatGPT conversation reached its context limit")
     prep = r"""(() => {
 const visible = (el) => {
   if (!el) return false;
@@ -891,7 +891,7 @@ if ('value' in el) {
 return 'ready';
 })()"""
     if cdp.evaluate(target, prep, timeout=15.0, user_gesture=True) != "ready":
-        raise BrowserError("ChatGPT composer was not available")
+        raise BrowserPreDispatchBlocked("ChatGPT composer was not available")
     dispatch_started = False
     try:
         cdp.insert_text(target, text)
@@ -917,7 +917,7 @@ return inputs.some(el=>String(el.value||el.innerText||el.textContent||'').includ
         deadline = time.monotonic()+10.0
         while cdp.evaluate(target, readiness, timeout=10.0) is not True:
             if time.monotonic()>=deadline:
-                raise BrowserError("ChatGPT Send did not become enabled for this composer before dispatch")
+                raise BrowserPreDispatchBlocked("ChatGPT Send did not become enabled for this composer before dispatch")
             time.sleep(0.2)
         # Exactly one gesture. From this point every exception is uncertain;
         # absence of composer clearing never permits a fallback submission.
@@ -982,7 +982,7 @@ return inputs.some(el=>String(el.value||el.innerText||el.textContent||'').includ
                 "inspect the exact bound conversation before retrying"
             ) from exc
         if isinstance(exc, cdp.CdpTimeoutError):
-            raise BrowserError("ChatGPT composer preparation failed before submission") from exc
+            raise BrowserPreDispatchBlocked("ChatGPT composer preparation failed before submission") from exc
         raise
 
 def browser_self_test(*, target: cdp.Target | None = None) -> dict[str, Any]:
