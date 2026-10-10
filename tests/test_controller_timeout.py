@@ -73,7 +73,7 @@ class ControllerTimeoutTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(BrowserSubmissionUncertain,"delivery outcome must be reconciled"):
                 browser.send_message(self.target,"DO_AGAIN_RECEIPT_NOT_CONFIRMED",wait_for_response=False)
-        self.assertEqual(evaluate.call_count,21)
+        self.assertEqual(evaluate.call_count,22)
         insert.assert_called_once()
         enter.assert_called_once()
 
