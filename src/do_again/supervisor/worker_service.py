@@ -6,6 +6,7 @@ import os
 import plistlib
 import subprocess
 import sys
+import time
 from pathlib import Path
 from ..core.schema import atomic_json
 from .macos_execution import INSTALL_ROOT,ExecutionBlocked,private_root_file
@@ -145,8 +146,25 @@ def withdraw_worker(broker):
         if record['plist_sha256']!=hashlib.sha256(target.read_bytes()).hexdigest():
             raise ExecutionBlocked('changed service definition blocks withdrawal')
         result=launchctl(broker,'bootout',f"gui/{broker.config['operator_uid']}/{label}",allow_missing=True)
-        if service_present(broker,label):
-            raise ExecutionBlocked('worker withdrawal is uncertain; maintenance and journals retained')
+        # launchctl bootout can return while launchd is still withdrawing the
+        # original service. Observe only: never issue another bootout/kill.
+        deadline=time.monotonic()+3.0
+        while service_present(broker,label):
+            if time.monotonic()>=deadline:
+                raise ExecutionBlocked('worker withdrawal is uncertain; maintenance and journals retained')
+            time.sleep(0.05)
+        # The protected lease pins the actual registered worker's kernel birth.
+        # A missing/changed PID counts as withdrawn; a surviving original PID
+        # blocks completion even if launchd no longer lists the service.
+        lease=broker.state/'worker-instance.json'
+        if lease.exists():
+            identity=json.loads(lease.read_text())
+            if (identity.get('epoch')==record.get('epoch')
+                    and type(identity.get('pid')) is int
+                    and isinstance(identity.get('identity'),list)
+                    and len(identity['identity'])==4):
+                from .service_probe import verify_process_withdrawn
+                verify_process_withdrawn(identity['pid'],identity['identity'])
         record['phase']='withdrawn';atomic_json(broker.state/'worker-deployment.json',record)
         return {'withdrawn':True,'operator_intent':'maintenance','journals_retained':True}
 
