@@ -96,11 +96,11 @@ def _source_ast(text: str, *, tests: bool, module: str) -> None:
                 or classes[0].bases[0].attr != "TestCase"
                 or not classes[0].name.startswith("Test")):
             raise CodexCanaryProposalRejected("tests require one plain unittest.TestCase")
-        if len(tree.body) != 3 or not all(
+        if (len(tree.body) != 3 or not classes[0].body or not all(
                 isinstance(n, ast.FunctionDef) and n.name.startswith("test_")
                 and n.args.args and n.args.args[0].arg == "self"
                 and not n.decorator_list
-                for n in classes[0].body):
+                for n in classes[0].body)):
             raise CodexCanaryProposalRejected("tests must be ordinary test methods")
     else:
         if (len(tree.body) != 1 or not isinstance(tree.body[0], ast.FunctionDef)
@@ -110,7 +110,9 @@ def _source_ast(text: str, *, tests: bool, module: str) -> None:
             raise CodexCanaryProposalRejected("implementation must define only canonical_label(text)")
     for node in ast.walk(tree):
         if isinstance(node, _BANNED_NODES):
-            if tests and isinstance(node, (ast.Import, ast.ImportFrom)):
+            # Only the exact two validated top-level test imports are accepted.
+            # A nested import inside a test method cannot borrow their authority.
+            if tests and node in tree.body and isinstance(node, (ast.Import, ast.ImportFrom)):
                 continue
             raise CodexCanaryProposalRejected("model source contains an excluded syntax capability")
         if isinstance(node, ast.Attribute):
