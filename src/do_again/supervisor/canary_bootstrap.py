@@ -95,6 +95,8 @@ def bootstrap_live_canary(
     dispatch_started = False
     try:
         session = browser.ensure_browser_running(verify_auth=True)
+        if session.get("mode") != "headless" or session.get("session_ready") is not True:
+            raise ExecutionBlocked("live canary requires authenticated true-headless Chrome; GUI fallback is not acceptance")
         target = cdp.create_target(int(session["port"]), browser.CHATGPT_URL, background=True)
         target, _ = browser.wait_for_authenticated(
             int(session["port"]), chat_url=target.url, timeout=30.0, target=target)
