@@ -145,9 +145,7 @@ class CanaryBootstrapTests(unittest.TestCase):
                 self.registry.return_value.status.return_value = {
                     "intent": "active" if change == "active" else "maintenance",
                     "epoch": 2}
-                self.config["production_ready"] = change != "production"
-                if change != "production":
-                    self.config["production_ready"] = False
+                self.config["production_ready"] = (change == "production")
                 source = "not-a-sha" if change == "invalid_baseline" else self.baseline
                 with self.assertRaises(ExecutionBlocked):
                     bootstrap_live_canary(self.config, baseline=source,
