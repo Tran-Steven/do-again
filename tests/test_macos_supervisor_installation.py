@@ -19,6 +19,84 @@ class InstallationTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
+    def worker_quiescence_fixture(self):
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        key='c'*64
+        repo=self.root/'synthetic-canary';repo.mkdir()
+        state=self.root/'state'/key;state.mkdir(parents=True)
+        agents=self.root/'agents';agents.mkdir()
+        label='io.github.tran-steven.do-again.worker.'+key[:12]
+        definition=agents/(label+'.plist')
+        definition.write_bytes(b'known-root-owned-plist-fixture')
+        lease=state/'worker-instance.json'
+        lease.write_text(json.dumps({'epoch':2,'pid':12345,'identity':[501,12,34,1]}))
+        journal=state/'worker-deployment.json'
+        record={'phase':'running','epoch':2,'source_sha':'a'*40,
+                'plist_sha256':hashlib.sha256(definition.read_bytes()).hexdigest()}
+        journal.write_text(json.dumps(record))
+        config={'source_sha':'a'*40,'operator_uid':501,'operator_gid':20,
+                'operator_home':str(self.root),'authority_path':str(self.root/'authority'),
+                'projects':[{'repo':str(repo),'key':key,'uid':401,'gid':401}]}
+        actual_stat=type(journal).stat
+        def root_owned(path,*args,**kwargs):
+            st=actual_stat(path,*args,**kwargs)
+            if path in (journal,lease,definition):
+                from types import SimpleNamespace
+                return SimpleNamespace(st_uid=0,st_nlink=1,st_mode=st.st_mode)
+            return st
+        return config,journal,record,agents,root_owned
+
+    def test_install_reconciles_proven_withdrawal_without_repeating_launchd_effect(self):
+        config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
+        result=Mock(returncode=113,stderr='Could not find service')
+        with patch.object(self.module,'ROOT',self.root), \
+             patch.object(self.module,'WORKER_AGENTS',agents), \
+             patch.object(type(journal),'stat',new=root_owned), \
+             patch.object(self.module.subprocess,'run',return_value=result) as launchd, \
+             patch('do_again.supervisor.authority.AuthorityRegistry') as registry, \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn') as birth:
+            registry.return_value.status.return_value={'intent':'maintenance'}
+            self.module.verify_worker_quiescence(config)
+            launchd.assert_called_once()
+            self.assertEqual(launchd.call_args.args[0][:2],['/bin/launchctl','print'])
+            birth.assert_called_once_with(12345,[501,12,34,1],timeout=3)
+        saved=json.loads(journal.read_text())
+        self.assertEqual(saved['phase'],'withdrawn')
+        self.assertEqual(saved['recovery_evidence']['previous_phase'],'running')
+        self.assertTrue(saved['recovery_evidence']['original_worker_withdrawn'])
+
+    def test_install_refuses_live_or_unverified_withdrawal_without_journal_mutation(self):
+        config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
+        original=journal.read_bytes()
+        cases=[('active',None),('maintenance',RuntimeError('original worker remains alive'))]
+        for intent,error in cases:
+            with self.subTest(intent=intent,error=bool(error)), \
+                 patch.object(self.module,'ROOT',self.root), \
+                 patch.object(self.module,'WORKER_AGENTS',agents), \
+                 patch.object(type(journal),'stat',new=root_owned), \
+                 patch.object(self.module.subprocess,'run',
+                              return_value=Mock(returncode=113,stderr='Could not find service')), \
+                 patch('do_again.supervisor.authority.AuthorityRegistry') as registry, \
+                 patch('do_again.supervisor.service_probe.verify_process_withdrawn',
+                       side_effect=error) as birth:
+                registry.return_value.status.return_value={'intent':intent}
+                with self.assertRaises(RuntimeError):
+                    self.module.verify_worker_quiescence(config)
+                if intent!='maintenance':birth.assert_not_called()
+            self.assertEqual(journal.read_bytes(),original)
+        with patch.object(self.module,'ROOT',self.root), \
+             patch.object(self.module,'WORKER_AGENTS',agents), \
+             patch.object(type(journal),'stat',new=root_owned), \
+             patch.object(self.module.subprocess,'run',
+                          return_value=Mock(returncode=0,stderr='')), \
+             patch('do_again.supervisor.authority.AuthorityRegistry') as registry, \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn') as birth:
+            registry.return_value.status.return_value={'intent':'maintenance'}
+            with self.assertRaisesRegex(RuntimeError,'loaded engineering worker'):
+                self.module.verify_worker_quiescence(config)
+            birth.assert_not_called()
+        self.assertEqual(journal.read_bytes(),original)
+
     def test_runtime_executable_paths_are_validated_before_cutover(self):
         current=self.root/'current'
         valid={'python':str(current/'runtimes/python/bin/python3'),
