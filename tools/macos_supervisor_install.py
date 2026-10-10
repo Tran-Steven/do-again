@@ -346,6 +346,15 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
     manifest=verify_stage(stage)
     config=json.loads((stage/'config.json').read_text())
     if config['source_sha']!=manifest['source_sha']:raise RuntimeError('configuration source mismatch')
+    # Never install another one-shot grant into a chat carrying an earlier
+    # canary's uncertain delivery. An altered preparer cannot bypass this.
+    prior_path=ROOT/'current/config.json'
+    if prior_path.exists():
+        from do_again.supervisor.live_canary import require_fresh_conversation
+        try:
+            require_fresh_conversation(json.loads(prior_path.read_text()),config)
+        except Exception as exc:
+            raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation') from exc
     if len(config['projects'])!=2 or len({p['uid'] for p in config['projects']})!=2:
         raise RuntimeError('two independently scoped execution identities required')
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
