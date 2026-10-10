@@ -558,10 +558,17 @@ cannot be repeated after a lost response; a follow-up can only GET and verify
 the exact original ref/SHA. A failure after successfully creating the chat
 never authorizes sending that bootstrap message again.
 
-For branch readback or GitHub-transport recovery, use the same exact grant and
-baseline with `--resume-control-ref`. This skips ChatGPT entirely and can only
-inspect the earlier branch if its publication ticket was reserved. Do not run
-the original bootstrap again with its consumed nonce.
+For an uncertain POST or branch readback, use the same exact grant and
+baseline with `--resume-control-ref`. It is strictly GET-only and refuses to
+act unless a reserved branch journal exists. It cannot create a new ref.
+If the ChatGPT initialization completed but the process exited **before any
+branch reservation**, use `--finish-control-ref` with the original grant and
+baseline; it can start the first branch creation only after an exact 404
+preflight and a fresh maintenance-epoch check. Both modes skip ChatGPT
+entirely. Do not rerun the original ChatGPT bootstrap for a consumed nonce.
+GitHub branch writes and recovery additionally require the original parent
+authority epoch and operator maintenance status; switching to production or
+pausing the parent revokes the branch-creation path.
 
 The generated grant is intended as input to
 `tools/prepare_macos_supervisor.py --canary-grant`. Only a separate, explicit
