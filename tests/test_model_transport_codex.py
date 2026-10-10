@@ -87,7 +87,7 @@ class CodexTransportTests(unittest.TestCase):
         self.assertEqual(answer, {"reply": "ready"})
         self.assertEqual(len(calls), 1)
         args, kwargs = calls[0]
-        self.assertEqual(args[:2], [str(self.binary), "exec"])
+        self.assertEqual(args[:4], [str(self.binary), "--ask-for-approval", "never", "exec"])
         self.assertEqual(args[args.index("--sandbox") + 1], "read-only")
         self.assertEqual(args[args.index("--ask-for-approval") + 1], "never")
         self.assertIn("--skip-git-repo-check", args)
