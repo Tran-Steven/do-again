@@ -155,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project", choices=sorted(PROJECT_ACCOUNTS), required=True)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--canary", action="store_true")
+    parser.add_argument("--codex-canary", action="store_true")
     parser.add_argument("--expected-source")
     parser.add_argument("--expected-epoch",type=int)
     args = parser.parse_args(argv)
