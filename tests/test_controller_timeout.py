@@ -15,6 +15,12 @@ from do_again.service import daemon
 class ControllerTimeoutTests(unittest.TestCase):
     def setUp(self):
         self.target = cdp.Target("test-id", "https://chatgpt.com/c/test", "test", "ws://127.0.0.1:9223/devtools/page/test")
+        # Focus policy has isolated tests in test_browser_send_focus.
+        # These cases exercise the pre-existing one-gesture/timeout protocol
+        # without connecting to a real Chrome CDP endpoint.
+        focus = patch.object(browser, "_require_send_target_focus")
+        focus.start()
+        self.addCleanup(focus.stop)
 
     def test_socket_timeout_is_typed_and_websocket_is_closed(self):
         ws = Mock()
