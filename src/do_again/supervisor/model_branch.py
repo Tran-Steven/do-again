@@ -7,12 +7,54 @@ import re
 from pathlib import Path
 
 from ..core.schema import atomic_json
-from .canary_branch import _api,_reserve,_check_operator_authority
+from .canary_branch import _api,_reserve
 from .macos_execution import ExecutionBlocked
 
 NONCE=re.compile(r"[0-9a-f]{24}\Z")
 SHA40=re.compile(r"[0-9a-f]{40}\Z")
 SHA64=re.compile(r"[0-9a-f]{64}\Z")
+
+
+
+def _check_operator_authority(installed:dict,grant:dict,*,rpc=None)->None:
+    """Use exact root-broker epochs, never the older browser authority DB."""
+    from .macos_client import broker_request
+    if (not isinstance(installed,dict)
+            or installed.get("production_ready") is not False
+            or installed.get("operator_uid")!=os.getuid()
+            or os.getuid()==0):
+        raise ExecutionBlocked("Codex branch requires its installed maintenance operator")
+    home=Path(installed.get("operator_home",""))
+    projects=installed.get("projects")
+    if (not isinstance(projects,list) or len(projects)!=2
+            or {p.get("account") for p in projects if isinstance(p,dict)}
+                  !={"_doagain_da","_doagain_jp"}
+            or type(grant.get("parent_epoch")) is not int):
+        raise ExecutionBlocked("Codex branch parent identities and epoch are missing")
+    reader=rpc or broker_request
+    for account in ("_doagain_da","_doagain_jp"):
+        project=next(p for p in projects if p.get("account")==account)
+        expected=home/("do-again" if account=="_doagain_da" else "jobpipe")
+        expected_name=("Tran-Steven/do-again" if account=="_doagain_da"
+                       else "Tran-Steven/jobpipe")
+        if (project.get("repo")!=str(expected)
+                or project.get("github_repository")!=expected_name):
+            raise ExecutionBlocked("Codex branch native project scope differs")
+        state=reader(expected,{"operation":"status"})
+        if (not isinstance(state,dict)
+                or state.get("source_sha")!=installed.get("source_sha")
+                or state.get("operator_intent")!="maintenance"
+                or state.get("production_ready") is not False
+                or state.get("canary_authorized") is not False
+                or state.get("enforcement_verified") is not True
+                or state.get("enforcement_blocker") is not None
+                or state.get("unresolved_executions")!=[]
+                or state.get("inflight_request_ids")!=[]):
+            raise ExecutionBlocked("Codex ref requires quiescent protected maintenance")
+        if (account=="_doagain_da" and (
+                type(state.get("epoch")) is not int
+                or state["epoch"]!=grant["parent_epoch"])):
+            raise ExecutionBlocked("Codex ref protected parent epoch changed")
 
 
 def provision_codex_control_branch(
