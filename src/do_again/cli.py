@@ -409,8 +409,8 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
         layout = runtime_layout(repo)
         if not layout.browser_enabled:
             raise ServiceError(
-                "end-to-end verification requires browser automation; "
-                "enable it with do-again setup"
+                "unattended browser verification requires a configured ChatGPT browser; "
+                "for normal ChatGPT conversations use do-again chatgpt prepare/check"
             )
         service = service_status(repo)
         if not service.get("running"):
@@ -1201,7 +1201,7 @@ def main() -> int:
     )
     verify_parser = sub.add_parser(
         "verify",
-        help="Verify the ChatGPT-to-control-to-local-to-receipt round trip",
+        help="Verify unattended ChatGPT browser round trip; use chatgpt prepare/check for regular chat",
     )
     verify_parser.add_argument("path", nargs="?", default=".")
     verify_parser.add_argument(
