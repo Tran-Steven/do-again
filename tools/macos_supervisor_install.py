@@ -366,6 +366,8 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
                 and older.get('chat_url')
                 and older['chat_url']==proposed.get('chat_url')):
             raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation')
+    if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+        raise RuntimeError('browser and Codex grants cannot coexist in an installed runtime')
     if len(config['projects'])!=2 or len({p['uid'] for p in config['projects']})!=2:
         raise RuntimeError('two independently scoped execution identities required')
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
