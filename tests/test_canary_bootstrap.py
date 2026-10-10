@@ -30,7 +30,11 @@ class CanaryBootstrapTests(unittest.TestCase):
             "source_sha": "a" * 40,
             "projects": [{"account": "_doagain_da", "repo": str(self.home / "do-again"),
                           "key": "parent", "uid": 401, "gid": 401, "worktree": "/sealed",
-                          "source_sha": "f" * 40}],
+                          "source_sha": "f" * 40,
+                          "github_repository":"Tran-Steven/do-again"},
+                         {"account":"_doagain_jp","repo":str(self.home/"jobpipe"),
+                          "key":"sibling","uid":402,"gid":402,"worktree":"/sealed-jobpipe",
+                          "source_sha":"e"*40,"github_repository":"Tran-Steven/jobpipe"}],
         }
         self.target = SimpleNamespace(id="new-tab", url="https://chatgpt.com/")
         self.record = {"chat_url": self.url, "binding_generation": "unique-generation"}
@@ -46,15 +50,14 @@ class CanaryBootstrapTests(unittest.TestCase):
         )
         self.cdp = patch("do_again.browser.cdp.create_target", return_value=self.target)
         self.close = patch("do_again.browser.cdp.close_target", return_value=True)
-        self.authority = patch("do_again.supervisor.canary_bootstrap.AuthorityRegistry")
+        self.authority = patch("do_again.supervisor.canary_bootstrap._protected_parent_state")
         self.create = self.cdp.start()
         self.closed = self.close.start()
         self.registry = self.authority.start()
         self.addCleanup(self.cdp.stop)
         self.addCleanup(self.close.stop)
         self.addCleanup(self.authority.stop)
-        self.registry.return_value.status.return_value = {
-            "intent": "maintenance", "epoch": 2}
+        self.registry.return_value = {"epoch": 2}
         self.baseline = "c" * 40
 
     def run_bootstrap(self):
@@ -157,10 +160,7 @@ class CanaryBootstrapTests(unittest.TestCase):
 
     def test_parent_epoch_change_during_headless_bootstrap_prevents_grant(self):
         self.browser.send_message.side_effect = self.succeed
-        self.registry.return_value.status.side_effect = [
-            {"intent": "maintenance", "epoch": 2},
-            {"intent": "paused", "epoch": 3},
-        ]
+        self.registry.side_effect = [{"epoch": 2}, {"epoch": 3}]
         with self.assertRaisesRegex(ExecutionBlocked, "authority changed"):
             self.run_bootstrap()
         self.assertEqual(self.ticket()["state"], "submission_unresolved")
@@ -172,9 +172,9 @@ class CanaryBootstrapTests(unittest.TestCase):
         for change in ("production", "active", "invalid_baseline"):
             with self.subTest(change=change):
                 self.browser.ensure_browser_running.reset_mock()
-                self.registry.return_value.status.return_value = {
-                    "intent": "active" if change == "active" else "maintenance",
-                    "epoch": 2}
+                self.registry.side_effect = (ExecutionBlocked("protected parent not in maintenance")
+                                             if change == "active" else None)
+                self.registry.return_value = {"epoch": 2}
                 self.config["production_ready"] = (change == "production")
                 source = "not-a-sha" if change == "invalid_baseline" else self.baseline
                 with self.assertRaises(ExecutionBlocked):
