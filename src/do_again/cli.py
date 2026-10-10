@@ -1042,6 +1042,43 @@ def _browser_action(action: str, *, mode: str = "auto", run_test: bool = True) -
         return 1
 
 
+def _model_action(action: str, *, allow_model_call: bool = False) -> int:
+    from .model_transport import (
+        CodexTransportBlocked,
+        discover_codex,
+        generate_structured,
+        login_ready,
+    )
+    binary = discover_codex()
+    if action == "status":
+        status = {"transport": "codex", "installed": binary is not None,
+                  "authenticated": login_ready(binary) if binary else False,
+                  "browser_required": False, "production_enabled": False}
+        print(json.dumps(status, sort_keys=True))
+        return 0 if status["authenticated"] else 2
+    if action == "smoke":
+        try:
+            response = generate_structured(
+                "Return exactly the word ready in the reply field. Do not read files, use tools, or perform other actions.",
+                {"type": "object",
+                 "properties": {"reply": {"type": "string", "maxLength": 64}},
+                 "required": ["reply"], "additionalProperties": False},
+                allow_model_call=allow_model_call,
+                binary=binary,
+                timeout_seconds=120,
+            )
+        except CodexTransportBlocked as exc:
+            print(f"do-again: model: {exc}", file=sys.stderr)
+            return 1
+        if response.get("reply", "").strip().lower() != "ready":
+            print("do-again: model: structured response did not match smoke marker", file=sys.stderr)
+            return 1
+        print("CODEX_READ_ONLY_SMOKE_OK")
+        return 0
+    print("do-again: model: unknown transport action", file=sys.stderr)
+    return 2
+
+
 def _chat_cleanup_action(
     action: str,
     path: str,
@@ -1241,6 +1278,16 @@ def main() -> int:
     run_parser.add_argument("path", nargs="?", default=".")
     run_parser.add_argument("--once", action="store_true")
 
+    model_parser = sub.add_parser(
+        "model",
+        help="Optional non-browser Codex transport readiness and read-only inference smoke",
+    )
+    model_sub = model_parser.add_subparsers(dest="model_command", required=True)
+    model_sub.add_parser("status", help="Check Codex CLI and ChatGPT login without model usage")
+    model_smoke = model_sub.add_parser("smoke", help="One explicit, read-only Codex inference")
+    model_smoke.add_argument("--allow-model-call", action="store_true",
+        help="Explicitly authorize one model call against your Codex usage allowance")
+
     browser_parser = sub.add_parser(
         "browser",
         help="Advanced browser runtime diagnostics and controls",
@@ -1309,6 +1356,11 @@ def main() -> int:
         return init_project(args.path)
     if args.command in {"start", "stop", "restart", "install", "uninstall"}:
         return _service_action(args.command, args.path)
+    if args.command == "model":
+        return _model_action(
+            args.model_command,
+            allow_model_call=bool(getattr(args, "allow_model_call", False)),
+        )
     if args.command == "browser":
         return _browser_action(
             args.browser_command,
