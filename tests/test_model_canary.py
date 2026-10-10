@@ -1,7 +1,9 @@
 """Offline synthetic Codex model-to-canary request integration tests."""
 from __future__ import annotations
 
+import json
 import os
+import io
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -150,6 +152,46 @@ class CodexCanaryPreparationTests(unittest.TestCase):
         self.assertIn("source_code = ", result["args"]["content"])
         self.assertIn("test_code = ", result["args"]["content"])
         self.assertNotIn("import os", result["args"]["content"])
+
+
+class CodexCanaryCliTests(unittest.TestCase):
+    nonce = "c" * 24
+    head = "d" * 40
+
+    def test_draft_requires_opt_in_before_any_model_call(self):
+        from do_again.cli import _model_action
+        with patch("do_again.model_transport.generate_structured") as generate:
+            with patch("sys.stderr", new_callable=io.StringIO):
+                self.assertEqual(_model_action("canary-draft", nonce=self.nonce,
+                    task=1, expected_head=self.head), 1)
+        generate.assert_not_called()
+
+    def test_draft_returns_candidate_but_does_not_dispatch_any_effect(self):
+        from do_again.cli import _model_action
+        implementation = "def canonical_label(text):\n    return '-'.join(text.strip().lower().split())\n"
+        tests = (
+            "import unittest\n"
+            "from canary_live_" + self.nonce + " import canonical_label\n"
+            "class TestLabel(unittest.TestCase):\n"
+            "    def test_value(self):\n"
+            "        self.assertEqual(canonical_label('ABC X'), 'abc-x')\n"
+        )
+        with patch("do_again.model_transport.discover_codex", return_value=Path("/isolated/codex")), patch(
+                "do_again.model_transport.generate_structured",
+                return_value={"implementation": implementation, "tests": tests}) as generate, patch(
+                "sys.stdout", new_callable=io.StringIO) as output:
+            result = _model_action("canary-draft", allow_model_call=True, nonce=self.nonce,
+                task=1, expected_head=self.head)
+        self.assertEqual(result, 0)
+        self.assertEqual(generate.call_count, 1)
+        call = generate.call_args
+        self.assertTrue(call.kwargs["allow_model_call"])
+        decoded = json.loads(output.getvalue())
+        self.assertEqual(decoded["state"], "proposal_only")
+        self.assertIs(decoded["published"], False)
+        self.assertIs(decoded["executed"], False)
+        self.assertEqual(decoded["request"]["request_id"], "canary-" + self.nonce + "-1-edit")
+        self.assertEqual(decoded["request"]["expected"]["repo_head"], self.head)
 
 
 if __name__ == "__main__":
