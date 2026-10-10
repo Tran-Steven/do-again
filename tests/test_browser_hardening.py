@@ -157,6 +157,9 @@ class BrowserHardeningTests(unittest.TestCase):
         launch.assert_not_called()
 
     def test_headless_launch_failure_automatically_uses_background(self):
+        cfg = browser.load_config()
+        cfg["allow_visible_fallback"] = True
+        browser.save_config(cfg)
         with patch.object(browser, "browser_status", side_effect=[{"running": False}, {"running": True, "port": 9223, "mode": "background"}]), patch.object(browser, "stop_browser"), patch.object(browser, "launch_browser", side_effect=[browser.BrowserError("headless startup failed"), {"port": 9223}]) as launch:
             status = browser.ensure_browser_running(verify_auth=False)
         self.assertEqual(status["mode"], "background")
@@ -174,7 +177,7 @@ class BrowserHardeningTests(unittest.TestCase):
 
     def test_background_network_failure_does_not_mark_auth_expired(self):
         config = browser.load_config()
-        config.update(authenticated=True, resolved_mode="background")
+        config.update(authenticated=True, resolved_mode="background", allow_visible_fallback=True)
         browser.save_config(config)
         with patch.object(browser, "browser_status", return_value={"running": True, "port": 9223, "mode": "background"}), patch.object(browser, "wait_for_authenticated", side_effect=browser.BrowserError("network unavailable")):
             with self.assertRaises(browser.BrowserError):
