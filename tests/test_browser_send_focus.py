@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from do_again.browser import cdp, runtime
-from do_again.browser.errors import BrowserError
+from do_again.browser.errors import BrowserError, BrowserPreDispatchBlocked
 
 
 class ChatSendFocusTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class ChatSendFocusTests(unittest.TestCase):
     def test_auto_background_blocks_before_any_focus_or_message_effect(self):
         commit = Mock()
         with patch.object(runtime, "load_config", return_value={"preferred_mode": "auto", "allow_visible_fallback": False}), patch.object(runtime, "load_state", return_value={"mode": "background"}), patch.object(cdp, "evaluate") as evaluate, patch.object(cdp, "target_call") as activate, patch.object(cdp, "insert_text") as insert, patch.object(cdp, "click_send") as click:
-            with self.assertRaisesRegex(BrowserError, "no browser submission was attempted"):
+            with self.assertRaisesRegex(BrowserPreDispatchBlocked, "no browser submission was attempted"):
                 runtime.send_message(self.target, "UNSENT", before_dispatch=commit)
         evaluate.assert_not_called()
         activate.assert_not_called()
@@ -50,7 +50,7 @@ class ChatSendFocusTests(unittest.TestCase):
                 {"focused": False, "visibility": "hidden"},
                 {"focused": False, "visibility": "visible"}]), patch.object(
                 cdp, "target_call") as call:
-            with self.assertRaisesRegex(BrowserError, "no browser submission was attempted"):
+            with self.assertRaisesRegex(BrowserPreDispatchBlocked, "no browser submission was attempted"):
                 runtime._require_send_target_focus(self.target)
         call.assert_called_once()
 
@@ -59,7 +59,7 @@ class ChatSendFocusTests(unittest.TestCase):
                       {"focused": True, "visibility": "hidden"}):
             with self.subTest(value=value), patch.object(cdp, "evaluate",
                     return_value=value), patch.object(cdp, "target_call"):
-                with self.assertRaises(BrowserError):
+                with self.assertRaises(BrowserPreDispatchBlocked):
                     runtime._require_send_target_focus(self.target)
 
     def test_send_message_cannot_modify_composer_or_commit_dispatch_without_focus(self):
@@ -70,7 +70,7 @@ class ChatSendFocusTests(unittest.TestCase):
                     cdp, "insert_text") as insert, patch.object(
                     cdp, "click_send") as click, patch.object(
                     runtime, "_assistant_snapshot") as snapshot:
-            with self.assertRaisesRegex(BrowserError, "no browser submission was attempted"):
+            with self.assertRaisesRegex(BrowserPreDispatchBlocked, "no browser submission was attempted"):
                 runtime.send_message(self.target, "DO_AGAIN_TEST", before_dispatch=commit)
         bring.assert_called_once_with(
             self.target, "Page.bringToFront", {}, timeout=10.0)
