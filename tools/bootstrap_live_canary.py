@@ -19,12 +19,15 @@ def main() -> None:
     parser.add_argument("--baseline", required=True, help="Exact public Do Again main commit SHA")
     parser.add_argument("--grant-file", type=Path, required=True, help="New private grant JSON path")
     parser.add_argument("--nonce", help="Optional fresh 24-character lowercase hex identity")
-    parser.add_argument("--resume-control-ref", action="store_true",
-                        help="Read an existing sealed grant; NEVER send another browser message")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--resume-control-ref", action="store_true",
+                      help="GET-only reconciliation of an already-reserved GitHub ref; no browser Send or POST")
+    mode.add_argument("--finish-control-ref", action="store_true",
+                      help="Finish first GitHub ref creation from a sealed grant; no browser Send")
     args = parser.parse_args()
     config_path = Path("/Library/Application Support/DoAgainSupervisor/current/config.json")
     config = json.loads(config_path.read_text())
-    if args.resume_control_ref:
+    if args.resume_control_ref or args.finish_control_ref:
         grant = json.loads(args.grant_file.read_text())
         if (grant.get("baseline") != args.baseline
                 or (args.nonce is not None and grant.get("nonce") != args.nonce)):
@@ -40,7 +43,8 @@ def main() -> None:
     control = provision_control_branch(
         nonce=result["nonce"], baseline=args.baseline,
         grant=args.grant_file,
-        journal_root=Path(config["operator_home"]) / ".do_again" / "canary-github-ref")
+        journal_root=Path(config["operator_home"]) / ".do_again" / "canary-github-ref",
+        installed=config, reconcile_only=args.resume_control_ref)
     result["control_branch_verified"] = control["branch"]
     result["control_branch_sha"] = control["sha"]
     print(json.dumps(result, indent=2))
