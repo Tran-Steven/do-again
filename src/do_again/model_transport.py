@@ -29,6 +29,12 @@ class CodexTransportUncertain(CodexTransportBlocked):
 
 
 def discover_codex() -> Path | None:
+    isolated_root = (Path.home() / ".do_again" / "codex-tools").resolve()
+    isolated = isolated_root / "node_modules" / ".bin" / "codex"
+    if isolated.exists():
+        resolved = isolated.resolve()
+        if resolved.is_file() and resolved.is_relative_to(isolated_root):
+            return isolated
     candidate = shutil.which("codex")
     if candidate is None:
         return None
