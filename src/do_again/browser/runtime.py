@@ -673,8 +673,8 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
 @_shared_operation
 def use_background_fallback() -> dict[str, Any]:
     config = load_config()
-    if config.get("preferred_mode") != "auto":
-        raise BrowserError("automatic browser fallback requires auto mode")
+    if config.get("preferred_mode") != "auto" or config.get("allow_visible_fallback") is not True:
+        raise BrowserError("background fallback requires explicit visible-fallback approval")
     stop_browser(force=True)
     config["resolved_mode"] = "background"
     save_config(config)
@@ -742,9 +742,13 @@ def setup_browser(
             save_config(config)
         except Exception as exc:
             stop_browser(force=True)
-            if mode == "headless":
+            if mode == "headless" or (mode == "auto" and config.get("allow_visible_fallback") is not True):
+                config = load_config()
+                config["resolved_mode"] = None
+                save_config(config)
                 raise BrowserError(
-                    "true headless Chrome could not preserve a usable ChatGPT session: "
+                    "true headless Chrome could not preserve a usable ChatGPT session; "
+                    "refusing GUI fallback: "
                     f"{type(exc).__name__}: {exc}"
                 ) from exc
             resolved = "background"
