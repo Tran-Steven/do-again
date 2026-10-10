@@ -6,7 +6,8 @@ import unittest
 from datetime import datetime, timezone
 
 from do_again.model_canary import prepare_canary_edit
-from do_again.model_stages import prepare_model_canary_test
+from do_again.model_stages import (prepare_model_canary_test, prepare_model_canary_commit,
+                                   prepare_model_canary_publish, prepare_model_canary_ci)
 from do_again.model_receipts import ModelReceiptBlocked
 from do_again.core.schema import request_fingerprint, validate_request
 
@@ -84,6 +85,105 @@ class ModelStageTests(unittest.TestCase):
     def test_no_extra_model_call_or_execution(self):
         with self.assertRaises(ModelReceiptBlocked):
             self.run_builder(task=2)
+
+
+class ModelStageSequenceTests(ModelStageTests):
+    def setUp(self):
+        super().setUp()
+        self.test = self.run_builder()
+        self.test_receipt = self._receipt(
+            self.test, self.head, self.head,
+            {"returncode": 0, "timed_out": False})
+        self.commit = prepare_model_canary_commit(
+            test_request=self.test, test_receipt=self.test_receipt,
+            nonce=self.nonce, task=1, expected_head=self.head)
+        self.after_commit = "c" * 40
+        self.commit_receipt = self._receipt(
+            self.commit, self.head, self.after_commit,
+            {"returncode": 0, "state": "succeeded",
+             "authority": {"repo_head": self.after_commit},
+             "paths": ["canary_live_" + self.nonce + ".py",
+                       "tests/test_live_canary_" + self.nonce + ".py"]})
+        self.publish = prepare_model_canary_publish(
+            commit_request=self.commit, commit_receipt=self.commit_receipt,
+            nonce=self.nonce, task=1, expected_head=self.head)
+        self.publish_receipt = self._receipt(
+            self.publish, self.after_commit, self.after_commit,
+            {"returncode": 0, "state": "succeeded",
+             "repository": "Tran-Steven/do-again",
+             "head": self.after_commit, "pull_request": 42})
+
+    @staticmethod
+    def _receipt(request, before, after, result):
+        sha = request_fingerprint(request)
+        return {"schema_version": 1, "request_id": request["request_id"],
+                "request_fingerprint": sha, "operation": request["operation"],
+                "state": "succeeded",
+                "result": {"operation": request["operation"],
+                           "request_fingerprint": sha,
+                           "authority_before": {"repo_head": before},
+                           "authority_after": {"repo_head": after},
+                           "result": result}}
+
+    def test_full_fixed_stage_chain_requires_no_further_model_calls(self):
+        self.assertEqual(self.commit["operation"], "git_commit")
+        self.assertEqual(self.commit["continuation"]["acknowledged_receipts"],
+                         [self.test["request_id"]])
+        self.assertEqual(self.commit["args"]["paths"],
+                         ["canary_live_" + self.nonce + ".py",
+                          "tests/test_live_canary_" + self.nonce + ".py"])
+        self.assertEqual(self.publish["operation"], "git_publish")
+        self.assertEqual(self.publish["expected"]["repo_head"], self.after_commit)
+        self.assertEqual(self.publish["continuation"]["acknowledged_receipts"],
+                         [self.commit["request_id"]])
+        self.assertIn("synthetic", self.publish["args"]["title"])
+        self.assertIn("disabled", self.publish["args"]["body"])
+        ci = prepare_model_canary_ci(
+            publish_request=self.publish, publish_receipt=self.publish_receipt,
+            nonce=self.nonce, task=1, expected_head=self.after_commit)
+        self.assertEqual(ci["operation"], "ci_observe")
+        self.assertEqual(ci["request_id"], "canary-" + self.nonce + "-1-ci")
+        self.assertEqual(ci["args"], {"original_request_id": self.publish["request_id"]})
+        self.assertEqual(ci["continuation"]["acknowledged_receipts"],
+                         [self.publish["request_id"]])
+        self.assertEqual(validate_request(ci, max_ttl_seconds=3600), ci)
+
+    def test_failed_or_ambiguous_test_never_authorizes_commit(self):
+        for update in ({"state": "error"}, {"state": "blocked_ambiguous_replay"}):
+            row = copy.deepcopy(self.test_receipt)
+            row.update(update)
+            with self.assertRaises(ModelReceiptBlocked):
+                prepare_model_canary_commit(
+                    test_request=self.test, test_receipt=row,
+                    nonce=self.nonce, task=1, expected_head=self.head)
+
+    def test_commit_requires_exact_files_and_head_change(self):
+        for wrong in (
+            {"result": {"returncode": 0, "state": "succeeded",
+                        "authority": {"repo_head": self.after_commit},
+                        "paths": [".github/workflows/change.yml"]}},
+            {"result": {"returncode": 0, "state": "succeeded",
+                        "authority": {"repo_head": self.head},
+                        "paths": self.commit["args"]["paths"]}},
+        ):
+            receipt = copy.deepcopy(self.commit_receipt)
+            receipt["result"].update(wrong)
+            with self.assertRaises(ModelReceiptBlocked):
+                prepare_model_canary_publish(
+                    commit_request=self.commit, commit_receipt=receipt,
+                    nonce=self.nonce, task=1, expected_head=self.head)
+
+    def test_publication_requires_actual_draft_pull_request_evidence(self):
+        for changed in (
+            {"pull_request": None}, {"repository": "Tran-Steven/jobpipe"},
+            {"head": self.head}, {"state": "post_dispatch_uncertain"},
+        ):
+            row = copy.deepcopy(self.publish_receipt)
+            row["result"]["result"].update(changed)
+            with self.assertRaises(ModelReceiptBlocked):
+                prepare_model_canary_ci(
+                    publish_request=self.publish, publish_receipt=row,
+                    nonce=self.nonce, task=1, expected_head=self.after_commit)
 
 if __name__ == "__main__":
     unittest.main()
