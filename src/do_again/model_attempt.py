@@ -19,6 +19,7 @@ from .model_canary import (
     validate_prepared_edit,
 )
 from .model_grant import sealed_codex_canary
+from .model_admission import require_codex_parent_maintenance
 from .model_quota import require_model_capacity
 from .model_transport import (
     CodexTransportBlocked, generate_structured, login_ready,
@@ -85,6 +86,7 @@ def run_first_codex_canary_proposal(config: dict, *, allow_model_call: bool = Fa
             or home.resolve() != Path.home().resolve()):
         raise ExecutionBlocked("Codex proposal must run as the pinned unprivileged operator")
     binary = _validate_pinned_binary(scope, home)
+    require_codex_parent_maintenance(config, scope)
     prompt = canary_task_prompt(nonce=scope.nonce, task=1)
     schema = canary_model_schema()
     # All non-effecting preconditions precede the durable reservation.
