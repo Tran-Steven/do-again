@@ -33,6 +33,46 @@ durable receipt + local ledger
 
 The Git control branch is the source of truth for requests and receipts. Local ledgers and Git-backed claims provide exact-once and replay protection. The browser layer is optional and does not replace Git transport.
 
+### Regular ChatGPT — no Codex or browser required
+
+Do Again's primary model interface is **your existing ChatGPT conversation**.
+ChatGPT writes a typed request to the dedicated Git control branch through a
+connected GitHub integration; Do Again's policy-controlled local worker runs it
+and writes an exact matching receipt. **Codex CLI is optional** and not required
+for the core product or v1 release. Background browser automation is another
+way to deliver the same Git-backed requests and receipts.
+
+For an initial status-only handoff from your existing ChatGPT conversation:
+
+~~~bash
+do-again chatgpt prepare /path/to/project
+~~~
+
+The command creates **one original, durable local intent** and prints a prompt.
+Paste the prompt into the regular ChatGPT conversation that has GitHub access.
+It does *not* submit a request, call any AI model or start browser automation.
+The ChatGPT conversation must actually publish the request on the specified
+control branch. After the worker publishes the original matching receipt:
+
+~~~bash
+do-again chatgpt check chatgpt-verify-<original-24-hex-nonce> /path/to/project
+~~~
+
+This reads the remote Git request and receipt using their exact identity. It
+reports `verification=git_receipt_only`; it **does not** assert that native
+confinement or an unattended browser loop has passed. Missing receipts,
+mismatched fingerprints, expired/ambiguous effects and changed control branches
+must never be treated as successful autonomous development. Use
+`do-again verify` for the separate automated ChatGPT-browser round trip, which
+requires a signed-in dedicated browser session.
+
+**Release status:** v1.0.0 requires real ordinary ChatGPT and authenticated
+ChatGPT web/native evidence in
+[the acceptance checklist](docs/v1-native-acceptance.md). The experimental
+[Codex transport](docs/non-browser-codex-transport.md) is not the default and
+its allowance or quota reset is never a release prerequisite.
+
+
 The [dedicated macOS execution-user preview](docs/macos-execution.md) provides a separately installed supervisor and synthetic enforcement probes. The Agent source routes admitted script/test execution through this authenticated broker. Legacy runtime preparation, install, restart and foreground run now fail closed; engineering automation remains held until immutable daemon deployment, scoped repository brokers and remaining production gates pass. These source changes do not retrofit confinement into older copied installations.
 
 ## Install
