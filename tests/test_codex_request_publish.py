@@ -115,7 +115,7 @@ class CodexRequestPublisherTests(unittest.TestCase):
             "epoch":4,"value":self.request}
         patches=[
             patch("do_again.supervisor.codex_request_publish.sys.platform","darwin"),
-            patch("do_again.supervisor.codex_request_publish.os.geteuid",return_value=0),
+            patch("do_again.supervisor.codex_request_publish.os.geteuid",return_value=0,create=True),
             patch("do_again.supervisor.model_native.CodexCanaryAuthority.check"),
             patch("do_again.supervisor.macos_server.verify_installation"),
             patch("do_again.supervisor.codex_request_publish.snapshot",
