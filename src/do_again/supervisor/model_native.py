@@ -108,11 +108,15 @@ class CodexCanaryAuthority:
                          "control_reconcile","git_publication_reconcile","worker_register"}:
             return
         if operation=="codex_request_publish":
-            if packet.get("request_id")!="codex-publish-"+self.scope.nonce+"-1-edit":
-                raise ExecutionBlocked("Codex publisher packet ID differs from sealed one-shot")
-            self.request(packet.get("value"),"automation/do_again/requests/canary-"
-                         +self.scope.nonce+"-1-edit.json")
-            return
+            rid=packet.get("request_id")
+            for task in (1,2):
+                if rid=="codex-publish-"+self.scope.nonce+"-"+str(task)+"-edit":
+                    if task==2:self.second_ready()
+                    self.request(packet.get("value"),
+                        "automation/do_again/requests/canary-"+self.scope.nonce+
+                        "-"+str(task)+"-edit.json")
+                    return
+            raise ExecutionBlocked("Codex publisher packet ID exceeds two one-shot edits")
         if operation in {"codex_ci_status","codex_ci_checkpoint"}:
             if packet != {"operation":operation}:
                 raise ExecutionBlocked("Codex CI checkpoint accepts no worker-provided authority")
@@ -120,12 +124,17 @@ class CodexCanaryAuthority:
                 self.check()
             return
         if operation=="codex_followup_publish":
-            prefix="codex-publish-"+self.scope.nonce+"-1-"
             rid=packet.get("request_id")
-            if (not isinstance(rid,str) or rid not in {
-                    prefix+"test",prefix+"commit",prefix+"publish",prefix+"ci"
-                } or set(packet)!={"operation","request_id","epoch"}):
-                raise ExecutionBlocked("Codex follow-up can select only the four fixed task-one stages")
+            allowed={
+                "codex-publish-"+self.scope.nonce+"-"+str(task)+"-"+stage
+                for task in (1,2)
+                for stage in ("test","commit","publish","ci")
+            }
+            if (not isinstance(rid,str) or rid not in allowed
+                    or set(packet)!={"operation","request_id","epoch"}):
+                raise ExecutionBlocked("Codex follow-up selects only fixed synthetic stages")
+            if rid.startswith("codex-publish-"+self.scope.nonce+"-2-"):
+                self.second_ready()
             return
         if operation=="control_publish":
             path=packet.get("path","")
@@ -134,19 +143,23 @@ class CodexCanaryAuthority:
                 # Reuse the existing typed stage set, not an arbitrary worker
                 # recipient. Terminal broker checks bind each receipt.
                 rid=path.rsplit("/",1)[-1].removesuffix(".json")
-                if rid not in {
-                    self.scope.request_prefix+"1-"+stage
+                allowed={
+                    self.scope.request_prefix+str(task)+"-"+stage
+                    for task in (1,2)
                     for stage in ("edit","test","commit","publish","ci")
-                } or not path.endswith(".json"):
-                    raise ExecutionBlocked("Codex child receipt is outside the fixed task-one stages")
+                }
+                if rid not in allowed or not path.endswith(".json"):
+                    raise ExecutionBlocked("Codex child receipt is outside the fixed two-task stages")
+                if rid.startswith(self.scope.request_prefix+"2-"):
+                    self.second_ready()
                 value=packet.get("value")
                 if not isinstance(value,dict) or value.get("request_id")!=rid:
                     raise ExecutionBlocked("Codex child control record mismatches its original request")
                 return
             raise ExecutionBlocked("Codex child cannot write requests through ordinary control_publish")
         if operation in {"execute","git_commit","git_publish","ci_observe"}:
-            from .model_stage_gate import admit_first_task_packet
-            admit_first_task_packet(self.broker,self.scope,packet)
+            from .model_stage_gate import admit_codex_task_packet
+            admit_codex_task_packet(self.broker,self.scope,packet)
             return
         # Any native operation outside the exact root-read original request
         # and successful preceding broker stages is blocked, not degraded.
