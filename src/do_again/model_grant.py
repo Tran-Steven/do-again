@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +91,7 @@ def sealed_codex_canary(config: dict[str, Any], *, now: datetime | None = None) 
     if not isinstance(instant, datetime) or instant.tzinfo is None:
         raise ExecutionBlocked("Codex canary clock has no trusted timezone")
     instant = instant.astimezone(timezone.utc)
-    if not instant < expiry <= instant.replace(year=instant.year + 1):
+    if not instant < expiry <= instant + timedelta(hours=2):
         raise ExecutionBlocked("Codex canary grant has expired or exceeds its bounded horizon")
     # The separate activation journal must enforce a tighter runtime 2h limit.
     return CodexCanaryScope(
