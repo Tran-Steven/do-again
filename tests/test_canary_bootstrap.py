@@ -38,7 +38,7 @@ class CanaryBootstrapTests(unittest.TestCase):
             CHATGPT_URL="https://chatgpt.com/",
             browser_paths=Mock(return_value=SimpleNamespace(
                 projects=self.home / "browser" / "projects")),
-            ensure_browser_running=Mock(return_value={"port": 9224, "mode": "headless"}),
+            ensure_browser_running=Mock(return_value={"port": 9224, "mode": "headless", "session_ready": True}),
             wait_for_authenticated=Mock(return_value=(self.target, {})),
             send_message=Mock(),
             register_project=Mock(return_value=self.record),
@@ -71,6 +71,22 @@ class CanaryBootstrapTests(unittest.TestCase):
     def ticket(self):
         return json.loads((self.home / ".do_again" / "canary-bootstrap" /
                            (self.nonce + ".json")).read_text())
+
+    def test_rejects_background_or_unverified_session_before_any_chat_target(self):
+        for session in ({"port": 9224, "mode": "background", "session_ready": True},
+                        {"port": 9224, "mode": "headless", "session_ready": False}):
+            with self.subTest(session=session):
+                self.browser.ensure_browser_running.return_value = session
+                with self.assertRaisesRegex(ExecutionBlocked, "authenticated true-headless"):
+                    self.run_bootstrap()
+                self.create.assert_not_called()
+                self.browser.send_message.assert_not_called()
+                self.browser.register_project.assert_not_called()
+                self.assertFalse(self.output.exists())
+                self.assertEqual(self.ticket()["state"], "reserved")
+                (self.home / ".do_again" / "canary-bootstrap" / (self.nonce + ".json")).unlink()
+        self.browser.ensure_browser_running.return_value = {
+            "port": 9224, "mode": "headless", "session_ready": True}
 
     def test_headless_chat_bootstraps_and_seals_private_exact_grant(self):
         self.browser.send_message.side_effect = self.succeed
