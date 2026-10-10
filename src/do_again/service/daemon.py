@@ -24,7 +24,7 @@ from ..browser import (
 from ..core.agent import Agent
 from ..core.schema import atomic_json, utc_now
 from ..browser import cdp
-from ..browser.errors import BrowserSubmissionUncertain
+from ..browser.errors import BrowserPreDispatchBlocked, BrowserSubmissionUncertain
 from ..browser import runtime as browser_runtime
 from ..browser.runtime import _file_lock
 from .runtime import runtime_layout
@@ -316,9 +316,13 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
             )
     except BrowserError as exc:
         if (_read_uncertain_delivery(state_dir).get('state') == 'preparing'
-            and (isinstance(exc, BrowserAuthRequired)
+            and (isinstance(exc, (BrowserAuthRequired, BrowserPreDispatchBlocked))
                  or "ChatGPT is still generating; retry delivery later" in str(exc))):
-            # These known pre-submit checks guarantee the page was not clicked.
+            # Only a typed *pre-Send* refusal, explicit login blocker, or
+            # read-only busy check proves no click. Keep the original outbox,
+            # but retire the transient "preparing" intent so a later healthy
+            # session may attempt delivery. Anything post-dispatch, unknown,
+            # or unexpected still requires read-only reconciliation.
             _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
             _record_browser_state(state_dir, "recovering", error=str(exc))
             if isinstance(exc, BrowserAuthRequired):
