@@ -52,8 +52,12 @@ class SecondCodexNativeStageTests(unittest.TestCase):
         f=self.fixture
         with patch("do_again.supervisor.model_stage_gate.read_sealed_request",
                    side_effect=lambda broker,scope,task,name:f.requests[name]):
+            original=(
+                {"operation":"ci_observe","request_id":"canary-"+f.nonce+"-2-publish"}
+                if stage=="ci" else f.packet(stage)
+            )
             return admit_codex_task_packet(
-                f.broker,f.scope,f.packet(stage) if packet is None else packet)
+                f.broker,f.scope,original if packet is None else packet)
 
     def test_all_five_second_task_stages_require_first_CI_proof(self):
         for stage in ("edit","test","commit","publish","ci"):
