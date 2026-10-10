@@ -7,15 +7,16 @@ receipt must come from that same branch's verified Git tree.
 from __future__ import annotations
 
 from .core.schema import canonical_json
-from .model_receipts import ModelReceiptBlocked, verify_model_edit_receipt
+from .model_receipts import ModelReceiptBlocked, verify_model_edit_receipt, verify_model_ci_receipt
 from .supervisor.control_history import blob_sha, read_json_blob, snapshot
 
 
-def observe_model_stage(*, api, nonce: str, task: int, stage: str, request: dict) -> dict:
+def observe_model_stage(*, api, nonce: str, task: int, stage: str, request: dict,
+                        pull_request: int | None = None) -> dict:
     from .model_receipts import _NONCE, _HEAD
     from .model_stages import _require_stage_receipt
     operations = {"edit": "scratch_script", "test": "run_tests",
-                  "commit": "git_commit", "publish": "git_publish"}
+                  "commit": "git_commit", "publish": "git_publish", "ci": "ci_observe"}
     if (not isinstance(nonce, str) or not _NONCE.fullmatch(nonce)
             or type(task) is not int or task not in (1, 2)
             or stage not in operations or not isinstance(request, dict)
@@ -50,6 +51,10 @@ def observe_model_stage(*, api, nonce: str, task: int, stage: str, request: dict
     if stage == "edit":
         evidence = verify_model_edit_receipt(
             request, receipt, nonce=nonce, task=task, expected_head=expected_head)
+    elif stage == "ci":
+        evidence = verify_model_ci_receipt(
+            request, receipt, nonce=nonce, task=task, expected_head=expected_head,
+            pull_request=pull_request)
     else:
         proof = _require_stage_receipt(
             request=request, receipt=receipt, nonce=nonce, task=task,
