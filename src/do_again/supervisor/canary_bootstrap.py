@@ -98,18 +98,10 @@ def bootstrap_live_canary(
         target = cdp.create_target(int(session["port"]), browser.CHATGPT_URL, background=True)
         target, _ = browser.wait_for_authenticated(
             int(session["port"]), chat_url=target.url, timeout=30.0, target=target)
-        # Chrome's background fallback launches with --start-minimized, while
-        # CDP Target.createTarget(background=True) leaves a newly created tab
-        # document.hidden. A correct hit-tested CDP mouse gesture can silently
-        # do nothing in that state. Activate ONLY the dedicated Chrome tab;
-        # Target.activateTarget restored document.visibilityState='visible' in
-        # a real disposable macOS diagnostic without focusing the OS window.
-        # Never unminimize Chrome, change the user's default browser, or retry
-        # a Send click if visibility is lost after dispatch.
-        cdp.browser_call(int(session["port"]), "Target.activateTarget",
-                         {"targetId": target.id}, timeout=10.0)
-        if cdp.evaluate(target, "document.visibilityState", timeout=10.0) != "visible":
-            raise ExecutionBlocked("canary tab did not become visible before Send")
+        # send_message owns its focus/visibility check before any composer
+        # mutation or durable dispatch. Target.activateTarget alone only made
+        # a disposable background tab visible, NOT focused on macOS, so never
+        # treat that as permission to click Send.
         atomic_json(ticket, {"schema_version": 1, "state": "target_created",
                              "nonce": nonce, "target_id": target.id})
 
