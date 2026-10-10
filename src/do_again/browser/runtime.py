@@ -849,7 +849,30 @@ return 'ready';
     dispatch_started = False
     try:
         cdp.insert_text(target, text)
-        time.sleep(0.15)
+        # ChatGPT can transiently render a disabled textarea before the actual
+        # contenteditable composer hydrates. Input.insertText may finish while
+        # Send is still disabled. Readiness is read-only and must be established
+        # BEFORE the durable pre-gesture dispatch point; never make a speculative
+        # click, or use Enter as a fallback.
+        prefix = str(text).strip()[:48]
+        readiness = r"""(() => {
+const visible = el => {const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+  return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';};
+const inputs=[...document.querySelectorAll(
+  '#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]'
+)].filter(visible);
+const buttons=[...document.querySelectorAll(
+  'button[data-testid="send-button"],button[aria-label="Send"],button[aria-label="Send prompt"]'
+)].filter(visible);
+if(buttons.length!==1 || buttons[0].disabled ||
+   buttons[0].getAttribute('aria-disabled')==='true')return false;
+return inputs.some(el=>String(el.value||el.innerText||el.textContent||'').includes(PREFIX));
+})()""".replace('PREFIX', json.dumps(prefix))
+        deadline = time.monotonic()+10.0
+        while cdp.evaluate(target, readiness, timeout=10.0) is not True:
+            if time.monotonic()>=deadline:
+                raise BrowserError("ChatGPT Send did not become enabled for this composer before dispatch")
+            time.sleep(0.2)
         # Exactly one gesture. From this point every exception is uncertain;
         # absence of composer clearing never permits a fallback submission.
         dispatch_started = True
