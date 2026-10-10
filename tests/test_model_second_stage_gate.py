@@ -25,9 +25,8 @@ class SecondCodexNativeStageTests(unittest.TestCase):
             "implementation":"def canonical_label(text):\n    if not text.isascii():\n        raise ValueError('ASCII only')\n    return '-'.join(text.lower().split())\n",
             "tests":"import unittest\nfrom canary_live_"+nonce+
                     " import canonical_label\nclass TestLabel(unittest.TestCase):\n"
-                    "    def test_non_ascii(self):\n"
-                    "        with self.assertRaises(ValueError):\n"
-                    "            canonical_label('caf\\u00e9')\n",
+                    "    def test_ascii(self):\n"
+                    "        self.assertEqual(canonical_label('A B'), 'a-b')\n",
         },nonce=nonce,task=2,expected_head=self.first_head,issued_at=now)
         prior="edit"
         for stage in ("test","commit","publish","ci"):
