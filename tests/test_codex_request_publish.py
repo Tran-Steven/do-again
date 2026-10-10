@@ -104,6 +104,7 @@ class CodexRequestPublisherTests(unittest.TestCase):
             max_model_calls=2)
         authority=CodexCanaryAuthority.__new__(CodexCanaryAuthority)
         authority.scope=self.scope
+        authority.second_ready=lambda: (_ for _ in ()).throw(ExecutionBlocked("first CI checkpoint not installed"))
         self.broker=SimpleNamespace(
             codex=authority,lock=threading.Lock(),admission=nullcontext,
             registry=SimpleNamespace(status=lambda repo:{"epoch":4}),
