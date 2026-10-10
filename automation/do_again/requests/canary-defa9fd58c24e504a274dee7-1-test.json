@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-defa9fd58c24e504a274dee7-1-test",
+  "operation": "run_tests",
+  "issued_at_utc": "2026-10-10T02:30:49.590Z",
+  "expires_at_utc": "2026-10-10T02:40:49.590Z",
+  "expected": {
+    "repo_head": "4d2d5660adb3e3fe24573fcb437781d9ba3581b3"
+  },
+  "args": {
+    "discover": true,
+    "start_directory": "tests",
+    "pattern": "test_live_canary_defa9fd58c24e504a274dee7.py",
+    "cwd": "."
+  },
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "canary-defa9fd58c24e504a274dee7-1-edit"
+    ],
+    "goal_state": "in_progress"
+  }
+}
