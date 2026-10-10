@@ -12,7 +12,7 @@ import secrets
 from pathlib import Path
 
 from ..core.schema import atomic_json
-from .authority import AuthorityRegistry, project_identity
+from .authority import project_identity
 from .live_canary import require_fresh_conversation, scope
 from .macos_execution import ExecutionBlocked
 
@@ -36,6 +36,44 @@ def _exclusive_json(path: Path, value: dict) -> None:
             os.close(directory)
 
 
+def _protected_parent_state(installed: dict, *, rpc=None) -> dict:
+    """Verify the actual root-broker authority, never stale legacy SQLite.
+
+    Both protected projects must remain native-verified, quiescent maintenance.
+    The root authority's epoch is the only valid sealed browser grant epoch.
+    """
+    from .macos_client import broker_request
+    reader = rpc or broker_request
+    home = Path(installed["operator_home"])
+    projects = installed.get("projects")
+    if (not isinstance(projects, list) or len(projects) != 2
+            or {p.get("account") for p in projects if isinstance(p,dict)}
+                 != {"_doagain_da", "_doagain_jp"}):
+        raise ExecutionBlocked("ChatGPT canary requires both protected project identities")
+    statuses = {}
+    for account, name in (("_doagain_da","do-again"),("_doagain_jp","jobpipe")):
+        project = next(p for p in projects if p.get("account")==account)
+        repo = home / name
+        if (project.get("repo") != str(repo)
+                or project.get("github_repository") != "Tran-Steven/" + name):
+            raise ExecutionBlocked("ChatGPT canary protected project path changed")
+        state = reader(repo, {"operation":"status"})
+        if (not isinstance(state,dict)
+                or state.get("source_sha")!=installed.get("source_sha")
+                or state.get("operator_intent")!="maintenance"
+                or state.get("production_ready") is not False
+                or state.get("canary_authorized") is not False
+                or state.get("enforcement_verified") is not True
+                or state.get("enforcement_blocker") is not None
+                or state.get("unresolved_executions")!=[]
+                or state.get("inflight_request_ids")!=[]
+                or type(state.get("epoch")) is not int
+                or state["epoch"]<1):
+            raise ExecutionBlocked("ChatGPT canary parent is not protected quiescent maintenance")
+        statuses[account] = state
+    return statuses["_doagain_da"]
+
+
 def bootstrap_live_canary(
     installed: dict,
     *,
@@ -56,16 +94,7 @@ def bootstrap_live_canary(
             or installed.get("operator_uid") != os.getuid()
             or not re.fullmatch(r"[0-9a-f]{40}", str(baseline))):
         raise ExecutionBlocked("canary bootstrap needs maintenance-only operator and exact baseline")
-    parents = [p for p in installed.get("projects", []) if p.get("account") == "_doagain_da"]
-    if len(parents) != 1 or parents[0].get("repo") != str(home / "do-again"):
-        raise ExecutionBlocked("canary bootstrap has no unique trusted parent")
-    parent = parents[0]
-    registry = AuthorityRegistry(Path(installed["legacy_authority_path"]))
-    status = registry.status(Path(parent["repo"]))
-    if status["intent"] != "maintenance":
-        raise ExecutionBlocked("canary bootstrap requires parent maintenance authority")
-    if not isinstance(status.get("epoch"), int) or status["epoch"] < 1:
-        raise ExecutionBlocked("canary bootstrap has no valid parent authority epoch")
+    status = _protected_parent_state(installed)
     nonce = secrets.token_hex(12) if nonce is None else nonce
     if not re.fullmatch(r"[0-9a-f]{24}", str(nonce)):
         raise ExecutionBlocked("invalid canary bootstrap nonce")
@@ -122,8 +151,8 @@ def bootstrap_live_canary(
             raise ExecutionBlocked("fresh canary chat lacks exact readiness acknowledgment")
         # Reject a parent pause, resume, or epoch change during browser I/O.
         # A new chat is not authority to issue a canary grant.
-        current = registry.status(Path(parent["repo"]))
-        if current.get("intent") != "maintenance" or current.get("epoch") != status["epoch"]:
+        current = _protected_parent_state(installed)
+        if current.get("epoch") != status["epoch"]:
             raise ExecutionBlocked("parent authority changed during canary bootstrap")
         grant = {"nonce": nonce, "baseline": baseline, "parent_epoch": status["epoch"],
                  "chat_url": url, "binding_identity": "0" * 64}
