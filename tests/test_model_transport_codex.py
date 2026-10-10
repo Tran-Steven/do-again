@@ -136,6 +136,32 @@ class CodexTransportTests(unittest.TestCase):
                     home=self.home, allow_model_call=True, timeout_seconds=60)
         run.assert_called_once()
 
+    def test_sensitive_codex_errors_are_redacted_to_safe_categories(self):
+        from do_again.model_transport import _safe_codex_failure_category
+        token = "shh-not-a-real-token"
+        for stderr, expected in (
+            ("401 access token " + token, "authentication"),
+            ("quota exceeded; secret=" + token, "quota_or_rate_limit"),
+            ("Connection refused at secret=" + token, "connectivity"),
+            ("unknown option --flag: " + token, "argument_validation"),
+            ("random provider details; secret=" + token, "unclassified"),
+        ):
+            with self.subTest(category=expected):
+                category = _safe_codex_failure_category("", stderr)
+                self.assertEqual(category, expected)
+                self.assertNotIn(token, category)
+
+    def test_nonzero_result_categorized_without_leaking_provider_output(self):
+        with patch.object(transport, "login_ready", return_value=True), patch.object(
+                transport.subprocess, "run", return_value=subprocess.CompletedProcess(
+                    ["codex"], 1, "", "rate limit; private-auth-stuff")) as run:
+            with self.assertRaises(transport.CodexTransportUncertain) as raised:
+                transport.generate_structured("test", self.schema, binary=self.binary,
+                                             home=self.home, allow_model_call=True)
+        self.assertIn("quota_or_rate_limit", str(raised.exception))
+        self.assertNotIn("private-auth-stuff", str(raised.exception))
+        run.assert_called_once()
+
     def test_nonzero_return_is_uncertain_and_never_retried(self):
         with patch.object(transport, "login_ready", return_value=True), patch.object(
                 transport.subprocess, "run", return_value=subprocess.CompletedProcess(
