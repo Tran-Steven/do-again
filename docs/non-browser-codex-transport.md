@@ -20,8 +20,10 @@ An isolated, pinned Codex CLI `0.162.1` was installed for the Mac operator at:
 
 This installation does not overwrite any global Node package, ChatGPT Chrome
 profile, launchd service, protected supervisor, or project. It is **not
-authenticated automatically**. To sign in deliberately, from a local terminal
-under the same macOS operator account:
+authenticated automatically**. On October 10, 2026, the user completed device
+sign-in and a private, read-only Mac workflow verified the installed CLI is
+signed in without making a model call. To reauthenticate deliberately, from a
+local terminal under the same macOS operator account:
 
 ```bash
 "$HOME/.do_again/codex-tools/node_modules/.bin/codex" login --device-auth
@@ -53,6 +55,13 @@ forces `--sandbox read-only` and `--ask-for-approval never`.
 
 **This is a transport foundation, not completed autonomous release
 qualification.** At this stage it returns structured model output only.
+An additional pure offline boundary, `model_canary.prepare_canary_edit`,
+translates a proposed implementation and unittest into the existing typed,
+head-fenced `scratch_script` request. It checks the exact nonce, task index,
+repository head, Python syntax, module imports, approved calls and output paths;
+it creates no file, browser, GitHub, or model effects. It is currently a
+request **candidate**, not an authorized publication or execution.
+
 It does **not** publish Do Again control requests, dispatch protected
 work, drive a two-task canary, or replace the conversation/acknowledgment
 protocol. The installed broker's grant is still tied to the original
