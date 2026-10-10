@@ -33,16 +33,36 @@ class OneGestureDeliveryTests(unittest.TestCase):
                         browser.notify_receipts(repo,[{'request_id':'synthetic','state':'succeeded'}],binding_guard=guard)
                 rollover.assert_not_called()
 
-    def test_explicit_send_uses_one_click_and_never_enter(self):
-        with patch.object(cdp,'evaluate',return_value='clicked') as evaluate, patch.object(cdp,'press_enter') as enter:
+    def test_explicit_send_uses_one_trusted_mouse_click_and_never_enter(self):
+        point={'x':85.5,'y':32.0}
+        with patch.object(cdp,'evaluate',return_value=point) as evaluate, \
+             patch.object(cdp,'target_call') as effect, \
+             patch.object(cdp,'press_enter') as enter:
             cdp.click_send(self.target)
             evaluate.assert_called_once()
-            self.assertIn('buttons[0].click()',evaluate.call_args.args[1])
-            self.assertTrue(evaluate.call_args.kwargs['user_gesture'])
+            self.assertIn('elementFromPoint',evaluate.call_args.args[1])
+            self.assertNotIn('button.click()',evaluate.call_args.args[1])
+            self.assertEqual([c.args[1] for c in effect.call_args_list],
+                             ['Input.dispatchMouseEvent','Input.dispatchMouseEvent'])
+            pressed,released=[c.args[2] for c in effect.call_args_list]
+            self.assertEqual(pressed,{'type':'mousePressed','x':85.5,'y':32.0,
+                                      'button':'left','clickCount':1,'buttons':1})
+            self.assertEqual(released,{'type':'mouseReleased','x':85.5,'y':32.0,
+                                       'button':'left','clickCount':1,'buttons':0})
             enter.assert_not_called()
-        with patch.object(cdp,'evaluate',return_value='send_unavailable'), patch.object(cdp,'press_enter') as enter:
+        with patch.object(cdp,'evaluate',return_value=None), \
+             patch.object(cdp,'target_call') as effect, \
+             patch.object(cdp,'press_enter') as enter:
             with self.assertRaises(BrowserError):cdp.click_send(self.target)
+            effect.assert_not_called()
             enter.assert_not_called()
+
+    def test_single_mouse_press_timeout_never_releases_or_retries(self):
+        with patch.object(cdp,'evaluate',return_value={'x':50.0,'y':50.0}), \
+             patch.object(cdp,'target_call',side_effect=cdp.CdpTimeoutError('press uncertain')) as effect:
+            with self.assertRaises(cdp.CdpTimeoutError):cdp.click_send(self.target)
+            effect.assert_called_once()
+            self.assertEqual(effect.call_args.args[2]['type'],'mousePressed')
 
     def test_target_lookup_cannot_match_a_different_conversation_prefix(self):
         wrong=cdp.Target('wrong','https://chatgpt.com/c/abc-other','','ws://127.0.0.1/wrong')
