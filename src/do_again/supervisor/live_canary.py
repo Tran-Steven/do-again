@@ -12,6 +12,20 @@ from .authority import project_identity
 from .macos_execution import EXECUTION_ROOT, INSTALL_ROOT, ExecutionBlocked
 
 
+def require_fresh_conversation(previous, candidate):
+    """One-shot canary identities must never share an earlier canary's chat.
+
+    A withdrawn canary may retain a possibly-submitted prompt in its exact
+    conversation. A fresh nonce/binding generation does not make that chat
+    safe to reuse: its old user message and unsent composer are ambiguous.
+    """
+    old = previous.get('live_canary') if isinstance(previous,dict) else None
+    new = candidate.get('live_canary') if isinstance(candidate,dict) else None
+    if (isinstance(old,dict) and isinstance(new,dict)
+            and old.get('chat_url') and old['chat_url']==new.get('chat_url')):
+        raise ExecutionBlocked('fresh canary requires a distinct ChatGPT conversation')
+
+
 def scope(config):
     value = config.get('live_canary')
     if (not isinstance(value,dict) or set(value) != {'nonce','baseline','parent_epoch','chat_url','binding_identity'}
