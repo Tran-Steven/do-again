@@ -159,6 +159,49 @@ class WorkerServiceTests(unittest.TestCase):
         self.assertTrue(result['journals_retained'])
         self.assertEqual(json.loads((self.state/'worker-deployment.json').read_text())['phase'],'withdrawn')
 
+    def test_async_withdrawal_waits_without_reissuing_bootout(self):
+        label,_=service.service_spec(self.broker,2)
+        with patch.object(service,'launchctl',return_value=SimpleNamespace(returncode=0)) as dispatch, \
+             patch.object(service,'service_present',side_effect=[True,True,False]) as observe, \
+             patch.object(service.time,'monotonic',return_value=0), \
+             patch.object(service.time,'sleep') as sleep:
+            outcome=service.withdraw_worker(self.broker)
+            self.assertTrue(outcome['withdrawn'])
+            dispatch.assert_called_once_with(self.broker,'bootout',f'gui/501/{label}',allow_missing=True)
+            self.assertEqual(observe.call_count,3)
+            self.assertEqual(sleep.call_count,2)
+        self.assertEqual(json.loads((self.state/'worker-deployment.json').read_text())['phase'],'withdrawn')
+
+    def test_withdrawal_timeout_preserves_original_phase_and_does_not_repeat_bootout(self):
+        with patch.object(service,'launchctl',return_value=SimpleNamespace(returncode=0)) as dispatch, \
+             patch.object(service,'service_present',return_value=True), \
+             patch.object(service.time,'monotonic',side_effect=[0,4]), \
+             patch.object(service.time,'sleep') as sleep:
+            with self.assertRaisesRegex(ExecutionBlocked,'withdrawal is uncertain'):
+                service.withdraw_worker(self.broker)
+            dispatch.assert_called_once()
+            self.assertEqual(dispatch.call_args.args[1],'bootout')
+            sleep.assert_not_called()
+        self.assertEqual(json.loads((self.state/'worker-deployment.json').read_text())['phase'],'staged')
+
+    def test_withdrawal_checks_registered_kernel_birth_before_terminal_success(self):
+        lease={'epoch':2,'pid':123,'identity':[501,10,20,1]}
+        (self.state/'worker-instance.json').write_text(json.dumps(lease))
+        with patch.object(service,'launchctl',return_value=SimpleNamespace(returncode=113)), \
+             patch.object(service,'service_present',return_value=False), \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn') as verify:
+            result=service.withdraw_worker(self.broker)
+            self.assertTrue(result['withdrawn'])
+            verify.assert_called_once_with(123,lease['identity'])
+        (self.state/'worker-deployment.json').write_text(json.dumps(self.record))
+        with patch.object(service,'launchctl',return_value=SimpleNamespace(returncode=113)), \
+             patch.object(service,'service_present',return_value=False), \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn',
+                   side_effect=ExecutionBlocked('worker still alive')):
+            with self.assertRaisesRegex(ExecutionBlocked,'worker still alive'):
+                service.withdraw_worker(self.broker)
+        self.assertEqual(json.loads((self.state/'worker-deployment.json').read_text())['phase'],'staged')
+
     def registration_fixture(self):
         self.record['phase']='started_unverified'
         (self.state/'worker-deployment.json').write_text(json.dumps(self.record))
