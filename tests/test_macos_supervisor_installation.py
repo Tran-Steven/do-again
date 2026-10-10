@@ -19,6 +19,7 @@ class InstallationTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
+    @unittest.skipUnless(sys.platform=='darwin','root installer is supported only on macOS')
     def test_installer_early_chat_gate_works_in_isolated_system_python(self):
         import subprocess
         current=self.root/'current';current.mkdir()
@@ -128,6 +129,7 @@ else:
             birth.assert_not_called()
         self.assertEqual(journal.read_bytes(),original)
 
+    @unittest.skipUnless(sys.platform=='darwin','root installer is supported only on macOS')
     def test_install_rejects_reused_canary_chat_before_privileged_effects(self):
         current=self.root/'current';current.mkdir()
         stage=self.root/'stage';stage.mkdir()
