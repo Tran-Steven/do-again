@@ -41,7 +41,7 @@ class CodexCanaryPreparationTests(unittest.TestCase):
             nonce=kwargs.pop("nonce", self.nonce),
             task=kwargs.pop("task", 1),
             expected_head=kwargs.pop("expected_head", self.sha),
-            issued_at=kwargs.pop("issued_at", datetime(2026, 10, 10, 17, 0, tzinfo=timezone.utc)),
+            issued_at=kwargs.pop("issued_at", datetime.now(timezone.utc)),
             **kwargs,
         )
 
