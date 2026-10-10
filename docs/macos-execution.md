@@ -549,6 +549,20 @@ A previous live canary's ChatGPT conversation is never an acceptable successor,
 even with a different nonce. Login/Cloudflare challenges or macOS administrator
 prompts still require human action; ordinary tab creation does not.
 
+The bootstrap then provisions exactly one isolated GitHub control ref at
+`refs/heads/do-again/canary-<nonce>/control` using the approved public baseline.
+It uses the operator's existing GitHub CLI authentication (no workflow scope)
+and journals the branch-create attempt before GitHub effects. A GET must prove
+the ref is absent with an actual HTTP 404 before the single POST. The POST
+cannot be repeated after a lost response; a follow-up can only GET and verify
+the exact original ref/SHA. A failure after successfully creating the chat
+never authorizes sending that bootstrap message again.
+
+For branch readback or GitHub-transport recovery, use the same exact grant and
+baseline with `--resume-control-ref`. This skips ChatGPT entirely and can only
+inspect the earlier branch if its publication ticket was reserved. Do not run
+the original bootstrap again with its consumed nonce.
+
 The generated grant is intended as input to
 `tools/prepare_macos_supervisor.py --canary-grant`. Only a separate, explicit
 administrator approval can install it. Run post-install native confinement
