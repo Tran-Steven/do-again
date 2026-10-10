@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import io
+import json
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -85,6 +87,27 @@ class CodexQuotaTests(unittest.TestCase):
         allowed["allowed"] = True
         with patch("do_again.model_quota.query_codex_rate_limits", return_value=allowed):
             self.assertIs(require_model_capacity(Path("/codex"), Path("/operator")), allowed)
+
+    def test_cli_status_and_limits_do_not_report_model_ready_if_weekly_blocked(self):
+        from do_again.cli import _model_action
+        capacity = summarize_rate_limits(self.original)
+        for action in ("status", "limits"):
+            with self.subTest(action=action), patch(
+                    "do_again.model_transport.discover_codex",
+                    return_value=Path("/operator/.do_again/codex-tools/node_modules/.bin/codex")
+            ), patch(
+                    "do_again.model_transport.login_ready", return_value=True
+            ), patch(
+                    "do_again.model_quota.query_codex_rate_limits", return_value=capacity
+            ) as rpc, patch("sys.stdout", new_callable=io.StringIO) as output:
+                exit_code = _model_action(action)
+            self.assertEqual(exit_code, 2)
+            result = json.loads(output.getvalue())
+            self.assertTrue(result["authenticated"])
+            self.assertFalse(result["model_ready"])
+            self.assertFalse(result["capacity"]["allowed"])
+            self.assertFalse(result["production_enabled"])
+            rpc.assert_called_once()
 
     def test_malformed_reset_credit_count_never_inferred(self):
         row = copy.deepcopy(self.original)
