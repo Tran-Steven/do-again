@@ -409,7 +409,7 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
         layout = runtime_layout(repo)
         if not layout.browser_enabled:
             raise ServiceError(
-                "unattended browser verification requires a configured ChatGPT browser; "
+                "unattended verification requires browser automation and a configured ChatGPT browser; "
                 "for normal ChatGPT conversations use do-again chatgpt prepare/check"
             )
         service = service_status(repo)
