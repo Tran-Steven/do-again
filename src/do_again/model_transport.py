@@ -144,9 +144,8 @@ def generate_structured(
         output_path = work / "answer.json"
         schema_path.write_text(serialized_schema, encoding="utf-8")
         argv = [
-            str(selected), "exec",
+            str(selected), "--ask-for-approval", "never", "exec",
             "--sandbox", "read-only",
-            "--ask-for-approval", "never",
             "--skip-git-repo-check",
             "--output-schema", str(schema_path),
             "--output-last-message", str(output_path),
