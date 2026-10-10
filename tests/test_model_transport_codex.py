@@ -77,8 +77,10 @@ class CodexTransportTests(unittest.TestCase):
 
     def test_single_sandboxed_structured_call(self):
         calls = []
+        wire_schemas = []
         def fake_run(args, **kwargs):
             calls.append((args, kwargs))
+            wire_schemas.append(json.loads(Path(args[args.index("--output-schema") + 1]).read_text()))
             output = Path(args[args.index("--output-last-message") + 1])
             output.write_text(json.dumps({"reply": "ready"}), encoding="utf-8")
             return subprocess.CompletedProcess(args, 0, "", "")
@@ -88,6 +90,12 @@ class CodexTransportTests(unittest.TestCase):
                 "Respond with ready", self.schema, binary=self.binary, home=self.home,
                 allow_model_call=True, model="gpt-5.6", timeout_seconds=60)
         self.assertEqual(answer, {"reply": "ready"})
+        self.assertEqual(wire_schemas, [{
+            "type": "object",
+            "properties": {"reply": {"type": "string"}},
+            "required": ["reply"],
+            "additionalProperties": False,
+        }])
         self.assertEqual(len(calls), 1)
         args, kwargs = calls[0]
         self.assertEqual(args[:4], [str(self.binary), "--ask-for-approval", "never", "exec"])
