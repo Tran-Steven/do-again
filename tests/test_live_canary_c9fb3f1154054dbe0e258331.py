@@ -14,3 +14,9 @@ class CanonicalLabelTests(unittest.TestCase):
     def test_empty(self):
         self.assertEqual(canonical_label(""), "")
         self.assertEqual(canonical_label(" \t\n "), "")
+
+    def test_non_ascii_rejected(self):
+        for value in ("café", "naïve", "東京", "hello\u00a0world"):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    canonical_label(value)
