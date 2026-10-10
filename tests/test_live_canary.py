@@ -96,6 +96,50 @@ class LiveCanaryTests(unittest.TestCase):
             with self.assertRaises(ExecutionBlocked):
                 self.authority.request(value,'automation/do_again/requests/'+rid+'.json')
 
+    def execution_stage(self,stage,returncode=None):
+        import hashlib
+        rid=self.authority.rid(1,stage);fp=hashlib.sha256(rid.encode()).hexdigest()
+        self.ledger.reserve(self.broker.project.key,rid,fp,
+            intent={'operation':'execute','source_sha':self.source,'request_fingerprint':fp})
+        if returncode is not None:self.ledger.finish(self.broker.project.key,rid,
+            {'returncode':returncode,'source_sha':self.source,'timed_out':False})
+
+    def test_one_repair_requires_known_failure_and_repaired_tests_before_commit(self):
+        edit=self.request(1,'edit-repair','execute',argv=['/sealed/python3','-c','pass'],cwd='.',timeout=20)
+        test=self.request(1,'test-repair','execute',argv=['/sealed/python3','-m','unittest','discover',
+            '-s','tests','-p','test_live_canary_'+self.nonce+'.py'],cwd='.',timeout=20)
+        commit=self.request(1,'commit','git_commit',paths=self.authority.paths())
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(edit)
+        self.execution_stage('test')
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(edit)
+        self.ledger.finish(self.broker.project.key,self.authority.rid(1,'test'),
+            {'returncode':1,'source_sha':self.source,'timed_out':False})
+        self.authority.packet(edit)
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(test)
+        self.execution_stage('edit-repair',0);self.authority.packet(test)
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(commit)
+        self.execution_stage('test-repair',0);self.authority.packet(commit)
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(dict(edit,request_id=edit['request_id']+'-again'))
+
+    def test_success_or_other_runtime_never_grants_repair_and_failed_repair_blocks_commit(self):
+        self.execution_stage('test',0)
+        with self.assertRaises(ExecutionBlocked):self.authority.repair_gate(1,'edit-repair')
+        self.broker.config['source_sha']='f'*40
+        with self.assertRaises(ExecutionBlocked):self.authority.repair_gate(1,'edit-repair')
+        self.broker.config['source_sha']=self.source
+        self.execution_stage('edit-repair',0);self.execution_stage('test-repair',1)
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(self.request(1,'commit','git_commit',paths=self.authority.paths()))
+
+    def test_control_sync_reserves_repair_only_after_causal_terminal_evidence(self):
+        edit='automation/do_again/requests/'+self.authority.rid(1,'edit-repair')+'.json'
+        test='automation/do_again/requests/'+self.authority.rid(1,'test-repair')+'.json'
+        entries={edit:'a'*40,test:'b'*40}
+        self.assertEqual(canary_entries(self.broker,entries),{})
+        self.execution_stage('test',1)
+        self.assertEqual(canary_entries(self.broker,entries),{edit:'a'*40})
+        self.execution_stage('edit-repair',0)
+        self.assertEqual(canary_entries(self.broker,entries),entries)
+
     def test_commits_require_real_terminal_test_evidence_and_exact_files(self):
         commit=self.request(1,'commit','git_commit',paths=self.authority.paths())
         with self.assertRaises(ExecutionBlocked):self.authority.packet(commit)

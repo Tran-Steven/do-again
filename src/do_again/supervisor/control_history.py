@@ -231,6 +231,7 @@ def canary_entries(broker,entries):
             try:
                 task,stage=broker.canary.task(path.rsplit('/',1)[1][:-5])
                 if task==2:broker.canary.second_ready()
+                broker.canary.repair_gate(task,stage)
             except (ExecutionBlocked,OSError,ValueError,KeyError):continue
         result[path]=sha
     return result

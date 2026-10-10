@@ -477,3 +477,12 @@ Root HOME and DO_AGAIN_HOME cannot select a different authority record.
 A live attempt refused before dispatch is withdrawn with its journals intact;
 a consumed one-shot grant is replaced by a fresh isolated grant rather than
 reactivated or replayed.
+
+Each synthetic task permits one additional `edit-repair` / `test-repair` pair
+after its original protected test execution reaches a terminal failure. Missing,
+started, uncertain, successful, or other-runtime evidence cannot admit a repair.
+Repair testing requires a successful confined repair edit, and commit admission
+then requires the repaired test to pass. A second failed test stops that task;
+there is no second repair identity or automatic replay of the first attempt.
+Source-generation instructions require actual line breaks and compilation before
+writing to catch JSON/Python escaping errors at the request-generation boundary.

@@ -92,9 +92,29 @@ class CanaryAuthority:
         return 'canary-'+self.grant['nonce']+'-'+str(task)+'-'+stage
 
     def task(self,rid):
-        match=re.fullmatch('canary-'+self.grant['nonce']+r'-([12])-(edit|test|commit|publish|ci)',str(rid))
+        match=re.fullmatch('canary-'+self.grant['nonce']+r'-([12])-(edit(?:-repair)?|test(?:-repair)?|commit|publish|ci)',str(rid))
         if match is None:raise ExecutionBlocked('request is outside the two-task canary budget')
         return int(match[1]),match[2]
+
+    def terminal_execution(self,task,stage):
+        rid=self.rid(task,stage)
+        intent=self.broker.ledger.intent(self.broker.project.key,rid)
+        if (not intent or intent.get('operation')!='execute'
+                or intent.get('source_sha')!=self.broker.config['source_sha']):return None
+        observed=self.broker.ledger.observe_request(self.broker.project.key,rid,intent.get('request_fingerprint'))
+        if observed.get('state')!='terminal':return None
+        result=observed['result']
+        return result if result.get('source_sha')==self.broker.config['source_sha'] else None
+
+    def repair_gate(self,task,stage):
+        if not stage.endswith('-repair'):return
+        failed=self.terminal_execution(task,'test')
+        if failed is None or type(failed.get('returncode')) is not int or failed['returncode']==0:
+            raise ExecutionBlocked('one canary repair requires an original terminal failed test')
+        if stage=='test-repair':
+            edited=self.terminal_execution(task,'edit-repair')
+            if edited is None or edited.get('returncode')!=0 or edited.get('timed_out'):
+                raise ExecutionBlocked('repair testing requires its successful confined repair edit')
 
     def paths(self):
         nonce=self.grant['nonce']
@@ -119,7 +139,7 @@ class CanaryAuthority:
         task,stage=self.task(rid)
         operations={'edit':'scratch_script','test':'run_tests','commit':'git_commit',
                     'publish':'git_publish','ci':'ci_observe'}
-        if value.get('request_id')!=rid or value.get('operation')!=operations[stage]:
+        if value.get('request_id')!=rid or value.get('operation')!=operations[stage.removesuffix('-repair')]:
             raise ExecutionBlocked('canary request operation or file identity differs from its stage')
 
     def packet(self,packet):
@@ -132,14 +152,18 @@ class CanaryAuthority:
             if path=='automation/do_again/agent_status.json':return
             match=re.fullmatch(r'automation/do_again/(claims|receipts)/([^/]+)\.json',path)
             if match is None:raise ExecutionBlocked('canary control writes are restricted to its claims and receipts')
-            task,_=self.task(match[2])
-            if match[1]=='claims' and task==2:self.second_ready()
+            task,stage=self.task(match[2])
+            if match[1]=='claims':
+                if task==2:self.second_ready()
+                self.repair_gate(task,stage)
             return
         if operation=='ci_observe':
             task,stage=self.task(packet.get('request_id'))
             if stage!='publish':raise ExecutionBlocked('canary CI must observe its own publication')
             return
         task,stage=self.task(packet.get('request_id'))
+        self.repair_gate(task,stage)
+        stage=stage.removesuffix('-repair')
         expected={'edit':'execute','test':'execute','commit':'git_commit','publish':'git_publish'}
         if expected.get(stage)!=operation:raise ExecutionBlocked('canary capability does not match its reserved stage')
         if task==2:self.second_ready()
@@ -153,10 +177,9 @@ class CanaryAuthority:
             raise ExecutionBlocked('canary testing requires its exact discovered regression')
         if stage=='commit':
             if packet.get('paths')!=self.paths():raise ExecutionBlocked('canary commit cannot change other files')
-            test=self.broker.ledger.intent(self.broker.project.key,self.rid(task,'test'))
-            if not test:raise ExecutionBlocked('canary commit requires its test execution')
-            observed=self.broker.ledger.observe_request(self.broker.project.key,self.rid(task,'test'),test.get('request_fingerprint'))
-            if observed['state']!='terminal' or observed['result']['returncode']!=0 or observed['result'].get('timed_out'):
+            stage='test-repair' if self.broker.ledger.intent(self.broker.project.key,self.rid(task,'edit-repair')) else 'test'
+            tested=self.terminal_execution(task,stage)
+            if tested is None or tested.get('returncode')!=0 or tested.get('timed_out'):
                 raise ExecutionBlocked('canary test has not passed')
 
     def export(self,export):
@@ -264,9 +287,17 @@ Issue one request at a time under automation/do_again/requests, with normal
 schema_version=1, fresh issued_at_utc/expires_at_utc, and the expected repo_head
 from the last receipt's authority_after. Initial expected head is above.
 Allowed request IDs: canary-{nonce}-1-edit, -1-test, -1-commit, -1-publish,
--1-ci, and the corresponding five -2- IDs. No replacement or retry IDs.
+-1-ci, and the corresponding five -2- IDs. After an original terminal failed
+test only, one repair pair is permitted per task: -1-edit-repair and
+-1-test-repair (or -2-edit-repair and -2-test-repair). Repair uses new identities;
+never modify or replay a consumed request. No other replacement or retry IDs.
+Uncertain/started operations do not authorize repair. If repair testing fails,
+stop and report the missing evidence; do not repeat another equivalent attempt.
 edit: scratch_script, Python, cwd '.', timeout <=120 seconds, writing only
-{code} and {test}. test: run_tests, discover=true, start_directory='tests',
+{code} and {test}. Use actual source line breaks, validate source using compile
+before writing, and avoid double-escaping nested JSON/Python strings. The model
+must author both implementation and tests; do not infer success from writing.
+test: run_tests, discover=true, start_directory='tests',
 pattern='test_live_canary_{nonce}.py', timeout <=120 seconds. commit: git_commit,
 paths=[{code!r},{test!r}], message explaining this synthetic change. publish:
 git_publish with title/body only; broker creates/updates a DRAFT PR, never main.
