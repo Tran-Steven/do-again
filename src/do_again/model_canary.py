@@ -25,7 +25,7 @@ _APPROVED_CALLS = frozenset({"canonical_label", "str", "len", "ValueError", "Typ
 _BANNED_NODES = (
     ast.AsyncFunctionDef, ast.Await, ast.Import, ast.ImportFrom,
     ast.Lambda, ast.Global, ast.Nonlocal, ast.With, ast.AsyncWith,
-    ast.Try, ast.Raise if False else ast.Delete,
+    ast.Try, ast.Delete,
     ast.Yield, ast.YieldFrom, ast.ListComp, ast.SetComp,
     ast.DictComp, ast.GeneratorExp, ast.NamedExpr,
 )
@@ -48,7 +48,7 @@ def canary_model_schema() -> dict:
 
 
 def canary_task_prompt(*, nonce: str, task: int) -> str:
-    if not _NONCE.fullmatch(nonce) or type(task) is not int or task not in (1, 2):
+    if not isinstance(nonce, str) or not _NONCE.fullmatch(nonce) or type(task) is not int or task not in (1, 2):
         raise CodexCanaryProposalRejected("invalid bounded canary identity")
     extra = (
         "Implement lower-case ASCII input with trimmed, collapsed whitespace joined by hyphens."
@@ -137,8 +137,9 @@ def prepare_canary_edit(
     issued_at: datetime | None = None,
 ) -> dict:
     """Translate model output into a request object, with no browser or GitHub effect."""
-    if (not _NONCE.fullmatch(nonce) or type(task) is not int or task not in (1, 2)
-            or not _SHA.fullmatch(expected_head)):
+    if (not isinstance(nonce, str) or not _NONCE.fullmatch(nonce)
+            or type(task) is not int or task not in (1, 2)
+            or not isinstance(expected_head, str) or not _SHA.fullmatch(expected_head)):
         raise CodexCanaryProposalRejected("canary scope or exact source head is invalid")
     if not isinstance(proposal, dict) or set(proposal) != {"implementation", "tests"}:
         raise CodexCanaryProposalRejected("model output must have exactly the two approved fields")
