@@ -62,6 +62,13 @@ class CodexCanaryPreparationTests(unittest.TestCase):
             self.assertIn(self.nonce, prompt)
             self.assertNotIn("production-ready", prompt)
         self.assertIn("non-ASCII", canary_task_prompt(nonce=self.nonce, task=2))
+        # A live synthetic proposal is reserved at most once. Tell the model
+        # the *actual* source validator restrictions before consuming quota.
+        task_two=canary_task_prompt(nonce=self.nonce,task=2)
+        self.assertIn("NOT with self.assertRaises",task_two)
+        self.assertIn("self.assertRaises(ValueError, canonical_label",task_two)
+        self.assertIn("one TestLabel(unittest.TestCase)",task_two)
+        self.assertIn("do not use with, try/except",task_two)
 
     def test_generates_exact_brokered_stage_request(self):
         result = self.build()
