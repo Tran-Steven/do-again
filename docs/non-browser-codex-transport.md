@@ -65,6 +65,37 @@ authenticated Codex CLI, bounds prompt/schema/output sizes, never retries an
 ambiguous result, and exposes neither model error logs nor credentials. It
 forces `--sandbox read-only` and `--ask-for-approval never`.
 
+## Account capacity gating (October 10, 2026)
+
+An authenticated Codex CLI is **not** necessarily entitled to begin inference.
+A read-only Mac `codex app-server` `account/rateLimits/read` query verified:
+
+- Five-hour usage: 0% exhausted (fresh capacity in this window).
+- Weekly usage: **100% exhausted**; ordinary included usage explicitly denied.
+- Weekly reset: **October 15, 2026 at 14:54:54 UTC** (7:54:54 AM Pacific).
+- Account Codex credit balance: **0**.
+- Two banked reset credits are reported available; **none was consumed**.
+- The single isolated Codex inference attempt failed without a valid response.
+  All subsequent checks were read-only quota observations, not inference retries.
+
+The operator can inspect the sanitized current snapshot with:
+
+```bash
+do-again model limits
+do-again model status
+```
+
+The model transport now requires a positive read-only account capacity
+decision **before** `codex exec`. On `ordinaryUsageAllowed=false`, unknown
+account authority, or unreadable quota evidence, it fails closed with a
+non-sensitive diagnostic and never launches inference. Banked resets, credits,
+account purchases, and automatic browser login are never triggered by this
+code. A user must explicitly redeem an available reset or wait for the backend
+to restore ordinary usage.
+
+Output schemas use provider-supported JSON Schema syntax while preserving
+the stricter local length checks for model-returned text.
+
 ## Acceptance boundaries
 
 **This is a transport foundation, not completed autonomous release
