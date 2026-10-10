@@ -40,7 +40,7 @@ class CodexTransportTests(unittest.TestCase):
         binary.touch()
         with patch.object(transport.Path, "home", return_value=self.home), patch.object(
                 transport.shutil, "which", return_value=None):
-            self.assertEqual(transport.discover_codex(), binary)
+            self.assertEqual(transport.discover_codex().resolve(), binary.resolve())
 
     def test_rejects_escaped_isolated_binary_symlink(self):
         root = self.home / ".do_again" / "codex-tools"
