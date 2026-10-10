@@ -244,7 +244,7 @@ def canary_entries(broker,entries):
 def codex_entries(broker,entries):
     """Exclude any request not in the explicitly sealed Codex synthetic plan."""
     result={}
-    prefix='canary-'+broker.codex.scope.nonce+'-1-'
+    prefix='canary-'+broker.codex.scope.nonce+'-'
     stages={'edit','test','commit','publish','ci'}
     for path,sha in entries.items():
         if path=='automation/do_again/agent_status.json':
@@ -258,7 +258,15 @@ def codex_entries(broker,entries):
         if parts[2]=='cancellations':
             continue
         rid=parts[3][:-5]
-        if not rid.startswith(prefix) or rid[len(prefix):] not in stages:
+        if not rid.startswith(prefix):
             continue
+        suffix=rid[len(prefix):]
+        if len(suffix)<3 or suffix[0] not in '12' or suffix[1]!='-' or suffix[2:] not in stages:
+            continue
+        if suffix[0]=='2':
+            try:
+                broker.codex.second_ready()
+            except (ExecutionBlocked,OSError,ValueError,KeyError):
+                continue
         result[path]=sha
     return result
