@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 from do_again.supervisor.macos_execution import ExecutionBlocked
 from do_again.supervisor.model_canary_worker import (
-    _receipt_driver,_poll_terminal_ci,_admission,
+    _receipt_driver,_poll_terminal_ci,_admission,_revoke_codex_child,
 )
 
 
@@ -101,6 +101,18 @@ class CodexCanaryWorkerTests(unittest.TestCase):
         result=_poll_terminal_ci(Path("/sealed"),2,scope,
             rpc=lambda repo,pkt:proof,check=lambda:None)
         self.assertIs(result,proof)
+
+    def test_worker_fails_closed_only_its_child_and_preserves_original_error(self):
+        repo=Path("/sealed/codex-child")
+        requests=[]
+        def operator(actual,intent):
+            requests.append((actual,intent))
+            return {"intent":"maintenance","epoch":9}
+        self.assertTrue(_revoke_codex_child(repo,operator=operator))
+        self.assertEqual(requests,[(repo,"maintenance")])
+        self.assertFalse(_revoke_codex_child(repo,operator=lambda actual,intent:(
+            (_ for _ in ()).throw(ExecutionBlocked("supervisor lost")))))
+        # No host shell, model call, parent project, or journal deletion.
 
     def test_original_native_operator_identity_and_quiescence_required(self):
         project={"repo":"/sealed/codex","worktree":"/sandbox/worktree",
