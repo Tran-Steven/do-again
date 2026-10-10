@@ -108,6 +108,24 @@ def _validate_response(answer: Any, schema: dict[str, Any]) -> dict[str, str]:
     return answer
 
 
+def _safe_codex_failure_category(stdout: str, stderr: str) -> str:
+    """Only expose stable error categories, never CLI output or auth secrets."""
+    message = (str(stdout) + " " + str(stderr)).lower()[:10000]
+    if any(token in message for token in ("usage:", "unexpected argument", "unrecognized option", "unknown option")):
+        return "argument_validation"
+    if any(token in message for token in ("not logged in", "auth required", "authentication expired", "unauthorized", "401")):
+        return "authentication"
+    if any(token in message for token in ("rate limit", "usage limit", "quota exceeded", "429")):
+        return "quota_or_rate_limit"
+    if any(token in message for token in ("connection refused", "dns", "network unreachable", "tls", "timed out")):
+        return "connectivity"
+    if any(token in message for token in ("not supported", "unknown model", "model not found")):
+        return "model_unavailable"
+    if "sandbox" in message or "permission denied" in message:
+        return "sandbox_or_filesystem"
+    return "unclassified"
+
+
 def generate_structured(
     prompt: str,
     schema: dict[str, Any],
@@ -165,8 +183,10 @@ def generate_structured(
                 "Codex execution did not return a final response; do not retry automatically"
             ) from None
         if result.returncode != 0:
+            category = _safe_codex_failure_category(result.stdout, result.stderr)
             raise CodexTransportUncertain(
-                "Codex did not complete successfully; do not retry automatically"
+                "Codex did not complete successfully (category=" + category +
+                "); do not retry automatically"
             )
         try:
             if output_path.is_symlink() or not output_path.is_file():
