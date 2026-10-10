@@ -202,6 +202,29 @@ class LiveCanaryTests(unittest.TestCase):
         self.authority.browser({'acknowledgments':[self.ci_ack(1,7)]})
         self.authority.packet(packet)
 
+    def test_task_two_control_sync_and_claim_require_exact_durable_ci_ack(self):
+        """An ACK for publication or for a different CI run must not permit a claim."""
+        self.first_proof(ci_ack=False)
+        first='automation/do_again/requests/'+self.authority.rid(1,'edit')+'.json'
+        second='automation/do_again/requests/'+self.authority.rid(2,'edit')+'.json'
+        claim={'operation':'control_publish',
+               'path':'automation/do_again/claims/'+self.authority.rid(2,'edit')+'.json'}
+        entries={first:'a'*40,second:'b'*40}
+        self.assertEqual(canary_entries(self.broker,entries),{first:'a'*40})
+        with self.assertRaises(ExecutionBlocked):
+            self.authority.packet(claim)
+
+        # Even a visible, acknowledged CI continuation for a different run
+        # must not authorize task-two synchronization or publication.
+        self.authority.browser({'acknowledgments':[self.ci_ack(1,8)]})
+        self.assertEqual(canary_entries(self.broker,entries),{first:'a'*40})
+        with self.assertRaises(ExecutionBlocked):
+            self.authority.packet(claim)
+
+        self.authority.browser({'acknowledgments':[self.ci_ack(1,7)]})
+        self.assertEqual(canary_entries(self.broker,entries),entries)
+        self.authority.packet(claim)
+
     def test_completion_requires_final_exact_ci_ack_not_only_publication_ack(self):
         self.first_proof()
         self.authority.ci({'state':'terminal','conclusion':'success','head_sha':self.head,'run_id':9},
