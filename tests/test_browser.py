@@ -449,6 +449,7 @@ class BrowserRuntimeTests(unittest.TestCase):
                 config = load_config()
                 config["preferred_mode"] = "auto"
                 config["resolved_mode"] = "headless"
+                config["allow_visible_fallback"] = True
                 config["authenticated"] = True
                 save_config(config)
                 statuses = [
