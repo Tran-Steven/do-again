@@ -1,5 +1,11 @@
 # Do Again: non-browser Codex transport (experimental)
 
+> **Opt-in experiment only.** Do Again's core workflow and v1 acceptance use
+> regular ChatGPT conversations or authenticated ChatGPT web transport with
+> Git-backed requests/receipts. Codex CLI is not the default, is not required
+> for v1.0.0, and its quota or paid/banked resets must not block or fund the
+> ChatGPT-first release. See [ChatGPT v1 acceptance](v1-native-acceptance.md).
+
 The Chrome transport is not true headless when it resolves to `background`.
 On the October 10, 2026 Mac acceptance attempt, a **disposable true-headless
 Chrome profile** reached ChatGPT's human-verification page, not an authenticated
