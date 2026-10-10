@@ -181,3 +181,45 @@ def prepare_canary_edit(
         return validate_request(result, max_ttl_seconds=3600)
     except OperatorError as exc:
         raise CodexCanaryProposalRejected("candidate did not satisfy standard request schema") from exc
+
+
+def validate_prepared_edit(request: dict, *, nonce: str, task: int, expected_head: str) -> dict:
+    """Reconstruct an edit from its two literal sources; never execute the writer.
+
+    An approved request ID cannot authorize arbitrary Python. Only the exact
+    deterministic writer produced by prepare_canary_edit is admissible.
+    """
+    if not isinstance(request, dict) or not isinstance(request.get("args"), dict):
+        raise CodexCanaryProposalRejected("canary edit must be an approved request object")
+    code = request["args"].get("content")
+    if not isinstance(code, str) or len(code.encode("utf-8")) > 65536:
+        raise CodexCanaryProposalRejected("canary writer exceeds its fixed budget")
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError, TypeError):
+        raise CodexCanaryProposalRejected("canary writer could not be parsed") from None
+    values = {}
+    for item in tree.body:
+        if not isinstance(item, ast.Assign) or len(item.targets) != 1:
+            continue
+        target = item.targets[0]
+        if (isinstance(target, ast.Name) and target.id in {"source_code", "test_code"}):
+            if target.id in values or not isinstance(item.value, ast.Constant) or not isinstance(item.value.value, str):
+                raise CodexCanaryProposalRejected("canary writer source assignments are not fixed literals")
+            values[target.id] = item.value.value
+    if set(values) != {"source_code", "test_code"}:
+        raise CodexCanaryProposalRejected("canary writer has no exact implementation and tests")
+    issued_at = request.get("issued_at_utc")
+    if not isinstance(issued_at, str):
+        raise CodexCanaryProposalRejected("canary request has no timestamp")
+    try:
+        issued = datetime.fromisoformat(issued_at)
+    except ValueError:
+        raise CodexCanaryProposalRejected("canary request timestamp is invalid") from None
+    candidate = prepare_canary_edit(
+        {"implementation": values["source_code"], "tests": values["test_code"]},
+        nonce=nonce, task=task, expected_head=expected_head, issued_at=issued,
+    )
+    if request != candidate:
+        raise CodexCanaryProposalRejected("canary request differs from the canonical bounded writer")
+    return candidate
