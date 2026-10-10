@@ -60,7 +60,8 @@ def bootstrap_live_canary(
     if len(parents) != 1 or parents[0].get("repo") != str(home / "do-again"):
         raise ExecutionBlocked("canary bootstrap has no unique trusted parent")
     parent = parents[0]
-    status = AuthorityRegistry(Path(installed["legacy_authority_path"])).status(Path(parent["repo"]))
+    registry = AuthorityRegistry(Path(installed["legacy_authority_path"]))
+    status = registry.status(Path(parent["repo"]))
     if status["intent"] != "maintenance":
         raise ExecutionBlocked("canary bootstrap requires parent maintenance authority")
     if not isinstance(status.get("epoch"), int) or status["epoch"] < 1:
@@ -113,6 +114,11 @@ def bootstrap_live_canary(
         if (str(response.get("response") or "").strip() != marker
                 or not re.fullmatch(r"https://chatgpt\.com/c/[A-Za-z0-9-]{16,80}", url)):
             raise ExecutionBlocked("fresh canary chat lacks exact readiness acknowledgment")
+        # Reject a parent pause, resume, or epoch change during browser I/O.
+        # A new chat is not authority to issue a canary grant.
+        current = registry.status(Path(parent["repo"]))
+        if current.get("intent") != "maintenance" or current.get("epoch") != status["epoch"]:
+            raise ExecutionBlocked("parent authority changed during canary bootstrap")
         grant = {"nonce": nonce, "baseline": baseline, "parent_epoch": status["epoch"],
                  "chat_url": url, "binding_identity": "0" * 64}
         # Reject the last installed chat even when the nonce is new.
