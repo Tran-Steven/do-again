@@ -184,8 +184,12 @@ def verify_worker_quiescence(config):
             if journal.is_symlink() or journal.stat().st_uid!=0 or journal.stat().st_nlink!=1:
                 raise RuntimeError('worker deployment ownership is invalid')
             record=json.loads(journal.read_text())
-            if record.get('phase') not in {'staged','withdrawn','stage_started','stage_failed_pre_effect'}:
+            if record.get('phase') not in {'staged','withdrawn','stage_started','stage_failed_pre_effect','running'}:
                 raise RuntimeError('worker deployment requires guarded withdrawal before cutover')
+            # A withdrawn launchd worker may leave its durable phase at
+            # "running" if bootout returned before launchd removed the service.
+            # This is an observation candidate, not permission to issue another
+            # bootout. The original registered PID/birth must also be gone.
         label='io.github.tran-steven.do-again.worker.'+project['key'][:12]
         observed=subprocess.run(['/bin/launchctl','print',f"gui/{config['operator_uid']}/{label}"],
             capture_output=True,text=True,timeout=30,user=config['operator_uid'],group=config['operator_gid'],
@@ -194,6 +198,42 @@ def verify_worker_quiescence(config):
             raise RuntimeError('loaded engineering worker blocks immutable runtime cutover')
         if observed.returncode!=113 or 'Could not find service' not in observed.stderr:
             raise RuntimeError('worker service absence is unproven; cutover deferred')
+        if record and record.get('phase')=='running':
+            # Maintain the original effect journal; only correct this worker
+            # deployment phase after independent service and kernel evidence.
+            from do_again.supervisor.authority import AuthorityRegistry
+            from do_again.supervisor.macos_execution import MacOSProcesses
+            from do_again.supervisor.service_probe import verify_process_withdrawn
+            registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
+            status=registry.status(Path(project['repo']))
+            lease=ROOT/'state'/project['key']/'worker-instance.json'
+            definition=WORKER_AGENTS/(label+'.plist')
+            if (status['intent']!='maintenance' or record.get('source_sha')!=config['source_sha']
+                    or not lease.is_file() or lease.is_symlink() or not definition.is_file()
+                    or definition.is_symlink()):
+                raise RuntimeError('worker withdrawal has no trusted, quiescent provenance')
+            for protected in (lease,definition):
+                info=protected.stat()
+                if info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022:
+                    raise RuntimeError('worker withdrawal identity or service definition is untrusted')
+            if record.get('plist_sha256')!=hashlib.sha256(definition.read_bytes()).hexdigest():
+                raise RuntimeError('worker withdrawal definition changed')
+            identity=json.loads(lease.read_text())
+            if (type(identity.get('pid')) is not int or identity['pid']<=1
+                    or identity.get('epoch')!=record.get('epoch')
+                    or not isinstance(identity.get('identity'),list)
+                    or len(identity['identity'])!=4
+                    or identity['identity'][0]!=config['operator_uid']):
+                raise RuntimeError('worker withdrawal original kernel identity is invalid')
+            # Observe the exact original PID and kernel birth; never signal it.
+            verify_process_withdrawn(identity['pid'],identity['identity'],timeout=3)
+            record['phase']='withdrawn'
+            record['recovery_evidence']={'reason':'launchd_bootout_observation_race',
+                                         'previous_phase':'running','service_absent':True,
+                                         'registered_pid':identity['pid'],
+                                         'original_kernel_identity':identity['identity'],
+                                         'original_worker_withdrawn':True}
+            atomic(journal,record)
         if record and record.get('phase')=='stage_started':
             target=WORKER_AGENTS/(label+'.plist')
             pending=target.with_suffix('.plist.pending')
