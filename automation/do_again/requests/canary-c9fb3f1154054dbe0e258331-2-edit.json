@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-c9fb3f1154054dbe0e258331-2-edit",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-10T03:13:51.702Z",
+  "expires_at_utc": "2026-10-10T03:23:51.702Z",
+  "expected": {
+    "repo_head": "727fd422442749dde2649337d4669a13fd779f47"
+  },
+  "args": {
+    "language": "python",
+    "cwd": ".",
+    "content": "from pathlib import Path\n\nmodule_source = \"def canonical_label(text):\\n    if not text.isascii():\\n        raise ValueError(\\\"canonical_label requires ASCII input\\\")\\n    return \\\"-\\\".join(text.lower().split())\\n\"\ntest_source = \"import unittest\\n\\nfrom canary_live_c9fb3f1154054dbe0e258331 import canonical_label\\n\\n\\nclass CanonicalLabelTests(unittest.TestCase):\\n    def test_case(self):\\n        self.assertEqual(canonical_label(\\\"HeLLo WoRLD\\\"), \\\"hello-world\\\")\\n\\n    def test_whitespace(self):\\n        self.assertEqual(canonical_label(\\\"  Hello   World  Again  \\\"), \\\"hello-world-again\\\")\\n        self.assertEqual(canonical_label(\\\" Hello\\\\tWorld\\\\nAgain \\\"), \\\"hello-world-again\\\")\\n\\n    def test_empty(self):\\n        self.assertEqual(canonical_label(\\\"\\\"), \\\"\\\")\\n        self.assertEqual(canonical_label(\\\" \\\\t\\\\n \\\"), \\\"\\\")\\n\\n    def test_non_ascii_rejected(self):\\n        for value in (\\\"café\\\", \\\"naïve\\\", \\\"東京\\\", \\\"hello\\\\u00a0world\\\"):\\n            with self.subTest(value=value):\\n                with self.assertRaises(ValueError):\\n                    canonical_label(value)\\n\"\ncompile(module_source, \"canary_live_c9fb3f1154054dbe0e258331.py\", \"exec\")\ncompile(test_source, \"tests/test_live_canary_c9fb3f1154054dbe0e258331.py\", \"exec\")\nPath(\"canary_live_c9fb3f1154054dbe0e258331.py\").write_text(module_source, encoding=\"utf-8\")\ntest_path = Path(\"tests/test_live_canary_c9fb3f1154054dbe0e258331.py\")\ntest_path.write_text(test_source, encoding=\"utf-8\")\n"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "canary-c9fb3f1154054dbe0e258331-1-edit",
+      "canary-c9fb3f1154054dbe0e258331-1-test",
+      "canary-c9fb3f1154054dbe0e258331-1-commit",
+      "canary-c9fb3f1154054dbe0e258331-1-publish",
+      "canary-c9fb3f1154054dbe0e258331-1-ci"
+    ],
+    "goal_state": "in_progress"
+  }
+}
