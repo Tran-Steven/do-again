@@ -156,6 +156,11 @@ def generate_structured(
     operator_home = (home or Path.home()).expanduser().resolve()
     if not login_ready(selected, home=operator_home):
         raise CodexTransportBlocked("Codex CLI requires an authorized ChatGPT login")
+    from .model_quota import CodexQuotaUnavailable, require_model_capacity
+    try:
+        require_model_capacity(selected, operator_home)
+    except CodexQuotaUnavailable as exc:
+        raise CodexTransportBlocked(str(exc)) from None
     with tempfile.TemporaryDirectory(prefix="do-again-codex-") as directory:
         work = Path(directory)
         schema_path = work / "schema.json"
