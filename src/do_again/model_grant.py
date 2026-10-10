@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .supervisor.macos_execution import ExecutionBlocked
@@ -66,16 +66,20 @@ def sealed_codex_canary(config: dict[str, Any], *, now: datetime | None = None) 
         raise ExecutionBlocked("sealed Codex canary source manifest is invalid")
     home = config.get("operator_home")
     projects = config.get("projects")
-    if (not isinstance(home, str) or not Path(home).is_absolute()
+    # Root-installed macOS paths have POSIX syntax regardless of the OS used
+    # to run offline CI. Retain native Path only for cross-platform test roots.
+    home_path = (PurePosixPath(home) if isinstance(home, str) and home.startswith("/")
+                 else Path(home or ""))
+    if (not isinstance(home, str) or not home_path.is_absolute()
             or not isinstance(projects, list) or len(projects) != 2
             or any(not isinstance(p, dict) for p in projects)
             or {p.get("account") for p in projects} != {"_doagain_da", "_doagain_jp"}):
         raise ExecutionBlocked("Codex canary parent project identities are invalid")
     parent = next(p for p in projects if p.get("account") == "_doagain_da")
     sibling = next(p for p in projects if p.get("account") == "_doagain_jp")
-    if (parent.get("repo") != str(Path(home) / "do-again")
+    if (parent.get("repo") != str(home_path / "do-again")
             or parent.get("github_repository") != "Tran-Steven/do-again"
-            or sibling.get("repo") != str(Path(home) / "jobpipe")
+            or sibling.get("repo") != str(home_path / "jobpipe")
             or sibling.get("github_repository") != "Tran-Steven/jobpipe"):
         raise ExecutionBlocked("Codex canary is not scoped to the installed Do Again parent")
     when = grant.get("expires_at_utc")
