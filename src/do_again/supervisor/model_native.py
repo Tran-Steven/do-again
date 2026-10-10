@@ -103,6 +103,14 @@ class CodexCanaryAuthority:
             self.request(packet.get("value"),"automation/do_again/requests/canary-"
                          +self.scope.nonce+"-1-edit.json")
             return
+        if operation=="codex_followup_publish":
+            prefix="codex-publish-"+self.scope.nonce+"-1-"
+            rid=packet.get("request_id")
+            if (not isinstance(rid,str) or rid not in {
+                    prefix+"test",prefix+"commit",prefix+"publish",prefix+"ci"
+                } or set(packet)!={"operation","request_id","epoch"}):
+                raise ExecutionBlocked("Codex follow-up can select only the four fixed task-one stages")
+            return
         if operation=="control_publish":
             path=packet.get("path","")
             if path=="automation/do_again/agent_status.json":return
