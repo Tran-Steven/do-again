@@ -127,6 +127,25 @@ class CodexCanaryPreparationTests(unittest.TestCase):
             with self.subTest(source=source), self.assertRaises(CodexCanaryProposalRejected):
                 self.build(proposal={"implementation": source, "tests": self.tests})
 
+    def test_nested_test_imports_cannot_avoid_top_level_import_allowlist(self):
+        nested = self.tests.replace(
+            "        self.assertEqual(canonical_label(' HI  there '), 'hi-there')",
+            "        import os\\n"
+            "        self.assertEqual(canonical_label(' HI  there '), 'hi-there')",
+        )
+        with self.assertRaises(CodexCanaryProposalRejected):
+            self.build(proposal={"implementation": self.impl, "tests": nested})
+
+    def test_empty_unittest_case_cannot_claim_success(self):
+        empty = (
+            "import unittest\\n"
+            "from canary_live_" + self.nonce + " import canonical_label\\n"
+            "class TestEmpty(unittest.TestCase):\\n"
+            "    pass\\n"
+        )
+        with self.assertRaises(CodexCanaryProposalRejected):
+            self.build(proposal={"implementation": self.impl, "tests": empty})
+
     def test_rejects_wrong_module_and_extra_test_classes(self):
         bad = self.tests.replace("canary_live_" + self.nonce, "other_module")
         with self.assertRaises(CodexCanaryProposalRejected):
