@@ -113,12 +113,16 @@ def sync_control(broker,packet,*,api=None):
         else:_,head,entries,_=cached
         if getattr(broker,'canary',None) is not None:
             entries=canary_entries(broker,entries)
+        if getattr(broker,'codex',None) is not None:
+            entries=codex_entries(broker,entries)
         changed=[path for path,sha in entries.items() if known.get(path)!=sha]
         files={};used=0
         for path in sorted(changed)[:16]:
             value=read_json_blob(api,entries[path])
             if getattr(broker,'canary',None) is not None and '/requests/' in path:
                 broker.canary.request(value,path)
+            if getattr(broker,'codex',None) is not None and '/requests/' in path:
+                broker.codex.request(value,path)
             size=len(canonical_json(value))
             if files and used+size>MAX_JSON:break
             used+=size;files[path]={'sha':entries[path],'value':value}
@@ -233,5 +237,28 @@ def canary_entries(broker,entries):
                 if task==2:broker.canary.second_ready()
                 broker.canary.repair_gate(task,stage)
             except (ExecutionBlocked,OSError,ValueError,KeyError):continue
+        result[path]=sha
+    return result
+
+
+def codex_entries(broker,entries):
+    """Exclude any request not in the explicitly sealed Codex synthetic plan."""
+    result={}
+    for path,sha in entries.items():
+        if '/requests/' in path:
+            try:
+                if (not path.startswith('automation/do_again/requests/canary-'
+                        +broker.codex.scope.nonce+'-')):
+                    continue
+                name=path.rsplit('/',1)[-1]
+                if not name.endswith('.json'):
+                    continue
+                parts=name[:-5].split('-')
+                if len(parts)!=4 or parts[0]!='canary' or parts[1]!=broker.codex.scope.nonce:
+                    continue
+                if parts[2]!='1' or parts[3] not in {'edit','test','commit','publish','ci'}:
+                    continue
+            except (AttributeError,TypeError,KeyError):
+                continue
         result[path]=sha
     return result
