@@ -244,21 +244,21 @@ def canary_entries(broker,entries):
 def codex_entries(broker,entries):
     """Exclude any request not in the explicitly sealed Codex synthetic plan."""
     result={}
+    prefix='canary-'+broker.codex.scope.nonce+'-1-'
+    stages={'edit','test','commit','publish','ci'}
     for path,sha in entries.items():
-        if '/requests/' in path:
-            try:
-                if (not path.startswith('automation/do_again/requests/canary-'
-                        +broker.codex.scope.nonce+'-')):
-                    continue
-                name=path.rsplit('/',1)[-1]
-                if not name.endswith('.json'):
-                    continue
-                parts=name[:-5].split('-')
-                if len(parts)!=4 or parts[0]!='canary' or parts[1]!=broker.codex.scope.nonce:
-                    continue
-                if parts[2]!='1' or parts[3] not in {'edit','test','commit','publish','ci'}:
-                    continue
-            except (AttributeError,TypeError,KeyError):
-                continue
+        if path=='automation/do_again/agent_status.json':
+            result[path]=sha
+            continue
+        parts=path.split('/')
+        if (len(parts)!=4 or parts[:2]!=['automation','do_again']
+                or parts[2] not in {'requests','receipts','claims','cancellations'}
+                or not parts[3].endswith('.json')):
+            continue
+        if parts[2]=='cancellations':
+            continue
+        rid=parts[3][:-5]
+        if not rid.startswith(prefix) or rid[len(prefix):] not in stages:
+            continue
         result[path]=sha
     return result
