@@ -509,3 +509,9 @@ It records the original intents and observed evidence, retains all journals, and
 completes the one pending row as a failed partial outcome. It never updates GitHub,
 replays an operation, counts engineering success, or enables production. Foreign,
 changing, missing, completed, or non-draft evidence refuses classification.
+
+Task-two admission also requires a durable acknowledgment of the exact successful
+CI continuation, tied to its run, conversation, generation, and current source.
+The earlier publication receipt acknowledgment alone cannot release a request.
+Final CI is delivered through the same reserved protocol, and canary completion
+waits for that final acknowledgment before closing admission.

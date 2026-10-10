@@ -133,6 +133,20 @@ class CanaryAuthority:
                 or self.rid(1,'publish') not in ack.get('request_ids',[])
                 or ack.get('assistant_acknowledged') is not True or ack.get('message_visible') is not True):
             raise ExecutionBlocked('second task lacks exact first-task CI and receipt acknowledgment')
+        if not self.ci_acknowledged(1,proof):
+            raise ExecutionBlocked('second task requires durable acknowledgment of its exact CI continuation')
+
+    def ci_acknowledged(self,task,proof):
+        path=self.broker.state/('canary-ci-ack-'+str(task)+'.json')
+        if not path.exists():return False
+        ack=json.loads(path.read_text())
+        marker='DO_AGAIN_CANARY_CI_'+self.grant['nonce']+'_'+str(task)+'_'+str(proof.get('run_id'))
+        return (type(proof.get('run_id')) is int and proof['run_id']>0
+                and ack.get('source_sha')==self.broker.config['source_sha']
+                and ack.get('chat_url')==self.grant['chat_url']
+                and ack.get('binding_identity')==self.grant['binding_identity']
+                and ack.get('purpose')=='ci_continuation' and ack.get('batch_marker')==marker
+                and ack.get('assistant_acknowledged') is True and ack.get('message_visible') is True)
 
     def request(self,value,path):
         rid=path.rsplit('/',1)[1][:-5]
@@ -203,10 +217,20 @@ class CanaryAuthority:
                 if self.rid(task,'publish') in ack.get('request_ids',[]):
                     atomic_json(self.broker.state/('canary-ack-'+str(task)+'.json'),
                                 dict(ack,source_sha=self.broker.config['source_sha']))
+                path=self.broker.state/('canary-ci-'+str(task)+'.json')
+                if path.exists():
+                    proof=json.loads(path.read_text())
+                    marker='DO_AGAIN_CANARY_CI_'+self.grant['nonce']+'_'+str(task)+'_'+str(proof.get('run_id'))
+                    if (proof.get('source_sha')==self.broker.config['source_sha']
+                            and proof.get('conclusion')=='success'
+                            and ack.get('purpose')=='ci_continuation' and ack.get('batch_marker')==marker):
+                        atomic_json(self.broker.state/('canary-ci-ack-'+str(task)+'.json'),
+                                    dict(ack,source_sha=self.broker.config['source_sha']))
         completed=self.broker.state/'canary-ci-2.json'
         if completed.exists() and (self.broker.state/'canary-ack-2.json').exists():
             proof=json.loads(completed.read_text())
-            if proof.get('source_sha')==self.broker.config['source_sha'] and proof.get('conclusion')=='success':
+            if (proof.get('source_sha')==self.broker.config['source_sha'] and proof.get('conclusion')=='success'
+                    and self.ci_acknowledged(2,proof)):
                 self.broker.registry.set_intent(self.broker.project.repo,'maintenance',
                     goal_revision='live-canary-'+self.grant['nonce'])
                 atomic_json(self.broker.state/'canary-complete.json',{'source_sha':self.broker.config['source_sha'],

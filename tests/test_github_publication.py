@@ -184,6 +184,7 @@ class GitHubScopeTests(unittest.TestCase):
         with patch('do_again.supervisor.github.https_bytes',return_value=(401,b'synthetic credential failure')) as fetch:
             with self.assertRaises(ExecutionBlocked) as error:api.request('GET','git/ref/heads/main')
             self.assertNotIn('synthetic credential',str(error.exception))
+            self.assertIn('GET git/ref/heads/main (HTTP 401)',str(error.exception))
             self.assertTrue(fetch.call_args.args[0].startswith('https://api.github.com/repos/Tran-Steven/do-again/'))
 
     def test_arbitrary_admin_endpoints_and_main_updates_cannot_contact_network(self):

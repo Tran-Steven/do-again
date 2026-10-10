@@ -177,15 +177,41 @@ class LiveCanaryTests(unittest.TestCase):
         self.authority.packet(commit)
         with self.assertRaises(ExecutionBlocked):self.authority.packet(dict(commit,paths=['.github/workflows/ci.yml']))
 
-    def first_proof(self):
+    def first_proof(self,*,ci_ack=True):
         rid=self.authority.rid(1,'publish')
         self.ledger.reserve(self.broker.project.key,rid,'f'*64,
             intent={'operation':'git_publish','head':self.head,'source_sha':self.source,'request_fingerprint':'f'*64})
         self.ledger.finish(self.broker.project.key,rid,{'state':'succeeded','returncode':0,'source_sha':self.source})
-        self.authority.ci({'state':'terminal','conclusion':'success','head_sha':self.head},rid)
+        self.authority.ci({'state':'terminal','conclusion':'success','head_sha':self.head,'run_id':7},rid)
         self.ack={'request_ids':[rid],'chat_url':self.grant['chat_url'],'binding_identity':self.grant['binding_identity'],
                   'message_visible':True,'assistant_acknowledged':True}
         self.authority.browser({'acknowledgments':[self.ack]})
+        if ci_ack:
+            self.authority.browser({'acknowledgments':[self.ci_ack(1,7)]})
+
+    def ci_ack(self,task,run):
+        return {**self.ack,'request_ids':['continuation-fixture'],'purpose':'ci_continuation',
+                'batch_marker':'DO_AGAIN_CANARY_CI_'+self.nonce+'_'+str(task)+'_'+str(run)}
+
+    def test_publication_ack_or_wrong_ci_run_cannot_admit_second_task(self):
+        self.first_proof(ci_ack=False)
+        packet=self.request(2,'edit','execute',argv=['/sealed/python3','-c','pass'],cwd='.',timeout=20)
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(packet)
+        self.authority.browser({'acknowledgments':[self.ci_ack(1,8)]})
+        with self.assertRaises(ExecutionBlocked):self.authority.packet(packet)
+        self.authority.browser({'acknowledgments':[self.ci_ack(1,7)]})
+        self.authority.packet(packet)
+
+    def test_completion_requires_final_exact_ci_ack_not_only_publication_ack(self):
+        self.first_proof()
+        self.authority.ci({'state':'terminal','conclusion':'success','head_sha':self.head,'run_id':9},
+                          self.authority.rid(2,'publish'))
+        self.authority.browser({'acknowledgments':[{**self.ack,'request_ids':[self.authority.rid(2,'publish')]}]})
+        self.assertEqual(self.registry.status(self.repo)['intent'],'active')
+        self.assertFalse((self.broker.state/'canary-complete.json').exists())
+        self.authority.browser({'acknowledgments':[self.ci_ack(2,9)]})
+        self.assertEqual(self.registry.status(self.repo)['intent'],'maintenance')
+        self.assertTrue((self.broker.state/'canary-complete.json').exists())
 
     def test_second_task_requires_both_original_ci_and_exact_browser_ack(self):
         packet=self.request(2,'edit','execute',argv=['/sealed/python3','-c','pass'],cwd='.',timeout=20)

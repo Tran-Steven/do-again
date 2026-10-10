@@ -71,7 +71,7 @@ class GitHubRepository:
                                      'User-Agent':'DoAgainSupervisor','X-GitHub-Api-Version':'2022-11-28'})
         if method == 'GET' and status == 404:return None
         if not 200 <= status < 300:
-            raise ExecutionBlocked('repository API rejected the scoped operation')
+            raise ExecutionBlocked(f'repository API rejected the scoped operation: {method} {endpoint} (HTTP {status})')
         try:return json.loads(content)
         except (ValueError,UnicodeError):raise ExecutionBlocked('repository API evidence is invalid') from None
 

@@ -48,7 +48,7 @@ def _tick():
                 and evidence.get('binding_identity')==browser.binding_identity(record)
                 and evidence.get('acknowledgment_token') and evidence.get('payload_sha256')):
             acknowledgments.append(evidence)
-    if ci.get('canary_nonce') and ci.get('state')=='terminal' and ci.get('task')==1:
+    if ci.get('canary_nonce') and ci.get('state')=='terminal' and ci.get('task') in (1,2):
         from ..service.daemon import _queue_continuation
         rid=ci['publication_request_id']
         if any(rid in ack.get('request_ids',[]) for ack in acknowledgments):
