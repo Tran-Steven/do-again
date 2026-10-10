@@ -126,6 +126,20 @@ def _candidate(config,task,*,rpc):
     return observation["request"]
 
 
+
+def _revoke_codex_child(repo,*,operator=None):
+    """Best-effort fail-closed child maintenance; never touch either parent."""
+    from .macos_client import operator_request
+    method=operator or operator_request
+    try:
+        value=method(repo,"maintenance")
+        return isinstance(value,dict) and value.get("intent")=="maintenance"
+    except Exception:
+        # Preserve the original failure. Root grant expiry and native stage
+        # guards remain authoritative if the supervisor is unreachable.
+        return False
+
+
 def main(config,args):
     from .macos_client import broker_request
     from .macos_server import verify_installation
@@ -155,33 +169,40 @@ def main(config,args):
     check()
     broker_request(repo,{"operation":"worker_register","pid":os.getpid(),
                          "epoch":args.expected_epoch,"source_sha":config["source_sha"]})
-    for task in (1,2):
-        check()
-        proposal=_candidate(config,task,rpc=broker_request)
-        published=broker_request(repo,{
-            "operation":"codex_request_publish",
-            "request_id":"codex-publish-"+scope.nonce+"-"+str(task)+"-edit",
-            "epoch":args.expected_epoch,"value":proposal,
-        })
-        if not isinstance(published,dict) or published.get("state")!="succeeded":
-            raise ExecutionBlocked("model proposal was not durably published by root broker")
-        status={"failure":None,"ci_receipt":False}
-        worker_args=Namespace(control_worktree=str(control),
-            branch=scope.control_branch,remote="origin",
-            policy=str(policy),once=False)
-        result=_run_admitted_worker(
-            worker_args,repo,state,False,
-            admission_check=check,
-            control_transport=BrokerControlHistory(
-                repo,control,args.expected_epoch),
-            executor=BrokerExecutor(repo=repo,policy_path=policy,state_dir=state),
-            receipt_observer=_receipt_driver(
-                scope.nonce,task,repo,args.expected_epoch,
-                rpc=broker_request,status=status),
-        )
-        if status["failure"] is not None:
-            raise ExecutionBlocked(status["failure"])
-        if result!=0 or not status["ci_receipt"]:
-            raise ExecutionBlocked("synthetic worker ended without a terminal CI-stage receipt")
-        _poll_terminal_ci(repo,task,scope,rpc=broker_request,check=check)
+    try:
+        for task in (1,2):
+            check()
+            proposal=_candidate(config,task,rpc=broker_request)
+            published=broker_request(repo,{
+                "operation":"codex_request_publish",
+                "request_id":"codex-publish-"+scope.nonce+"-"+str(task)+"-edit",
+                "epoch":args.expected_epoch,"value":proposal,
+            })
+            if not isinstance(published,dict) or published.get("state")!="succeeded":
+                raise ExecutionBlocked("model proposal was not durably published by root broker")
+            status={"failure":None,"ci_receipt":False}
+            worker_args=Namespace(control_worktree=str(control),
+                branch=scope.control_branch,remote="origin",
+                policy=str(policy),once=False)
+            result=_run_admitted_worker(
+                worker_args,repo,state,False,
+                admission_check=check,
+                control_transport=BrokerControlHistory(
+                    repo,control,args.expected_epoch),
+                executor=BrokerExecutor(repo=repo,policy_path=policy,state_dir=state),
+                receipt_observer=_receipt_driver(
+                    scope.nonce,task,repo,args.expected_epoch,
+                    rpc=broker_request,status=status),
+            )
+            if status["failure"] is not None:
+                raise ExecutionBlocked(status["failure"])
+            if result!=0 or not status["ci_receipt"]:
+                raise ExecutionBlocked("synthetic worker ended without a terminal CI-stage receipt")
+            _poll_terminal_ci(repo,task,scope,rpc=broker_request,check=check)
+    except BaseException:
+        # A failed quota gate, lost native grant, interrupted CI or uncertain
+        # broker effect must not leave an active orphan canary behind.
+        # Maintenance revocation never clears original effects or replays.
+        _revoke_codex_child(repo)
+        raise
     return 0
