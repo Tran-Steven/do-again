@@ -7,6 +7,8 @@ a root-owned config includes a Codex grant.
 from __future__ import annotations
 
 import json
+import os
+import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
