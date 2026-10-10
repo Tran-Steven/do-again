@@ -38,9 +38,13 @@ _INPUTS={
 }
 
 
-def _derive(broker,scope,api,entries,stage):
+def _derive(broker,scope,api,entries,stage,task=1):
+    if type(task) is not int or task not in (1,2):
+        raise ExecutionBlocked("Codex continuation task is outside the two-task plan")
+    if task==2:
+        broker.codex.second_ready()
     previous=_PRECEDING[stage]
-    rid=scope.request_prefix+"1-"+previous
+    rid=scope.request_prefix+str(task)+"-"+previous
     req_path="automation/do_again/requests/"+rid+".json"
     receipt_path="automation/do_again/receipts/"+rid+".json"
     req_sha,receipt_sha=entries.get(req_path),entries.get(receipt_path)
@@ -51,7 +55,7 @@ def _derive(broker,scope,api,entries,stage):
             or original.get("request_id")!=rid):
         raise ExecutionBlocked("Codex preceding request blob does not match its canonical identity")
     receipt=read_json_blob(api,receipt_sha)
-    native=_terminal(broker,scope,1,previous)
+    native=_terminal(broker,scope,task,previous)
     fingerprint=request_fingerprint(original)
     intent=broker.ledger.intent(broker.project.key,rid)
     if intent.get("request_fingerprint")!=fingerprint:
@@ -77,10 +81,10 @@ def _derive(broker,scope,api,entries,stage):
     inputs=dict(zip(_INPUTS[stage],(original,receipt)))
     try:
         generated=_BUILDERS[stage](
-            **inputs,nonce=scope.nonce,task=1,expected_head=expected_head)
+            **inputs,nonce=scope.nonce,task=task,expected_head=expected_head)
     except Exception:
         raise ExecutionBlocked("Codex follow-up cannot be admitted from preceding receipt") from None
-    if generated.get("request_id")!=scope.request_prefix+"1-"+stage:
+    if generated.get("request_id")!=scope.request_prefix+str(task)+"-"+stage:
         raise ExecutionBlocked("Codex follow-up builder generated a different identity")
     return generated
 
@@ -99,12 +103,15 @@ def publish_codex_followup(broker,packet:dict,*,api=None)->dict:
             or type(packet.get("epoch")) is not int):
         raise ExecutionBlocked("Codex follow-up refuses model-selected payloads and refs")
     request_id=packet["request_id"]
-    prefix="codex-publish-"+scope.nonce+"-1-"
-    if not isinstance(request_id,str) or not request_id.startswith(prefix):
-        raise ExecutionBlocked("Codex follow-up identity differs from sealed nonce")
-    stage=request_id[len(prefix):]
-    if stage not in _PRECEDING:
-        raise ExecutionBlocked("Codex follow-up stage is not a bounded task-one continuation")
+    if not isinstance(request_id,str):
+        raise ExecutionBlocked("Codex follow-up identity is missing")
+    match=re.fullmatch("codex-publish-"+scope.nonce+r"-([12])-(test|commit|publish|ci)",request_id)
+    if match is None:
+        raise ExecutionBlocked("Codex follow-up stage is outside the bounded two-task plan")
+    task=int(match[1])
+    stage=match[2]
+    if task==2:
+        authority.second_ready()
     digest=hashlib.sha256(canonical_json(packet)).hexdigest()
     with broker.lock:
         with broker.admission():
@@ -119,7 +126,7 @@ def publish_codex_followup(broker,packet:dict,*,api=None)->dict:
             cached=broker.ledger.lookup(broker.project.key,request_id,digest)
             if cached is not None:return cached
             base,commit,entries=snapshot(api)
-            proposal=_derive(broker,scope,api,entries,stage)
+            proposal=_derive(broker,scope,api,entries,stage,task=task)
             rid=proposal["request_id"]
             path="automation/do_again/requests/"+rid+".json"
             if path in entries:
