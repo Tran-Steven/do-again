@@ -94,6 +94,7 @@ def _default_config() -> dict[str, Any]:
         "port": 9223,
         "preferred_mode": "auto",
         "resolved_mode": None,
+        "allow_visible_fallback": False,
         "authenticated": False,
         "last_authenticated_utc": None,
         "last_headless_verified_utc": None,
@@ -580,6 +581,8 @@ def _normal_mode(config: dict[str, Any]) -> str:
         return "headless"
     if preferred == "background":
         return "background"
+    if preferred == "auto" and config.get("allow_visible_fallback") is not True:
+        return "headless"
     if resolved in {"headless", "background"}:
         return resolved
     return "headless"
@@ -593,6 +596,9 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
         if verify_auth and config.get("auth_required"):
             raise BrowserAuthRequired("ChatGPT authentication requires interaction; run do-again setup")
         preferred = config.get("preferred_mode")
+        if (preferred == "auto" and config.get("allow_visible_fallback") is not True
+                and status["running"] and status.get("mode") != "headless"):
+            raise BrowserError("unattended auto mode refuses an existing GUI browser; no browser submission attempted")
         if status["running"] and preferred in {"headless", "background"} and status.get("mode") != preferred:
             stop_browser(force=True)
             status["running"] = False
@@ -601,7 +607,8 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
             try:
                 launch_browser(mode, config=config)
             except BrowserError:
-                if mode != "headless" or config.get("preferred_mode") != "auto":
+                if (mode != "headless" or config.get("preferred_mode") != "auto"
+                        or config.get("allow_visible_fallback") is not True):
                     raise
                 stop_browser(force=True)
                 launch_browser("background", config=config)
@@ -620,7 +627,8 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
         current_mode = str(status.get("mode") or "")
         preferred = str(config.get("preferred_mode") or "auto")
 
-        if current_mode == "headless" and preferred == "auto":
+        if (current_mode == "headless" and preferred == "auto"
+                and config.get("allow_visible_fallback") is True):
             # Some ChatGPT/Cloudflare sessions work in real Chrome but not in
             # true headless. Fall back automatically without involving the
             # user's normal browser profile or foreground applications.
@@ -815,6 +823,12 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     This targets only Do Again's dedicated Chrome profile, not the user's
     normal browser.
     """
+    config = load_config()
+    state = load_state()
+    if (config.get("preferred_mode") == "auto"
+            and config.get("allow_visible_fallback") is not True
+            and state.get("mode") == "background"):
+        raise BrowserError("unattended auto mode refuses GUI tab focus; no browser submission was attempted")
     probe = r"""(() => ({
         focused: document.hasFocus(),
         visibility: document.visibilityState
