@@ -152,7 +152,7 @@ def generate_structured(
             result = subprocess.run(
                 argv, input=prompt, cwd=work,
                 env=_isolated_environment(operator_home),
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, check=False, timeout=timeout_seconds,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
