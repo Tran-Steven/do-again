@@ -58,10 +58,16 @@ control branch. After the worker publishes the original matching receipt:
 do-again chatgpt check chatgpt-verify-<original-24-hex-nonce> /path/to/project
 ~~~
 
-This reads the remote Git request and receipt using their exact identity. It
-reports `verification=git_receipt_only`; it **does not** assert that native
-confinement or an unattended browser loop has passed. Missing receipts,
-mismatched fingerprints, expired/ambiguous effects and changed control branches
+This reads the remote Git request and receipt using their exact identity.
+**A GitHub receipt is only a claim:** the ChatGPT GitHub writer also has
+permission to write those files. Therefore a matching remote receipt without a
+separately matching, private, terminal local-agent ledger reports
+`state=remote_receipt_unverified`, `completed=false`, and
+`verification=git_receipt_only`. Only the exact matching terminal local agent
+record produces `state=agent_receipt_verified`, `completed=true`, and
+`verification=git_receipt_and_local_agent_ledger`. This still does **not**
+establish native-root confinement or unattended browser acceptance.
+Missing/altered evidence, ambiguous effects and changed control branches
 must never be treated as successful autonomous development. Use
 `do-again verify` for the separate automated ChatGPT-browser round trip, which
 requires a signed-in dedicated browser session.
