@@ -19,6 +19,37 @@ class InstallationTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
+    def test_installer_early_chat_gate_works_in_isolated_system_python(self):
+        import subprocess
+        current=self.root/'current';current.mkdir()
+        stage=self.root/'stage';stage.mkdir()
+        (current/'config.json').write_text(json.dumps({
+            'live_canary':{'chat_url':'https://chatgpt.com/c/fixture-old'}}))
+        (stage/'config.json').write_text(json.dumps({
+            'source_sha':'b'*40,
+            'live_canary':{'chat_url':'https://chatgpt.com/c/fixture-old'}}))
+        installer=Path(__file__).resolve().parents[1]/'tools/macos_supervisor_install.py'
+        script="""
+import importlib.util,json,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('sealed_installer',sys.argv[1])
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.ROOT=Path(sys.argv[2])
+module.verify_stage=lambda path:{'source_sha':'b'*40}
+module.os.geteuid=lambda:0
+try:
+    module.install(Path(sys.argv[3]))
+except RuntimeError as exc:
+    if 'distinct ChatGPT conversation' not in str(exc):
+        raise
+else:
+    raise AssertionError('duplicate conversation was accepted')
+"""
+        child=subprocess.run([sys.executable,'-I','-S','-c',script,str(installer),
+                              str(self.root),str(stage)],capture_output=True,text=True)
+        self.assertEqual(child.returncode,0,child.stderr[-800:])
+
     def worker_quiescence_fixture(self):
         from do_again.supervisor.macos_execution import ExecutionBlocked
         key='c'*64
