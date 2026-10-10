@@ -430,9 +430,14 @@ def serve_operator(config: dict, brokers: dict) -> None:
                         from .worker_service import restart_canary
                         result=restart_canary(broker)
                     elif set(packet)=={'operation','project'} and packet['operation']=='activate_canary':
-                        if getattr(broker,'canary',None) is None:raise ExecutionBlocked('project has no sealed canary scope')
-                        from .live_canary import activate
-                        result=activate(broker)
+                        if getattr(broker,'canary',None) is not None:
+                            from .live_canary import activate
+                            result=activate(broker)
+                        elif getattr(broker,'codex',None) is not None:
+                            from .model_native import activate_codex
+                            result=activate_codex(broker)
+                        else:
+                            raise ExecutionBlocked('project has no separately sealed canary scope')
                     elif set(packet)=={'operation','project'} and packet['operation'] in {'stage_worker','withdraw_worker'}:
                         from .worker_service import stage_worker,withdraw_worker
                         result={'stage_worker':stage_worker,'withdraw_worker':withdraw_worker}[packet['operation']](broker)
