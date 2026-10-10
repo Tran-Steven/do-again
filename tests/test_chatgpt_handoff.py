@@ -15,7 +15,7 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
     def setUp(self):
         self.slug=patch("do_again.chatgpt_handoff._github_slug",
                         return_value="Tran-Steven/do-again")
-        self.slug.start()
+        self.slug_mock=self.slug.start()
         self.addCleanup(self.slug.stop)
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -115,7 +115,7 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
     def test_chatgpt_prompt_names_actual_github_slug_not_private_mac_path(self):
         self.assertIn("Git repository Tran-Steven/do-again",self.prepared["prompt"])
         self.assertNotIn(str(self.layout.repo),self.prepared["prompt"])
-        self.slug.return_value="AnotherOwner/do-again"
+        self.slug_mock.return_value="AnotherOwner/do-again"
         with self.assertRaisesRegex(ServiceError,"identity changed"):
             observe(self.layout,self.rid,runner=self.runner())
 
