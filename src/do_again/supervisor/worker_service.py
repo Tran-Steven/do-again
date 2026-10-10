@@ -22,7 +22,8 @@ def service_spec(broker,epoch):
     return label,{'Label':label,'ProgramArguments':[broker.config['python'],'-I','-S','-B',
         str(INSTALL_ROOT/'current/worker-bootstrap.py'),'--project',name,
         '--expected-source',broker.config['source_sha'],'--expected-epoch',str(epoch),
-        *(['--canary'] if getattr(broker,'canary',None) is not None else [])],
+        *(['--canary'] if getattr(broker,'canary',None) is not None else []),
+        *(['--codex-canary'] if getattr(broker,'codex',None) is not None else [])],
         'RunAtLoad':False,'KeepAlive':False,'ThrottleInterval':30,
         'WorkingDirectory':str(INSTALL_ROOT/'current'),
         'EnvironmentVariables':{'HOME':broker.config['operator_home'],'PATH':'/usr/bin:/bin'}}
