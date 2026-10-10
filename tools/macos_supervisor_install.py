@@ -350,11 +350,16 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
     # canary's uncertain delivery. An altered preparer cannot bypass this.
     prior_path=ROOT/'current/config.json'
     if prior_path.exists():
-        from do_again.supervisor.live_canary import require_fresh_conversation
-        try:
-            require_fresh_conversation(json.loads(prior_path.read_text()),config)
-        except Exception as exc:
-            raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation') from exc
+        # This root entrypoint runs in an isolated system Python before the
+        # verified payload package is on sys.path. Use only sealed JSON values
+        # for this early fail-closed gate; do not import do_again here.
+        previous=json.loads(prior_path.read_text())
+        older=previous.get('live_canary')
+        proposed=config.get('live_canary')
+        if (isinstance(older,dict) and isinstance(proposed,dict)
+                and older.get('chat_url')
+                and older['chat_url']==proposed.get('chat_url')):
+            raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation')
     if len(config['projects'])!=2 or len({p['uid'] for p in config['projects']})!=2:
         raise RuntimeError('two independently scoped execution identities required')
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
