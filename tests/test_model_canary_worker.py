@@ -57,10 +57,11 @@ class CodexCanaryWorkerTests(unittest.TestCase):
 
     def test_ambiguous_native_followup_does_not_generate_retry_packet(self):
         calls=[]
+        status={}
         receiver=_receipt_driver(self.nonce,2,Path("/sealed/codex"),8,
             rpc=lambda repo,pkt:(calls.append(pkt) or (_ for _ in ()).throw(
                 RuntimeError("GitHub branch PATCH response uncertain"))),
-            status:= {})
+            status=status)
         self.assertTrue(receiver({
             "request_id":"canary-"+self.nonce+"-2-edit","state":"succeeded"}))
         self.assertEqual(len(calls),1)
