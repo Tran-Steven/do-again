@@ -97,6 +97,14 @@ class CodexRootChildTests(unittest.TestCase):
                               request_id=packet.get("request_id")),self.assertRaises(ExecutionBlocked):
                 self.authority.packet(packet)
 
+    def test_sibling_started_native_execution_blocks_codex_child_authority(self):
+        from do_again.supervisor.authority import project_identity
+        sibling_key=project_identity(Path(self.config["projects"][1]["repo"]))
+        self.parent.ledger.pending=lambda key: (
+            [{"request_id":"started-uncertain"}] if key==sibling_key else [])
+        with self.assertRaisesRegex(ExecutionBlocked,"sibling"):
+            self.authority.parent_check()
+
     def test_task_one_remote_control_filter_disallows_other_canary_and_task_two(self):
         base="automation/do_again/requests/"
         entries={
