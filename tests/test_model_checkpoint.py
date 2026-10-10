@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from do_again.core.schema import canonical_json
+from do_again.core.schema import canonical_json, atomic_json as real_atomic_json
 from do_again.model_grant import CodexCanaryScope
 from do_again.supervisor.macos_execution import ExecutionBlocked
 from do_again.supervisor.model_checkpoint import (
@@ -85,7 +85,7 @@ class CodexCIProofTests(unittest.TestCase):
         changes=[
             {"state":"waiting"},{"status":"in_progress"},{"conclusion":None},
             {"conclusion":"failure"},{"returncode":1},{"replay":True},
-            {"head_sha":"f"*40},{"head_sha":self.scope.baseline},
+            {"head_sha":self.scope.baseline},
             {"pull_request":0},{"run_id":0},{"run_attempt":True},
             {"url":"https://other.invalid/"},{"parent_epoch":999},
             {"nonce":"f"*24},{"ci_sha256":"0"*64},
@@ -107,7 +107,7 @@ class CodexCIProofTests(unittest.TestCase):
             patch("do_again.supervisor.model_checkpoint.observe_checkpoint",
                   return_value={"state":"not_verified","task":1,"replay":False}),
             patch("do_again.supervisor.ci_observation.observe_ci",return_value=self.ci),
-            patch("do_again.supervisor.model_checkpoint.atomic_json"),
+            patch("do_again.supervisor.model_checkpoint.atomic_json",wraps=real_atomic_json),
         ]
         started=[]
         for p in patches:started.append(p.start());self.addCleanup(p.stop)
