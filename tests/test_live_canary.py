@@ -12,12 +12,22 @@ from unittest.mock import Mock
 
 from do_again.core.schema import atomic_json
 from do_again.supervisor.authority import AuthorityRegistry,project_identity
-from do_again.supervisor.live_canary import scope,CanaryAuthority,effect_authorized,activate
+from do_again.supervisor.live_canary import scope,CanaryAuthority,effect_authorized,activate,require_fresh_conversation
 from do_again.supervisor.macos_execution import ExecutionBlocked,ExecutionLedger
 from do_again.supervisor.control_history import canary_entries,gate
 
 
 class LiveCanaryTests(unittest.TestCase):
+    def test_fresh_canary_requires_different_chat_even_when_nonce_and_binding_change(self):
+        old={'live_canary':{'nonce':'a'*24,'chat_url':'https://chatgpt.com/c/old-chat'}}
+        new={'live_canary':{'nonce':'b'*24,'chat_url':'https://chatgpt.com/c/old-chat',
+                            'binding_identity':'c'*64}}
+        with self.assertRaisesRegex(ExecutionBlocked,'distinct ChatGPT conversation'):
+            require_fresh_conversation(old,new)
+        new['live_canary']['chat_url']='https://chatgpt.com/c/new-chat'
+        require_fresh_conversation(old,new)
+        require_fresh_conversation({'production_ready':False},new)
+
     def test_worker_reconciles_lost_control_response_read_only_before_admission(self):
         from do_again.supervisor.live_canary_worker import reconciled_status
         repo=Path('/synthetic/canary')
