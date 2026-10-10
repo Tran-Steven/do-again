@@ -39,7 +39,7 @@ class CodexMaintenanceGateTests(unittest.TestCase):
 
     def rpc(self, repo, packet):
         self.assertEqual(packet, {"operation":"status"})
-        return copy.deepcopy(self.base if str(repo)==self.home+"/do-again" else self.sibling)
+        return copy.deepcopy(self.base if Path(repo).as_posix()==self.home+"/do-again" else self.sibling)
 
     def test_exact_both_parent_maintenance_read_only(self):
         fake=Mock(side_effect=self.rpc)
