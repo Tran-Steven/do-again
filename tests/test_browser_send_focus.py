@@ -16,6 +16,17 @@ class ChatSendFocusTests(unittest.TestCase):
         self.target = cdp.Target("test-tab", "https://chatgpt.com/", "",
                                  "ws://127.0.0.1:9223/devtools/page/test-tab")
 
+    def test_auto_background_blocks_before_any_focus_or_message_effect(self):
+        commit = Mock()
+        with patch.object(runtime, "load_config", return_value={"preferred_mode": "auto", "allow_visible_fallback": False}), patch.object(runtime, "load_state", return_value={"mode": "background"}), patch.object(cdp, "evaluate") as evaluate, patch.object(cdp, "target_call") as activate, patch.object(cdp, "insert_text") as insert, patch.object(cdp, "click_send") as click:
+            with self.assertRaisesRegex(BrowserError, "no browser submission was attempted"):
+                runtime.send_message(self.target, "UNSENT", before_dispatch=commit)
+        evaluate.assert_not_called()
+        activate.assert_not_called()
+        insert.assert_not_called()
+        click.assert_not_called()
+        commit.assert_not_called()
+
     def test_already_focused_page_requires_no_activation(self):
         with patch.object(cdp, "evaluate", return_value={
                 "focused": True, "visibility": "visible"}) as evaluate, patch.object(
