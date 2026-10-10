@@ -40,6 +40,20 @@ do-again model status
 do-again model smoke --allow-model-call
 ```
 
+A third command prepares, but **does not publish or execute**, exactly one
+synthetic edit proposal:
+
+```bash
+do-again model canary-draft --nonce <fresh-24-hex-nonce> --task 1 \
+  --head <exact-40-character-commit-SHA> --allow-model-call
+```
+
+It produces a typed JSON `scratch_script` request for offline review, using
+the source and tests authored by one signed-in Codex model call. Invalid
+Python, imports, file names, source heads or capabilities fail closed. The
+draft is **not** a grant, and its output must not be treated as a broker
+acknowledgment, CI evidence or authorization to activate the canary.
+
 The status command does not use model inference. The smoke command uses
 **one explicitly authorized inference** against the signed-in Codex allowance,
 is restricted to a read-only sandbox, emits only a bounded structured result,
