@@ -1210,6 +1210,21 @@ def main() -> int:
         default=90.0,
         help="Maximum seconds to wait for the end-to-end verification receipt",
     )
+    # Browser-free option for an ordinary ChatGPT chat with GitHub access.
+    # Does not contact Codex, invoke CDP, activate a worker, or submit an effect.
+    chatgpt_parser = sub.add_parser(
+        "chatgpt", help="Use the regular ChatGPT conversation + Git receipts (no Codex)"
+    )
+    chatgpt_sub = chatgpt_parser.add_subparsers(dest="chatgpt_command")
+    chatgpt_prepare = chatgpt_sub.add_parser(
+        "prepare", help="Prepare one browser-free status verification prompt"
+    )
+    chatgpt_prepare.add_argument("path", nargs="?", default=".")
+    chatgpt_check = chatgpt_sub.add_parser(
+        "check", help="Read-only reconcile the original ChatGPT Git receipt"
+    )
+    chatgpt_check.add_argument("request_id")
+    chatgpt_check.add_argument("path", nargs="?", default=".")
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
     summary_parser = sub.add_parser(
@@ -1373,6 +1388,23 @@ def main() -> int:
         )
     if args.command == "verify":
         return verify_project(args.path, timeout_seconds=args.timeout)
+    if args.command == "chatgpt":
+        from .chatgpt_handoff import prepare, observe
+        try:
+            layout = runtime_layout(find_repo(args.path))
+            if args.chatgpt_command == "prepare":
+                outcome = prepare(layout)
+            elif args.chatgpt_command == "check":
+                outcome = observe(layout, args.request_id)
+            else:
+                chatgpt_parser.print_help()
+                return 2
+        except (ServiceError, OSError, ValueError) as exc:
+            print(f"do-again: chatgpt: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(outcome, indent=2, sort_keys=True))
+        return 0 if (args.chatgpt_command == "prepare" or
+                     outcome.get("completed") is True) else 2
     if args.command == "status":
         return status(args.path)
     if args.command == "summary":
