@@ -49,7 +49,7 @@ jobs:
               "project_count":len(config.get("projects",[])),
           },sort_keys=True))
           # The runner is intentionally unprivileged. A separate runner UID must
-          # never be given filesystem permissions or sudo authority to bypass
+          # never be given filesystem permissions or privileged authority to bypass
           # the root broker's peer-UID enforcement. Status may be queried only
           # when the registered operator identity already owns the process.
           if os.getuid()!=config.get("operator_uid"):
