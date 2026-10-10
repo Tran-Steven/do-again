@@ -170,9 +170,14 @@ def main(argv: list[str] | None = None) -> int:
         raise OperatorError('worker operator group differs from the sealed identity')
     from .macos_server import verify_installation
     verify_installation(config)
+    if args.canary and args.codex_canary:
+        raise OperatorError("browser and Codex canary flags cannot coexist")
     if args.canary:
         from .live_canary_worker import main as canary_main
         return canary_main(config,args)
+    if args.codex_canary:
+        from .model_canary_worker import main as codex_main
+        return codex_main(config,args)
     project = next(
         (p for p in config.get("projects", []) if isinstance(p, dict)
          and p.get("account") == PROJECT_ACCOUNTS[args.project]),
