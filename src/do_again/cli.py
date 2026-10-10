@@ -1215,7 +1215,7 @@ def main() -> int:
     chatgpt_parser = sub.add_parser(
         "chatgpt", help="Use the regular ChatGPT conversation + Git receipts (no Codex)"
     )
-    chatgpt_sub = chatgpt_parser.add_subparsers(dest="chatgpt_command")
+    chatgpt_sub = chatgpt_parser.add_subparsers(dest="chatgpt_command", required=True)
     chatgpt_prepare = chatgpt_sub.add_parser(
         "prepare", help="Prepare one browser-free status verification prompt"
     )
