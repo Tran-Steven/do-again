@@ -1042,7 +1042,9 @@ def _browser_action(action: str, *, mode: str = "auto", run_test: bool = True) -
         return 1
 
 
-def _model_action(action: str, *, allow_model_call: bool = False) -> int:
+def _model_action(action: str, *, allow_model_call: bool = False,
+                  nonce: str | None = None, task: int | None = None,
+                  expected_head: str | None = None) -> int:
     from .model_transport import (
         CodexTransportBlocked,
         discover_codex,
@@ -1056,6 +1058,34 @@ def _model_action(action: str, *, allow_model_call: bool = False) -> int:
                   "browser_required": False, "production_enabled": False}
         print(json.dumps(status, sort_keys=True))
         return 0 if status["authenticated"] else 2
+    if action == "canary-draft":
+        from .model_canary import (
+            CodexCanaryProposalRejected,
+            canary_model_schema,
+            canary_task_prompt,
+            prepare_canary_edit,
+        )
+        try:
+            if not allow_model_call:
+                raise CodexTransportBlocked("canary draft requires explicit model-call authorization")
+            prompt = canary_task_prompt(nonce=nonce, task=task)
+            proposal = generate_structured(
+                prompt, canary_model_schema(),
+                allow_model_call=True, binary=binary, timeout_seconds=180,
+            )
+            request = prepare_canary_edit(
+                proposal, nonce=nonce, task=task, expected_head=expected_head,
+            )
+        except (CodexTransportBlocked, CodexCanaryProposalRejected) as exc:
+            print(f"do-again: model: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps({
+            "state": "proposal_only",
+            "published": False,
+            "executed": False,
+            "request": request,
+        }, indent=2, sort_keys=True))
+        return 0
     if action == "smoke":
         try:
             response = generate_structured(
@@ -1287,6 +1317,13 @@ def main() -> int:
     model_smoke = model_sub.add_parser("smoke", help="One explicit, read-only Codex inference")
     model_smoke.add_argument("--allow-model-call", action="store_true",
         help="Explicitly authorize one model call against your Codex usage allowance")
+    model_canary = model_sub.add_parser("canary-draft",
+        help="Prepare but never publish one exact-head synthetic canary edit request")
+    model_canary.add_argument("--nonce", required=True)
+    model_canary.add_argument("--task", type=int, choices=(1, 2), required=True)
+    model_canary.add_argument("--head", required=True)
+    model_canary.add_argument("--allow-model-call", action="store_true",
+        help="Explicitly authorize one non-browser model proposal")
 
     browser_parser = sub.add_parser(
         "browser",
@@ -1360,6 +1397,9 @@ def main() -> int:
         return _model_action(
             args.model_command,
             allow_model_call=bool(getattr(args, "allow_model_call", False)),
+            nonce=getattr(args, "nonce", None),
+            task=getattr(args, "task", None),
+            expected_head=getattr(args, "head", None),
         )
     if args.command == "browser":
         return _browser_action(
