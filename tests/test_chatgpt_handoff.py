@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from do_again.chatgpt_handoff import prepare, observe
+from do_again.chatgpt_handoff import prepare, observe, _github_slug
 from do_again.core.schema import request_fingerprint
 from do_again.service.runtime import ServiceError
 
@@ -101,6 +101,22 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
         row=observe(self.layout,self.rid,runner=self.runner(receipt=failed))
         self.assertEqual(row["state"],"worker_failed")
         self.assertFalse(row["completed"])
+
+    def test_github_remote_url_formats_are_strict(self):
+        self.slug.stop()
+        for remote in ("https://github.com/Tran-Steven/do-again.git",
+                       "git@github.com:Tran-Steven/do-again.git",
+                       "ssh://git@github.com/Tran-Steven/do-again"):
+            with self.subTest(remote=remote):
+                with patch("do_again.chatgpt_handoff.subprocess.run",
+                           return_value=SimpleNamespace(returncode=0,stdout=remote,stderr="")):
+                    self.assertEqual(_github_slug(self.layout),"Tran-Steven/do-again")
+        with patch("do_again.chatgpt_handoff.subprocess.run",
+                   return_value=SimpleNamespace(returncode=0,
+                       stdout="https://evil.example/owner/repo.git",stderr="")):
+            with self.assertRaisesRegex(ServiceError,"requires a GitHub repository"):
+                _github_slug(self.layout)
+        self.slug_mock=self.slug.start()
 
     def test_bad_private_state_and_invalid_ids_fail_closed(self):
         with self.assertRaises(ServiceError):
