@@ -8,11 +8,11 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
 from ..core.schema import atomic_json
+from .authority import AuthorityRegistry
 from .macos_execution import ExecutionBlocked
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -82,9 +82,29 @@ def _reserve(ticket: Path, value: dict) -> None:
             os.close(fd)
 
 
+def _check_operator_authority(installed: dict, grant: dict) -> None:
+    """Tie a GitHub effect to current maintenance and the original parent epoch."""
+    if (not isinstance(installed, dict)
+            or installed.get("production_ready") is not False
+            or installed.get("operator_uid") != os.getuid()):
+        raise ExecutionBlocked("GitHub canary setup requires the maintenance operator")
+    home = Path(installed["operator_home"])
+    parents = [p for p in installed.get("projects", [])
+               if p.get("account") == "_doagain_da"]
+    if (len(parents) != 1 or parents[0].get("repo") != str(home / "do-again")
+            or type(grant.get("parent_epoch")) is not int):
+        raise ExecutionBlocked("GitHub canary setup has no matching parent authority")
+    status = AuthorityRegistry(Path(installed["legacy_authority_path"])).status(
+        Path(parents[0]["repo"]))
+    if (status.get("intent") != "maintenance"
+            or status.get("epoch") != grant["parent_epoch"]):
+        raise ExecutionBlocked("canary parent maintenance authority changed")
+
+
 def provision_control_branch(*, nonce: str, baseline: str, grant: Path,
-                             journal_root: Path) -> dict:
-    """Create only an absent exact canary ref; resolve consumed attempts read-only."""
+                             journal_root: Path, installed: dict,
+                             reconcile_only: bool = False) -> dict:
+    """Create only an absent exact canary ref; recovery may be strictly read-only."""
     if not (_NONCE.fullmatch(nonce) and _SHA.fullmatch(baseline)):
         raise ExecutionBlocked("control branch needs exact canary nonce and SHA")
     grant = Path(grant).absolute()
@@ -100,6 +120,7 @@ def provision_control_branch(*, nonce: str, baseline: str, grant: Path,
                 "nonce", "baseline", "parent_epoch", "chat_url", "binding_identity"}):
         raise ExecutionBlocked("canary branch authority differs from sealed grant")
 
+    _check_operator_authority(installed, value)
     branch = "do-again/canary-" + nonce + "/control"
     name = "refs/heads/" + branch
     endpoint = "repos/Tran-Steven/do-again/git/ref/heads/" + branch
@@ -121,10 +142,17 @@ def provision_control_branch(*, nonce: str, baseline: str, grant: Path,
                              "phase": "verified", "branch": branch})
         return {"branch": branch, "sha": baseline, "reconciled": True}
 
+    if reconcile_only:
+        # A reconciliation action must never turn into the first branch POST.
+        raise ExecutionBlocked("no reserved branch publication to reconcile")
     # We require a literal GitHub 404 *before* reserving the one-shot effect.
     status, remote = _api("GET", endpoint)
     if status != 404 or remote:
         raise ExecutionBlocked("fresh canary branch is already present or ambiguous")
+    # The remote preflight can take time. Recheck the same sealed authority
+    # immediately before reserving GitHub effects. A parent epoch change
+    # blocks creation, including on the grant-only continuation path.
+    _check_operator_authority(installed, value)
     _reserve(ticket, {"nonce": nonce, "baseline": baseline,
                       "phase": "publication_reserved", "branch": branch})
     # A lost POST response leaves the journal reserved. Later calls only GET.
