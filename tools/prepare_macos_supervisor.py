@@ -108,7 +108,9 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, classify_canary_partial=False):
+    if classify_canary_partial and canary_grant is None:
+        raise ValueError('explicit partial disposition requires a fresh sealed canary grant')
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if git(source,'status','--porcelain'):raise ValueError('commit and validate supervisor source before preparation')
@@ -133,6 +135,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                 raise ValueError('existing execution identity changed')
         ids=[next(p['uid'] for p in installed['projects'] if p['repo']==str(repo)) for repo in (do_again_repo,jobpipe)]
     elif ids is None:ids=available_ids()
+    if classify_canary_partial and (installed is None or not installed.get('live_canary')):
+        raise ValueError('partial disposition requires the exact installed canary scope')
     if len(ids)!=2 or len(set(ids))!=2 or any(not 400<=value<500 or value==uid for value in ids):raise ValueError('invalid execution IDs')
     for repo,name in ((source,'do-again'),(jobpipe,'jobpipe')):
         remote=git(repo,'remote','get-url','origin')
@@ -262,7 +266,9 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         'cd '+q(stage),
         'test "$(/usr/bin/shasum -a 256 MANIFEST.sha256 | /usr/bin/cut -d " " -f 1)" = '+q(sums_digest),
         '/usr/bin/shasum -a 256 -c MANIFEST.sha256 >/dev/null',
-        '/usr/bin/python3 -I -S -B '+q(stage+'/install.py')+' --stage '+q(stage),
+        '/usr/bin/python3 -I -S -B '+q(stage+'/install.py')+' --stage '+q(stage)
+        +(' --classify-canary-partial-publication --partial-disposition-source '+q(installed['source_sha'])
+          +' --partial-disposition-nonce '+q(installed['live_canary']['nonce']) if classify_canary_partial else ''),
     ])+'\n'
     (output/'administrator-install.sh').write_text(command)
     (output/'administrator-install.sh').chmod(0o600)
@@ -284,6 +290,8 @@ if __name__=='__main__':
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--dependency-lock',type=Path)
     parser.add_argument('--canary-grant',type=Path)
+    parser.add_argument('--classify-canary-partial-publication',action='store_true')
     args=parser.parse_args()
     print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
-                             dependency_lock=args.dependency_lock,canary_grant=args.canary_grant),indent=2))
+                             dependency_lock=args.dependency_lock,canary_grant=args.canary_grant,
+                             classify_canary_partial=args.classify_canary_partial_publication),indent=2))

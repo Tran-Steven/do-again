@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..core.schema import canonical_json
 from .git_broker import validate_packet
-from .github import GitHubRepository, publish_commit, matching_pull_requests, validate_publication_paths
+from .github import GitHubRepository, publish_commit, matching_pull_requests, branch_pull_requests, validate_publication_paths
 from .macos_execution import EXECUTION_ROOT, INSTALL_ROOT, REQUEST_ID, ExecutionBlocked, MacOSProcesses, capture, launch_spec, private_root_file
 
 
@@ -133,4 +133,62 @@ def reconcile_publication(broker, packet: dict) -> dict:
                 'branch':intent['branch'],'pull_request':matches[0]['number'],'url':matches[0]['html_url'],
                 'reconciled_read_only':True}
         broker.ledger.finish(broker.project.key,packet['request_id'],result)
+        return result
+
+
+def classify_canary_partial_publication(broker):
+    """Explicit administrator disposition, never automatic recovery or success."""
+    from ..core.schema import atomic_json
+    from .macos_server import worktree_authority
+    if sys.platform!='darwin' or os.geteuid()!=0 or getattr(broker,'canary',None) is None:
+        raise ExecutionBlocked('partial classification requires an administrator and sealed canary')
+    with broker.lock,broker.admission():
+        if (broker.config.get('production_ready') is not False
+                or broker.registry.status(broker.project.repo)['intent']!='maintenance'
+                or MacOSProcesses().owned(broker.project.uid)):
+            raise ExecutionBlocked('partial classification requires withdrawn quiescent maintenance')
+        rid=broker.canary.rid(2,'publish');prior=broker.canary.rid(1,'publish')
+        original=broker.ledger.intent(broker.project.key,rid)
+        previous=broker.ledger.intent(broker.project.key,prior)
+        pending=broker.ledger.pending(broker.project.key)
+        if ([row['request_id'] for row in pending]!=[rid] or not original or not previous
+                or any(v.get('operation')!='git_publish' or v.get('source_sha')!=broker.config['source_sha']
+                       for v in (original,previous))
+                or original['branch']!=previous['branch'] or original['repository']!=previous['repository']
+                or original['head']==previous['head']):
+            raise ExecutionBlocked('only the original second canary publication may be classified')
+        before=broker.ledger.observe_request(broker.project.key,prior,previous['request_fingerprint'])
+        if (before.get('state')!='terminal' or before['result'].get('state')!='succeeded'
+                or before['result'].get('returncode')!=0
+                or before['result'].get('source_sha')!=broker.config['source_sha']
+                or before['result'].get('head')!=previous['head']):
+            raise ExecutionBlocked('original successful canary PR evidence is required')
+        api=GitHubRepository(original['repository'],read_credential(broker))
+        def evidence():
+            ref=api.request('GET','git/ref/heads/'+original['branch'])
+            commit=api.request('GET','git/commits/'+original['head'])
+            matches=branch_pull_requests(api,original['branch'])
+            if (not ref or ref['object']['sha']!=original['head'] or not commit
+                    or [p['sha'] for p in commit['parents']]!=[previous['head']]
+                    or len(matches)!=1 or matches[0]['head']['sha']!=original['head']):
+                raise ExecutionBlocked('partial publication lacks exact branch/parent/PR evidence')
+            pr=api.request('GET','pulls/'+str(matches[0]['number']))
+            if (not pr or pr['number']!=before['result']['pull_request'] or pr.get('draft') is not True
+                    or pr['state']!='open' or pr['head']['sha']!=original['head']
+                    or pr['head']['ref']!=original['branch'] or pr['head']['repo']['full_name']!=original['repository']
+                    or pr['base']['repo']['full_name']!=original['repository'] or pr['base']['ref']!='main'
+                    or pr['title']!=previous['title'] or pr['body']!=previous['body']
+                    or (pr['title'],pr['body'])==(original['title'],original['body'])):
+                raise ExecutionBlocked('partial classification requires the unchanged original draft metadata')
+            return {'head':original['head'],'pull_request':pr['number'],'title':pr['title'],'body':pr['body']}
+        observed=evidence()
+        if (worktree_authority(broker.project.worktree)['repo_head']!=original['head']
+                or evidence()!=observed):
+            raise ExecutionBlocked('partial evidence changed during administrator classification')
+        result={'operation':'git_publish','state':'blocked_partial_publication','returncode':1,
+                'source_sha':broker.config['source_sha'],'replay':False,'administrator_classified':True,
+                'engineering_complete':False,'repository':original['repository'],**observed}
+        atomic_json(broker.state/'canary-partial-publication-disposition.json',
+                    {'original_intent':original,'previous_intent':previous,'result':result})
+        broker.ledger.finish(broker.project.key,rid,result)
         return result

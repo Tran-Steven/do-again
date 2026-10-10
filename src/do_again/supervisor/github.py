@@ -104,6 +104,13 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
     observed = None if reference is None else reference['object']['sha']
     if observed not in (None, export['parent'], export['head']):
         raise ExecutionBlocked('remote branch changed; publication requires reconciliation')
+    # Bind an existing PR before moving its branch. GitHub's list endpoint may
+    # still show its old head after the reference update; that is not absence.
+    owned = branch_pull_requests(api,branch)
+    if len(owned)>1 or any(pr.get('state')!='open' for pr in owned):
+        raise ExecutionBlocked('pull request ownership is conflicting or closed')
+    if owned and owned[0]['head']['sha'] not in (export['parent'],export['head']):
+        raise ExecutionBlocked('existing pull request head requires reconciliation')
     if observed != export['head']:
         parent = api.request('GET','git/commits/'+export['parent'])
         if parent is None or parent['sha'] != export['parent'] or not SHA.fullmatch(parent['tree']['sha']):
@@ -135,9 +142,21 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
         reference = api.request('GET',ref_endpoint)
         if reference is None or reference['object']['sha'] != export['head']:
             raise ExecutionBlocked('remote branch publication is uncertain')
-    matching = matching_pull_requests(api,branch,export['head'])
+    matching = branch_pull_requests(api,branch)
     if len(matching)>1 or any(pr['state']!='open' for pr in matching):
         raise ExecutionBlocked('pull request ownership is conflicting or closed')
+    if owned:
+        if matching and matching[0]['number']!=owned[0]['number']:
+            raise ExecutionBlocked('pull request identity changed during publication')
+        matching=[api.request('GET','pulls/'+str(owned[0]['number']))]
+    elif matching:
+        matching=[api.request('GET','pulls/'+str(matching[0]['number']))]
+    if matching and (matching[0] is None or matching[0]['head']['sha']!=export['head']
+                     or matching[0]['head']['ref']!=branch
+                     or matching[0]['head']['repo']['full_name']!=api.repository
+                     or matching[0]['base']['repo']['full_name']!=api.repository
+                     or matching[0]['base']['ref']!='main' or matching[0]['state']!='open'):
+        raise ExecutionBlocked('existing pull request update is uncertain; no second creation')
     if not matching:
         with effect_guard():
             created = api.request('POST','pulls',{'title':title,'body':body,'head':branch,'base':'main','draft':True})
@@ -164,9 +183,14 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
 
 
 def matching_pull_requests(api: GitHubRepository, branch: str, head: str) -> list:
+    return [pr for pr in branch_pull_requests(api,branch) if pr['head']['sha']==head]
+
+
+def branch_pull_requests(api: GitHubRepository, branch: str) -> list:
     query = urlencode({'state':'all','head':api.repository.split('/')[0]+':'+branch,'base':'main','per_page':100})
     pulls = api.request('GET','pulls?'+query)
     if not isinstance(pulls,list):raise ExecutionBlocked('pull request inventory is invalid')
-    return [pr for pr in pulls if pr['head']['sha']==head and pr['head']['ref']==branch
+    if len(pulls)>=100:raise ExecutionBlocked('pull request inventory exceeds its bound')
+    return [pr for pr in pulls if pr['head']['ref']==branch
             and pr['head']['repo']['full_name']==api.repository and pr['base']['ref']=='main'
             and pr['base']['repo']['full_name']==api.repository]

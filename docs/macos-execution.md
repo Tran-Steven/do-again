@@ -494,3 +494,18 @@ reconciliation; paused admission cannot trigger it. Missing or conflicting
 evidence remains unresolved and prevents further effects. This closes the live
 control-publication lost-response stall without resubmitting browser messages,
 GitHub objects, claims, or coding requests.
+
+Publication binds an existing draft PR before advancing its branch, then reads
+that exact PR after the update. A stale or temporarily missing list entry cannot
+authorize creating a second PR. An unresolved exact-head readback stays uncertain.
+
+An explicitly authorized maintenance installer can classify the second canary
+publication as `blocked_partial_publication` only when the worker is withdrawn,
+the original successful first publication is retained, the new branch and PR head
+match the second commit with the exact first parent, and two readbacks prove the
+same original draft still has the first publication's unchanged metadata. This
+administrator-only flag is absent from ordinary broker APIs and default updates.
+It records the original intents and observed evidence, retains all journals, and
+completes the one pending row as a failed partial outcome. It never updates GitHub,
+replays an operation, counts engineering success, or enables production. Foreign,
+changing, missing, completed, or non-draft evidence refuses classification.

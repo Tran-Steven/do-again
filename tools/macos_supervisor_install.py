@@ -300,7 +300,7 @@ def recovery_candidate(source_sha):
     return candidate
 
 
-def install(stage, *, recovery=False):
+def install(stage, *, recovery=False, classify_canary_partial=False, partial_expected=None):
     if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
     os.umask(0o077)
     manifest=verify_stage(stage)
@@ -333,6 +333,26 @@ def install(stage, *, recovery=False):
     sys.path.insert(0,str(stage/'package'))
     from do_again.supervisor.authority import AuthorityRegistry
     registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
+    if classify_canary_partial:
+        if recovery or not existing_installation or not current.exists():
+            raise RuntimeError('partial canary disposition requires a separately authorized maintenance update')
+        verify_stage(current)
+        old=json.loads((current/'config.json').read_text())
+        if (old.get('production_ready') is not False or config.get('production_ready') is not False
+                or not old.get('live_canary') or not config.get('live_canary')
+                or partial_expected!=(old['source_sha'],old['live_canary']['nonce'])
+                or old['source_sha']==config['source_sha']
+                or old['live_canary']['nonce']==config['live_canary']['nonce']):
+            raise RuntimeError('partial disposition cannot reactivate a consumed grant or enable production')
+        verify_worker_quiescence(old)
+        from do_again.supervisor.macos_server import ProjectBroker
+        from do_again.supervisor.live_canary import create_broker
+        from do_again.supervisor.publication import classify_canary_partial_publication
+        parent=ProjectBroker(old,next(p for p in old['projects'] if p['account']=='_doagain_da'))
+        child=create_broker(old,parent)
+        # This explicit installer flag classifies one observed failed partial
+        # result; it never replays publication or overwrites older journals.
+        classify_canary_partial_publication(child)
     if existing_installation and not registry.path.exists():
         raise RuntimeError('previous installation lost its effect journal; reconciliation required')
     if registry.path.exists():
@@ -404,8 +424,20 @@ def install(stage, *, recovery=False):
 if __name__=='__main__':
     parser=argparse.ArgumentParser();choice=parser.add_mutually_exclusive_group(required=True)
     choice.add_argument('--stage',type=Path);choice.add_argument('--recover-source')
+    parser.add_argument('--classify-canary-partial-publication',action='store_true')
+    parser.add_argument('--partial-disposition-source')
+    parser.add_argument('--partial-disposition-nonce')
     args=parser.parse_args()
+    if args.recover_source and args.classify_canary_partial_publication:
+        parser.error('partial disposition is separate from runtime rollback')
+    if args.classify_canary_partial_publication:
+        if (not re.fullmatch('[0-9a-f]{40}',args.partial_disposition_source or '')
+                or not re.fullmatch('[0-9a-f]{24}',args.partial_disposition_nonce or '')):
+            parser.error('partial disposition requires the exact approved installed source and nonce')
+    elif args.partial_disposition_source or args.partial_disposition_nonce:
+        parser.error('partial disposition identity requires explicit authorization')
     if args.recover_source:
         if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
         install(recovery_candidate(args.recover_source),recovery=True)
-    else:install(args.stage.resolve())
+    else:install(args.stage.resolve(),classify_canary_partial=args.classify_canary_partial_publication,
+                 partial_expected=(args.partial_disposition_source,args.partial_disposition_nonce))
