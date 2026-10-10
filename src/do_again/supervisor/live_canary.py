@@ -34,7 +34,7 @@ def scope(config):
     project = dict(parent,repo=str(repo),key=key,worktree=str(EXECUTION_ROOT/key/'worktree'),
                    source_sha=value['baseline'],goal_revision='live-canary-'+value['nonce'],
                    control_branch='do-again/canary-'+value['nonce']+'/control',
-                   bundle='repositories/canary.bundle',github_repository='Tran-Steven/do-again')
+                   bundle='snapshots/canary.bundle',github_repository='Tran-Steven/do-again')
     return value,parent,project
 
 

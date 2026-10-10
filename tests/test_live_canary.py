@@ -28,6 +28,7 @@ class LiveCanaryTests(unittest.TestCase):
                         'account':'_doagain_da','key':'parent','uid':401,'gid':401,
                         'worktree':'/original','executables':['/sealed/python3']}]}
         _,parent,project=scope(self.config)
+        self.assertEqual(project['bundle'],'snapshots/canary.bundle')
         self.registry=AuthorityRegistry(self.root/'authority.sqlite',owner_uid=os.getuid() if os.name=='posix' else None)
         self.registry.initialize();self.registry.set_intent(Path(parent['repo']),'maintenance',goal_revision='original')
         self.repo=Path(project['repo']);self.registry.set_intent(self.repo,'maintenance',goal_revision=project['goal_revision'])
