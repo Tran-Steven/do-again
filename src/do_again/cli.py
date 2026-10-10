@@ -1052,12 +1052,24 @@ def _model_action(action: str, *, allow_model_call: bool = False,
         login_ready,
     )
     binary = discover_codex()
-    if action == "status":
+    if action in {"status", "limits"}:
+        from .model_quota import CodexQuotaUnavailable, query_codex_rate_limits
+        authenticated = login_ready(binary) if binary else False
         status = {"transport": "codex", "installed": binary is not None,
-                  "authenticated": login_ready(binary) if binary else False,
+                  "authenticated": authenticated,
                   "browser_required": False, "production_enabled": False}
+        if authenticated:
+            try:
+                capacity = query_codex_rate_limits(binary, Path.home().resolve())
+                status["capacity"] = capacity
+                status["model_ready"] = capacity["allowed"] is True
+            except CodexQuotaUnavailable:
+                status["capacity"] = {"allowed": None, "reason": "quota_observation_unavailable"}
+                status["model_ready"] = False
+        else:
+            status["model_ready"] = False
         print(json.dumps(status, sort_keys=True))
-        return 0 if status["authenticated"] else 2
+        return 0 if status["model_ready"] else 2
     if action == "canary-draft":
         from .model_canary import (
             CodexCanaryProposalRejected,
@@ -1313,7 +1325,8 @@ def main() -> int:
         help="Optional non-browser Codex transport readiness and read-only inference smoke",
     )
     model_sub = model_parser.add_subparsers(dest="model_command", required=True)
-    model_sub.add_parser("status", help="Check Codex CLI and ChatGPT login without model usage")
+    model_sub.add_parser("status", help="Check Codex login and account capacity without inference")
+    model_sub.add_parser("limits", help="Read only the authenticated Codex allowance and reset time")
     model_smoke = model_sub.add_parser("smoke", help="One explicit, read-only Codex inference")
     model_smoke.add_argument("--allow-model-call", action="store_true",
         help="Explicitly authorize one model call against your Codex usage allowance")
