@@ -132,6 +132,40 @@ def _git(control: Path, *args: str, runner=None) -> str:
     return result.stdout.strip()
 
 
+def _local_agent_receipt(layout: RuntimeLayout, request_id: str,
+                         fingerprint: str, remote_receipt: dict) -> bool:
+    """Cross-check Git claims with the trusted *local* agent's terminal ledger.
+
+    GitHub writers (including the ChatGPT model) can write receipts. Therefore
+    remote JSON alone must NEVER prove the local agent ran. This is an operator
+    ledger cross-check, not a native-root qualification certificate.
+    """
+    state=layout.state_dir
+    parent=state/"ledger"
+    path=parent/(request_id+".json")
+    if any(item.is_symlink() for item in (state,parent,path)):
+        raise ServiceError("local agent receipt ledger contains an alias")
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ServiceError("local agent receipt ledger is not an ordinary file")
+    metadata=path.stat()
+    if (metadata.st_nlink!=1 or metadata.st_mode & 0o022
+            or (os.name=="posix" and metadata.st_uid!=os.getuid())):
+        raise ServiceError("local agent receipt ledger ownership or integrity is unsafe")
+    try:
+        ledger=json.loads(path.read_text(encoding="utf-8"))
+    except (OSError,ValueError) as exc:
+        raise ServiceError("local agent receipt ledger is unreadable") from exc
+    if (not isinstance(ledger,dict)
+            or ledger.get("state")!="terminal"
+            or ledger.get("request_fingerprint")!=fingerprint
+            or not isinstance(ledger.get("receipt"),dict)
+            or canonical_json(ledger["receipt"])!=canonical_json(remote_receipt)):
+        raise ServiceError("remote Git receipt differs from the original local agent ledger")
+    return True
+
+
 def observe(layout: RuntimeLayout, request_id: str, *, runner=None) -> dict[str, Any]:
     """Check the exact original request and receipt on a fresh remote Git head."""
     if not isinstance(request_id, str) or not _ID.fullmatch(request_id):
@@ -201,4 +235,8 @@ def observe(layout: RuntimeLayout, request_id: str, *, runner=None) -> dict[str,
             or result.get("operation") != "status"
             or result.get("request_fingerprint") != original["request_fingerprint"]):
         raise ServiceError("status receipt lacks a matching executed transport result")
-    return dict(base, state="receipt_verified", completed=True)
+    if not _local_agent_receipt(layout, request_id, original["request_fingerprint"], receipt):
+        return dict(base, state="remote_receipt_unverified", completed=False,
+                    note="Git receipt exists but no original terminal local agent ledger was found")
+    return dict(base, state="agent_receipt_verified", completed=True,
+                verification="git_receipt_and_local_agent_ledger")
