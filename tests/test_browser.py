@@ -108,6 +108,11 @@ class BrowserRuntimeTests(unittest.TestCase):
 
     def test_setup_auto_falls_back_to_background_when_headless_auth_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}):
+                config = load_config()
+                config["allow_visible_fallback"] = True
+                from do_again.browser.runtime import save_config
+                save_config(config)
             fake_binary = Path(tmp) / "chrome"
             fake_binary.write_text("", encoding="utf-8")
             fake_target = cdp.Target("target", "https://chatgpt.com/", "", "ws://127.0.0.1/x")
@@ -148,6 +153,37 @@ class BrowserRuntimeTests(unittest.TestCase):
             with patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}):
                 saved = load_config()
             self.assertEqual(saved["resolved_mode"], "background")
+
+    def test_setup_auto_refuses_headless_auth_failure_without_visible_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_binary = Path(tmp) / "chrome"
+            fake_binary.write_text("", encoding="utf-8")
+            fake_target = cdp.Target("target", "https://chatgpt.com/", "", "ws://127.0.0.1/x")
+            launches = []
+            auth_calls = 0
+
+            def launch(mode, **kwargs):
+                launches.append(mode)
+                return {"pid": 123, "port": 9223, "mode": mode}
+
+            def auth(*args, **kwargs):
+                nonlocal auth_calls
+                auth_calls += 1
+                if auth_calls == 2:
+                    raise BrowserAuthRequired("headless authentication failed")
+                return fake_target, {"prompt": True, "url": "https://chatgpt.com/"}
+
+            with (
+                patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}),
+                patch("do_again.browser.runtime.discover_browser", return_value=fake_binary),
+                patch("do_again.browser.runtime.launch_browser", side_effect=launch),
+                patch("do_again.browser.runtime.stop_browser"),
+                patch("do_again.browser.runtime.wait_for_authenticated", side_effect=auth),
+            ):
+                with self.assertRaisesRegex(BrowserError, "refusing GUI fallback"):
+                    setup_browser(mode="auto", run_iteration_test=False)
+                self.assertEqual(launches, ["visible", "headless"])
+                self.assertIsNone(load_config()["resolved_mode"])
 
     def test_existing_project_chat_is_reused_without_new_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
