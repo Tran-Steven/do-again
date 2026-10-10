@@ -222,7 +222,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                 or grant_path.stat().st_nlink!=1 or grant_path.stat().st_mode&0o022):
             raise ValueError('canary grant must be privately controlled by the operator')
         config['live_canary']=json.loads(grant_path.read_text())
-        from do_again.supervisor.live_canary import scope
+        from do_again.supervisor.live_canary import scope,require_fresh_conversation
+        require_fresh_conversation(installed,config)
         _,_,canary=scope(config)
         # Only public Do Again main is copied as scaffold. The model creates
         # the two synthetic files later through confined execution.
