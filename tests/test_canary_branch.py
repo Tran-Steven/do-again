@@ -31,11 +31,24 @@ class CanaryControlBranchTests(unittest.TestCase):
         }))
         self.grant.chmod(0o600)
         self.ledger = self.root / "branch-journal"
+        self.installed = {
+            "operator_home": str(self.root), "operator_uid": os.getuid(),
+            "production_ready": False,
+            "legacy_authority_path": str(self.root / "authority.sqlite"),
+            "projects": [{"account": "_doagain_da",
+                          "repo": str(self.root / "do-again")}],
+        }
+        authority = patch.object(canary_branch, "AuthorityRegistry")
+        self.registry = authority.start()
+        self.addCleanup(authority.stop)
+        self.registry.return_value.status.return_value = {
+            "intent": "maintenance", "epoch": 1}
 
-    def provision(self):
+    def provision(self, *, reconcile_only=False):
         return canary_branch.provision_control_branch(
             nonce=self.nonce, baseline=self.base, grant=self.grant,
-            journal_root=self.ledger)
+            journal_root=self.ledger, installed=self.installed,
+            reconcile_only=reconcile_only)
 
     def remote(self):
         return {"ref": "refs/heads/" + self.branch, "object": {"sha": self.base}}
@@ -112,7 +125,55 @@ class CanaryControlBranchTests(unittest.TestCase):
             with self.assertRaisesRegex(ExecutionBlocked, "authority differs"):
                 canary_branch.provision_control_branch(
                     nonce="f" * 24, baseline=self.base, grant=self.grant,
-                    journal_root=self.ledger)
+                    journal_root=self.ledger, installed=self.installed)
+            api.assert_not_called()
+
+    def test_read_only_resume_requires_a_previously_reserved_publication(self):
+        with patch.object(canary_branch, "_api") as api:
+            with self.assertRaisesRegex(ExecutionBlocked, "no reserved branch"):
+                self.provision(reconcile_only=True)
+            api.assert_not_called()
+        self.assertFalse(self.ledger.exists())
+
+    def test_read_only_resume_never_repeats_post_and_reconciles_existing_ticket(self):
+        with patch.object(canary_branch, "_api", side_effect=[
+                (404, {}), ExecutionBlocked("unknown POST")]):
+            with self.assertRaises(ExecutionBlocked):
+                self.provision()
+        with patch.object(canary_branch, "_api", return_value=(200, self.remote())) as api:
+            result = self.provision(reconcile_only=True)
+            self.assertTrue(result["reconciled"])
+            api.assert_called_once()
+            self.assertEqual(api.call_args.args[0], "GET")
+
+    def test_stale_parent_epoch_denies_before_any_gh_request(self):
+        for intent, epoch in (("active", 1), ("maintenance", 2)):
+            with self.subTest(intent=intent, epoch=epoch):
+                self.registry.return_value.status.return_value = {
+                    "intent": intent, "epoch": epoch}
+                with patch.object(canary_branch, "_api") as api:
+                    with self.assertRaisesRegex(ExecutionBlocked, "maintenance authority changed"):
+                        self.provision()
+                    api.assert_not_called()
+        self.assertFalse(self.ledger.exists())
+
+    def test_epoch_changes_during_github_read_preflight_block_branch_creation(self):
+        self.registry.return_value.status.side_effect = [
+            {"intent": "maintenance", "epoch": 1},
+            {"intent": "paused", "epoch": 2},
+        ]
+        with patch.object(canary_branch, "_api", return_value=(404, {})) as api:
+            with self.assertRaisesRegex(ExecutionBlocked, "maintenance authority changed"):
+                self.provision()
+            api.assert_called_once()
+            self.assertEqual(api.call_args.args[0], "GET")
+        self.assertFalse(self.ledger.exists())
+
+    def test_resume_refuses_while_production_enabled(self):
+        self.installed["production_ready"] = True
+        with patch.object(canary_branch, "_api") as api:
+            with self.assertRaisesRegex(ExecutionBlocked, "maintenance operator"):
+                self.provision(reconcile_only=True)
             api.assert_not_called()
 
     def test_http_404_is_distinguished_from_denied_and_ambiguous_responses(self):
