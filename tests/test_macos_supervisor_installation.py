@@ -51,6 +51,16 @@ else:
                               str(self.root),str(stage)],capture_output=True,text=True)
         self.assertEqual(child.returncode,0,child.stderr[-800:])
 
+    def test_installer_refuses_mixed_browser_and_codex_grants_before_any_service_effect(self):
+        cfg={'live_canary':{'nonce':'a'*24},
+             'codex_canary':{'nonce':'b'*24},
+             'projects':[]}
+        with patch.object(self.module,'ROOT',self.root),patch.object(
+                self.module.subprocess,'run') as effects:
+            with self.assertRaisesRegex(RuntimeError,'may not coexist'):
+                self.module.verify_worker_quiescence(cfg)
+        effects.assert_not_called()
+
     def worker_quiescence_fixture(self):
         from do_again.supervisor.macos_execution import ExecutionBlocked
         key='c'*64
