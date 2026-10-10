@@ -14,6 +14,7 @@ from do_again.supervisor.canary_bootstrap import bootstrap_live_canary
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 
+@unittest.skipUnless(os.name == "posix", "canary operator bootstrap uses macOS/POSIX identity")
 class CanaryBootstrapTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
