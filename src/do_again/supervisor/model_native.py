@@ -48,10 +48,11 @@ class CodexCanaryAuthority:
         sibling=next(p for p in projects if p.get("account")=="_doagain_jp")
         # The second installed parent remains a maintenance-only dependency.
         # The durable parent-check cannot authorize work in jobpipe.
-        from .authority import AuthorityRegistry
-        sibling_state=self.parent.registry.status(Path(sibling["repo"]))
-        if sibling_state["intent"]!="maintenance":
-            raise ExecutionBlocked("Codex canary sibling project left maintenance")
+        sibling_repo=Path(sibling["repo"])
+        sibling_state=self.parent.registry.status(sibling_repo)
+        if (sibling_state["intent"]!="maintenance"
+                or self.parent.ledger.pending(project_identity(sibling_repo))):
+            raise ExecutionBlocked("Codex canary sibling project left quiescent maintenance")
 
     def check(self):
         self.parent_check()
