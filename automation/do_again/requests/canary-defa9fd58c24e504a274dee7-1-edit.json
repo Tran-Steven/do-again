@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-defa9fd58c24e504a274dee7-1-edit",
+  "operation": "scratch_script",
+  "issued_at_utc": "2026-10-10T02:30:16.483Z",
+  "expires_at_utc": "2026-10-10T02:40:16.483Z",
+  "expected": {
+    "repo_head": "4d2d5660adb3e3fe24573fcb437781d9ba3581b3"
+  },
+  "args": {
+    "language": "python",
+    "content": "from pathlib import Path\n\nmodule = Path(\"canary_live_defa9fd58c24e504a274dee7.py\")\nmodule.write_text(\"def canonical_label(text):\\\\n    return \\\"-\\\".join(text.lower().split())\\\\n\", encoding=\"utf-8\")\ntests = Path(\"tests/test_live_canary_defa9fd58c24e504a274dee7.py\")\ntests.parent.mkdir(parents=True, exist_ok=True)\ntests.write_text(\"import unittest\\\\nfrom canary_live_defa9fd58c24e504a274dee7 import canonical_label\\\\n\\\\n\\\\nclass CanonicalLabelTests(unittest.TestCase):\\\\n    def test_case(self):\\\\n        self.assertEqual(canonical_label(\\\"HeLLo WoRLD\\\"), \\\"hello-world\\\")\\\\n\\\\n    def test_whitespace(self):\\\\n        self.assertEqual(canonical_label(\\\"  Hello  \\\\t World \\\\n Again  \\\"), \\\"hello-world-again\\\")\\\\n\\\\n    def test_empty(self):\\\\n        self.assertEqual(canonical_label(\\\"\\\"), \\\"\\\")\\\\n        self.assertEqual(canonical_label(\\\"  \\\\t \\\\n  \\\"), \\\"\\\")\\\\n\", encoding=\"utf-8\")\n",
+    "cwd": "."
+  },
+  "limits": {
+    "timeout_seconds": 120
+  }
+}
