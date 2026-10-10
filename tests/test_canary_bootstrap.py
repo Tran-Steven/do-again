@@ -139,6 +139,19 @@ class CanaryBootstrapTests(unittest.TestCase):
         self.assertEqual(self.ticket()["state"], "submission_unresolved")
         self.assertFalse(self.output.exists())
 
+    def test_parent_epoch_change_during_headless_bootstrap_prevents_grant(self):
+        self.browser.send_message.side_effect = self.succeed
+        self.registry.return_value.status.side_effect = [
+            {"intent": "maintenance", "epoch": 2},
+            {"intent": "paused", "epoch": 3},
+        ]
+        with self.assertRaisesRegex(ExecutionBlocked, "authority changed"):
+            self.run_bootstrap()
+        self.assertEqual(self.ticket()["state"], "submission_unresolved")
+        self.browser.register_project.assert_not_called()
+        self.assertFalse(self.output.exists())
+        self.closed.assert_not_called()
+
     def test_rejects_nonmaintenance_and_production_without_browser_effect(self):
         for change in ("production", "active", "invalid_baseline"):
             with self.subTest(change=change):
