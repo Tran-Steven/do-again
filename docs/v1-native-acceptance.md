@@ -1,89 +1,85 @@
-# Do Again v1.0 acceptance gate (non-browser Codex transport)
+# Do Again v1.0 acceptance gate — ChatGPT-first
 
-**Status: blocked pending installed native qualification and live synthetic acceptance.**
-This file is a release checklist, not a declaration of production readiness.
-No release, merge, tag, real job application, Sonary work, or browser login is
-authorized by the existence of the code below.
+**Status: not released.** This is a gate, not an implementation claim.
+The primary product is ChatGPT-to-Git-to-local-execution-to-receipt, using
+the user's ordinary ChatGPT conversations or an authorized dedicated ChatGPT
+web session. An inference API key, Codex CLI, Codex Work quota, purchased
+credits or banked quota reset **must not be required** for v1.
 
-## Fixed scope and transport
+## Contract
 
-- Protected macOS root broker source must exactly equal the **reviewed CI-passing
-  candidate commit**, with its immutable manifest and administrator-approved
-  installation. An old, unrelated source's native probes do not qualify the
-  new candidate.
-- The root-installed `codex_canary` grant and the legacy browser
-  `live_canary` grant are mutually exclusive. **Do not** reinterpret, replay
-  or migrate an old ChatGPT conversation grant.
-- The sealed parent Do Again and sibling jobpipe projects must both remain
-  in quiescent verified maintenance, with unchanged parent epoch and source.
-- The dedicated Codex child must have its own root-installed project identity,
-  isolated worktree, native sandbox, immutable isolated CLI digest,
-  pre-staged launchd worker, one-shot root activation, and no browser/CDP.
-- Codex included usage must be explicitly allowed by the authenticated account
-  quota gate. A signed-in CLI alone is not sufficient. Never automatically
-  consume available full resets, purchase credits, or retry an ambiguous model
-  call.
-- Exactly two non-browser synthetic model calls are authorized, at most once
-  each per nonce, with private `O_EXCL` fsynced journals. A started, timed-out
-  or uncertain model call cannot be retried.
+- **Regular ChatGPT conversation**: the model can publish an exact typed
+  request to the dedicated Git control branch with GitHub tools. The native
+  Do Again worker performs the operation and publishes a durable receipt. The
+  model observes that receipt. No CDP or CLI model call is required. The
+  operator can run `do-again chatgpt prepare` and later
+  `do-again chatgpt check <original-id>` for a harmless status-only handshake.
+  `check` returns **git_receipt_only**, not native, autonomous or deployment
+  acceptance. No request is submitted automatically by `prepare`.
+- **ChatGPT web automation**: the existing dedicated Chrome profile and
+  authenticated conversation can transport requests, receipts, and CI
+  continuations without stealing focus. If ChatGPT requires a visible human
+  challenge, returns an ambiguous submission outcome, or lacks an authenticated
+  session, stop and surface the original event; never bypass the challenge,
+  click a second time, or claim unattended readiness.
+- **Codex CLI**: an optional experimental alternative transport. Its isolated
+  two-task canary and root grants remain preserved for future opt-in work, but
+  must **not** be a release dependency, the default transport, or a reason to
+  redeem usage credits. A Codex-only passing run is not a ChatGPT acceptance.
+- **Execution**: all code, testing, Git mutations and native/CI qualification
+  continue through the authenticated root broker and its original receipts.
+  No normal ChatGPT message or browser DOM claim grants execution or production.
+  The parent Do Again and jobpipe projects remain in maintenance during the
+  synthetic canary. Real job applications are excluded.
+- The previously installed browser canary was bound to its own chat and nonce.
+  Do not repurpose or replay that grant. A fresh candidate requires explicit
+  operator authorization, new identity and separate root-installed scope.
 
-## Synthetic acceptance: native effects
+## Mandatory release evidence
 
-Each task must execute only:
+1. The final release candidate SHA passes all cross-platform CI jobs with
+   Python/npm versions synchronized **after** ChatGPT qualification.
+2. The final protected Mac source matches that SHA. An administrator-approved
+   installation preserves original effect and browser delivery journals.
+   Native sandbox and worker identity probes pass for both parents and the
+   dedicated isolated ChatGPT canary.
+3. A **real ordinary ChatGPT conversation** authors at least one harmless
+   request through GitHub; its actual original request, worker result, receipt
+   fingerprint and Git remote history are checked. A prepared prompt or
+   ChatGPT assertion alone is insufficient.
+4. A **fresh dedicated ChatGPT web conversation**, if used for unattended
+   acceptance, proves authenticated background/headless delivery through the
+   browser's original write-once dispatch journal, **actual** exact assistant
+   acknowledgment and immutable receipt evidence. No login bypass, fabricated
+   ACK, silent visible focus stealing, or uncertain resend is accepted.
+5. ChatGPT (not Codex CLI) originates **two sequential isolated synthetic
+   changes**, with edit → native test → confined Git commit → same draft PR →
+   read-only exact-head CI. The second requires the first PR receipt, actual
+   passing CI and the original conversation's acknowledgment. Distinct heads
+   on one PR and native proof must be present. This test does not submit
+   applications or change Sonary.
+6. A bad receipt, interrupted session, expired request, unreadable browser,
+   native blocker, or uncertain Git effect leaves the task unaccepted. It must
+   be explicitly reconciled by read-only evidence or stopped—not inferred to
+   have succeeded.
+7. The isolated child stops and parent projects remain native-verified,
+   quiescent and in maintenance; `production_ready=false`. Release packaging
+   and tags must not silently authorize production.
+8. Review the PR, verify published artifacts/provenance and exact source,
+   then separately approve merge/tag and publish `v1.0.0`.
 
-```text
-root-gated canonical model edit
-    -> exact native test
-    -> two-file native git commit
-    -> draft-only native PR publication
-    -> read-only CI observation
-```
+## Release blockers tracked separately
 
-Only these two files are writable or publishable:
+- **Code CI**: necessary but not sufficient. A 17/17 result does not prove a
+  real ChatGPT browser workflow or administrator-qualified native deployment.
+- **Host interaction**: the operator-controlled Mac needs an approved
+  administrator dialog. Unattended sudo bypass is not acceptable.
+- **Browser session**: if ChatGPT challenges a headless session, request human
+  authentication and retain the original chat; do not solve by switching the
+  inference transport to Codex.
+- **Model quota**: Codex quota and reset credits are irrelevant to this
+  ChatGPT-first gate. Never spend them by default.
 
-- `canary_live_<24-hex-nonce>.py`
-- `tests/test_live_canary_<24-hex-nonce>.py`
-
-Each follow-up control request must be derived by the root broker from its
-predecessor's exact Git blob, remote receipt and durable native execution
-ledger. The worker can select only the next fixed stage and **cannot** author
-commands, GitHub refs, publication metadata, or a repair/replay payload.
-Original in-flight or uncertain effects block advancement.
-
-Task two is unavailable until the root-owned `codex-ci-task-one.json`
-checkpoint binds an actual terminal successful CI run to the original draft PR,
-exact Git head, installed source and parent epoch. A successful polling receipt
-or user-authored success claim is not this proof. Task two uses its own
-distinct one-shot model reservation and the resulting first-task CI head.
-
-Final acceptance requires a different second commit, the **same draft PR**,
-a terminal successful second run on its exact head, and a root-written
-`codex-two-task-complete.json` certificate. On success the native child must
-return to maintenance; the two parent projects must stay in maintenance and
-`production_ready` must remain **false**. This evidence alone is not permission
-to submit applications.
-
-## v1 gate — all mandatory
-
-1. Candidate PR has full cross-platform CI green on exactly its final SHA.
-2. A bounded, administrator-authorized protected installation uses that same
-   SHA; all previous runtime/grant state is preserved or explicitly classified,
-   never overwritten to discard an uncertain effect.
-3. A fresh, separately sealed Codex grant is installed and a new dedicated
-   child is initialized, staged and native-probed. Native probes pass for the
-   candidate on the Do Again parent, jobpipe sibling **and** isolated child.
-4. Login and backend included-usage permission pass with no credential logs.
-5. The two synthetic model proposals complete with distinct reserved identities.
-6. Every edit/test/commit/PR/CI step has exact original request, root ledger,
-   remote receipt and GitHub provenance without ambiguous retries.
-7. First and second CI are terminal success on one draft PR with different
-   exact heads; immutable root completion evidence is present and verified.
-8. Child worker/process/service is withdrawn or conclusively inactive, parent
-   projects are still in maintenance, and native confinement still passes.
-9. Release PR review, version synchronization and package provenance checks
-   pass. Only then may a separate explicit release action merge, tag and
-   publish v1.0.0.
-
-**If any gate is missing, keep the PR draft and leave v1 unpublished.**
-Never replace a missing real acceptance receipt with an offline test assertion
-or an invented acknowledgment.
+**If any mandatory evidence is missing, keep the PR draft and do not tag or
+publish v1.0.0.** A manual Git receipt is progress, not proof of unattended
+ChatGPT messaging or a native two-task release canary.
