@@ -61,9 +61,18 @@ def canary_task_prompt(*, nonce: str, task: int) -> str:
         "one canonical_label(text) function, no imports and no side effects. "
         + extra + " The tests must use unittest, import canonical_label from "
         + "canary_live_" + nonce + ", and define a unittest.TestCase with "
-        "test_* methods for expected behavior. Do not make network calls, "
-        "read local files, or use subprocesses. Return complete source code "
-        "for both files without Markdown fences."
+        "test_* methods for expected behavior. Python AST syntax is "
+        "strictly restricted: do not use with, try/except, decorators, "
+        "comprehensions, nested imports, module-level code, or helper classes. "
+        "Implementation must be exactly one plain canonical_label(text) function "
+        "without imports. The tests must contain exactly import unittest, "
+        "from canary_live_" + nonce + " import canonical_label, and one "
+        "TestLabel(unittest.TestCase) with only test_* methods. To verify "
+        "ValueError, use self.assertRaises(ValueError, canonical_label, 'caf\\u00e9') "
+        "as a direct call, NOT with self.assertRaises(...). Use only "
+        "self.assertEqual and self.assertRaises assertions. Do not make network "
+        "calls, read local files, or use subprocesses. Return complete source "
+        "code for both files without Markdown fences."
     )
 
 
