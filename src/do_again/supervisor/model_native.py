@@ -75,6 +75,16 @@ class CodexCanaryAuthority:
                 or not self.broker._verified()):
             raise ExecutionBlocked("Codex child native activation is incomplete or revoked")
 
+    def second_ready(self):
+        from .model_checkpoint import observe_checkpoint
+        proof=observe_checkpoint(self.broker,self.scope)
+        if (proof.get("state")!="terminal"
+                or proof.get("head_sha")==self.scope.baseline
+                or proof.get("source_sha")!=self.scope.source_sha):
+            raise ExecutionBlocked("second Codex task lacks root-sealed passing first-task CI")
+        self.parent_check()
+        return proof
+
     def request(self,value,path):
         if not isinstance(path,str) or not path.startswith("automation/do_again/requests/"):
             raise ExecutionBlocked("Codex child request path is excluded")
@@ -83,12 +93,12 @@ class CodexCanaryAuthority:
             for stage in ("edit","test","commit","publish","ci"):
                 if rid==self.scope.request_prefix+str(task)+"-"+stage:
                     bound_model_request(self.scope,task=task,stage=stage,request=value)
-                    if task==2:
-                        raise ExecutionBlocked("second Codex task awaits a separately verified model checkpoint")
+                    checkpoint=self.second_ready() if task==2 else None
                     if stage=="edit":
                         from ..model_canary import validate_prepared_edit
                         validate_prepared_edit(value,nonce=self.scope.nonce,
-                            task=task,expected_head=self.scope.baseline)
+                            task=task,expected_head=(
+                                checkpoint["head_sha"] if checkpoint else self.scope.baseline))
                     return
         raise ExecutionBlocked("Codex child request ID exceeds two-task plan")
 
@@ -102,6 +112,12 @@ class CodexCanaryAuthority:
                 raise ExecutionBlocked("Codex publisher packet ID differs from sealed one-shot")
             self.request(packet.get("value"),"automation/do_again/requests/canary-"
                          +self.scope.nonce+"-1-edit.json")
+            return
+        if operation in {"codex_ci_status","codex_ci_checkpoint"}:
+            if packet != {"operation":operation}:
+                raise ExecutionBlocked("Codex CI checkpoint accepts no worker-provided authority")
+            if operation=="codex_ci_checkpoint":
+                self.check()
             return
         if operation=="codex_followup_publish":
             prefix="codex-publish-"+self.scope.nonce+"-1-"
