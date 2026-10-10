@@ -63,8 +63,8 @@ def _github_slug(layout: RuntimeLayout) -> str:
         raise ServiceError("configured GitHub remote is unavailable")
     raw = result.stdout.strip()
     found = re.fullmatch(
-        r"(?:https://github\\.com/|git@github\\.com:|ssh://git@github\\.com/)"
-        r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?/?", raw)
+        r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)"
+        r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?", raw)
     if found is None:
         raise ServiceError("regular ChatGPT GitHub handoff requires a GitHub repository remote")
     return found[1]
