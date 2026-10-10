@@ -33,6 +33,24 @@ class CodexTransportTests(unittest.TestCase):
         login.assert_not_called()
         run.assert_not_called()
 
+    def test_discovers_isolated_npm_cli_without_global_path(self):
+        root = self.home / ".do_again" / "codex-tools"
+        binary = root / "node_modules" / ".bin" / "codex"
+        binary.parent.mkdir(parents=True)
+        binary.touch()
+        with patch.object(transport.Path, "home", return_value=self.home), patch.object(
+                transport.shutil, "which", return_value=None):
+            self.assertEqual(transport.discover_codex(), binary)
+
+    def test_rejects_escaped_isolated_binary_symlink(self):
+        root = self.home / ".do_again" / "codex-tools"
+        binary = root / "node_modules" / ".bin" / "codex"
+        binary.parent.mkdir(parents=True)
+        binary.symlink_to(self.binary)
+        with patch.object(transport.Path, "home", return_value=self.home), patch.object(
+                transport.shutil, "which", return_value=None):
+            self.assertIsNone(transport.discover_codex())
+
     def test_unavailable_binary_is_not_a_browser_fallback(self):
         with patch.object(transport, "discover_codex", return_value=None), patch.object(
                 transport.subprocess, "run") as run:
