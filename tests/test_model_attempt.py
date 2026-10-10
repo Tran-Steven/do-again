@@ -162,6 +162,39 @@ class CodexAttemptTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionBlocked, "hash"):
             observe_original_codex_attempt(self.config)
 
+    def test_read_only_recovery_rejects_public_or_aliased_journal(self):
+        with patch("do_again.model_attempt.generate_structured",return_value=self.sample):
+            self.call()
+        journal=self.journal()
+        journal.chmod(0o644)
+        with self.assertRaisesRegex(ExecutionBlocked, "ownership"):
+            observe_original_codex_attempt(self.config)
+        journal.chmod(0o600)
+        outside=self.home/"outside-journal.json"
+        outside.write_text(journal.read_text())
+        journal.unlink()
+        journal.symlink_to(outside)
+        with self.assertRaisesRegex(ExecutionBlocked, "aliased"):
+            observe_original_codex_attempt(self.config)
+
+    def test_read_only_recovery_rejects_fake_terminal_and_malformed_record(self):
+        with patch("do_again.model_attempt.generate_structured",return_value=self.sample):
+            self.call()
+        journal=self.journal()
+        record=json.loads(journal.read_text())
+        record["state"]="published"
+        journal.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ExecutionBlocked, "unknown state"):
+            observe_original_codex_attempt(self.config)
+        record["state"]="candidate_ready"
+        record["model_calls_reserved"]=200
+        journal.write_text(json.dumps(record))
+        with self.assertRaisesRegex(ExecutionBlocked, "identity"):
+            observe_original_codex_attempt(self.config)
+        journal.write_text("not valid json")
+        with self.assertRaisesRegex(ExecutionBlocked, "malformed"):
+            observe_original_codex_attempt(self.config)
+
     def test_browser_grant_and_production_mode_cannot_activate_new_transport(self):
         with patch("do_again.model_attempt.generate_structured") as model:
             self.config["live_canary"]={"nonce":"z"*24}
