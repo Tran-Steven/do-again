@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-c9fb3f1154054dbe0e258331-1-commit",
+  "operation": "git_commit",
+  "issued_at_utc": "2026-10-10T03:09:01.604Z",
+  "expires_at_utc": "2026-10-10T03:19:01.604Z",
+  "expected": {
+    "repo_head": "4d2d5660adb3e3fe24573fcb437781d9ba3581b3"
+  },
+  "args": {
+    "paths": [
+      "canary_live_c9fb3f1154054dbe0e258331.py",
+      "tests/test_live_canary_c9fb3f1154054dbe0e258331.py"
+    ],
+    "message": "Add synthetic canonical label canary and regression tests"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "canary-c9fb3f1154054dbe0e258331-1-edit",
+      "canary-c9fb3f1154054dbe0e258331-1-test"
+    ],
+    "goal_state": "in_progress"
+  }
+}
