@@ -37,6 +37,18 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
             }
         }
 
+    def write_agent_ledger(self,receipt=None):
+        root=self.layout.state_dir/"ledger"
+        root.mkdir(parents=True,exist_ok=True)
+        path=root/(self.rid+".json")
+        path.write_text(json.dumps({
+            "state":"terminal",
+            "request_fingerprint":request_fingerprint(self.request),
+            "receipt":self.receipt if receipt is None else receipt,
+        }))
+        path.chmod(0o600)
+        return path
+
     def runner(self, *, request=None,receipt=None):
         request=self.request if request is None else request
         receipt=self.receipt if receipt is None else receipt
@@ -69,11 +81,40 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
             prepare(self.layout,nonce=self.nonce)
 
     def test_remote_matching_receipt_is_not_claimed_as_native_execution(self):
+        missing=observe(self.layout,self.rid,runner=self.runner())
+        self.assertFalse(missing["completed"])
+        self.assertEqual(missing["state"],"remote_receipt_unverified")
+        self.assertEqual(missing["verification"],"git_receipt_only")
+        self.write_agent_ledger()
         result=observe(self.layout,self.rid,runner=self.runner())
         self.assertTrue(result["completed"])
-        self.assertEqual(result["state"],"receipt_verified")
-        self.assertEqual(result["verification"],"git_receipt_only")
+        self.assertEqual(result["state"],"agent_receipt_verified")
+        self.assertEqual(result["verification"],"git_receipt_and_local_agent_ledger")
         self.assertEqual(result["remote_head"],self.sha)
+
+    def test_forged_remote_success_never_passes_without_agent_ledger(self):
+        row=observe(self.layout,self.rid,runner=self.runner())
+        self.assertFalse(row["completed"])
+        self.assertEqual(row["state"],"remote_receipt_unverified")
+        local=self.write_agent_ledger(receipt={**self.receipt,"result":{"forged":"success"}})
+        with self.assertRaisesRegex(ServiceError,"differs from the original local"):
+            observe(self.layout,self.rid,runner=self.runner())
+        local.unlink()
+        self.assertFalse(observe(self.layout,self.rid,runner=self.runner())["completed"])
+
+    def test_incomplete_or_aliased_agent_ledger_is_never_proof(self):
+        ledger=self.write_agent_ledger()
+        payload=json.loads(ledger.read_text())
+        payload["state"]="started"
+        ledger.write_text(json.dumps(payload))
+        with self.assertRaisesRegex(ServiceError,"differs"):
+            observe(self.layout,self.rid,runner=self.runner())
+        ledger.unlink()
+        source=self.layout.state_dir/"unrelated.json"
+        source.write_text("{}")
+        ledger.symlink_to(source)
+        with self.assertRaisesRegex(ServiceError,"alias"):
+            observe(self.layout,self.rid,runner=self.runner())
 
     def test_never_accept_different_remote_request(self):
         wrong={**self.request,"request_id":"different-request"}
