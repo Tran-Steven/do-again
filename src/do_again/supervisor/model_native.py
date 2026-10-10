@@ -117,11 +117,13 @@ class CodexCanaryAuthority:
                         "-"+str(task)+"-edit.json")
                     return
             raise ExecutionBlocked("Codex publisher packet ID exceeds two one-shot edits")
-        if operation in {"codex_ci_status","codex_ci_checkpoint"}:
+        if operation in {"codex_ci_status","codex_ci_checkpoint","codex_canary_complete"}:
             if packet != {"operation":operation}:
-                raise ExecutionBlocked("Codex CI checkpoint accepts no worker-provided authority")
-            if operation=="codex_ci_checkpoint":
+                raise ExecutionBlocked("Codex CI operations accept no worker-provided authority")
+            if operation!="codex_ci_status":
                 self.check()
+            if operation=="codex_canary_complete":
+                self.second_ready()
             return
         if operation=="codex_followup_publish":
             rid=packet.get("request_id")
