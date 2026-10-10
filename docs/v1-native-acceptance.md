@@ -16,6 +16,9 @@ credits or banked quota reset **must not be required** for v1.
   `do-again chatgpt check <original-id>` for a harmless status-only handshake.
   `check` returns **git_receipt_only**, not native, autonomous or deployment
   acceptance. No request is submitted automatically by `prepare`.
+  Local terminal ledger verification additionally requires an owner- and
+  permission-checked POSIX filesystem. On platforms without that verification
+  the result remains unverified even if the Git receipt and local JSON match.
 - **ChatGPT web automation**: the existing dedicated Chrome profile and
   authenticated conversation can transport requests, receipts, and CI
   continuations without stealing focus. If ChatGPT requires a visible human

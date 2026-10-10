@@ -150,8 +150,8 @@ def _local_agent_receipt(layout: RuntimeLayout, request_id: str,
     if not path.is_file():
         raise ServiceError("local agent receipt ledger is not an ordinary file")
     metadata=path.stat()
-    if (metadata.st_nlink!=1 or metadata.st_mode & 0o022
-            or (os.name=="posix" and metadata.st_uid!=os.getuid())):
+    if (metadata.st_nlink!=1 or (os.name=="posix" and
+            (metadata.st_mode & 0o022 or metadata.st_uid!=os.getuid()))):
         raise ServiceError("local agent receipt ledger ownership or integrity is unsafe")
     try:
         ledger=json.loads(path.read_text(encoding="utf-8"))
@@ -163,7 +163,7 @@ def _local_agent_receipt(layout: RuntimeLayout, request_id: str,
             or not isinstance(ledger.get("receipt"),dict)
             or canonical_json(ledger["receipt"])!=canonical_json(remote_receipt)):
         raise ServiceError("remote Git receipt differs from the original local agent ledger")
-    return True
+    return os.name == "posix"
 
 
 def observe(layout: RuntimeLayout, request_id: str, *, runner=None) -> dict[str, Any]:
@@ -237,6 +237,6 @@ def observe(layout: RuntimeLayout, request_id: str, *, runner=None) -> dict[str,
         raise ServiceError("status receipt lacks a matching executed transport result")
     if not _local_agent_receipt(layout, request_id, original["request_fingerprint"], receipt):
         return dict(base, state="remote_receipt_unverified", completed=False,
-                    note="Git receipt exists but no original terminal local agent ledger was found")
+                    note="Git receipt exists, but a trusted matching local agent ledger could not be verified")
     return dict(base, state="agent_receipt_verified", completed=True,
                 verification="git_receipt_and_local_agent_ledger")

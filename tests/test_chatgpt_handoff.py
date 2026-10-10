@@ -1,5 +1,6 @@
 """Regular ChatGPT path works without CDP, Codex usage or model API calls."""
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -87,9 +88,14 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
         self.assertEqual(missing["verification"],"git_receipt_only")
         self.write_agent_ledger()
         result=observe(self.layout,self.rid,runner=self.runner())
-        self.assertTrue(result["completed"])
-        self.assertEqual(result["state"],"agent_receipt_verified")
-        self.assertEqual(result["verification"],"git_receipt_and_local_agent_ledger")
+        if os.name == "posix":
+            self.assertTrue(result["completed"])
+            self.assertEqual(result["state"],"agent_receipt_verified")
+            self.assertEqual(result["verification"],"git_receipt_and_local_agent_ledger")
+        else:
+            self.assertFalse(result["completed"])
+            self.assertEqual(result["state"],"remote_receipt_unverified")
+            self.assertEqual(result["verification"],"git_receipt_only")
         self.assertEqual(result["remote_head"],self.sha)
 
     def test_forged_remote_success_never_passes_without_agent_ledger(self):
