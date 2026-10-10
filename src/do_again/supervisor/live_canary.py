@@ -55,6 +55,12 @@ def scope(config):
 def effect_authorized(broker):
     """Only the Root-constructed scoped broker may substitute canary authority."""
     canary = getattr(broker,'canary',None)
+    codex = getattr(broker,'codex',None)
+    if canary is not None and codex is not None:
+        raise ExecutionBlocked('browser and Codex canary authorities cannot coexist')
+    if codex is not None:
+        codex.check()
+        return True
     if canary is None:
         return broker.config.get('production_ready') is True
     canary.check()
