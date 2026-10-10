@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-c9fb3f1154054dbe0e258331-2-publish",
+  "operation": "git_publish",
+  "issued_at_utc": "2026-10-10T03:16:55.698Z",
+  "expires_at_utc": "2026-10-10T03:26:55.698Z",
+  "expected": {
+    "repo_head": "78fec52d9ebc6b3aa369d4ca976014da2d65c112"
+  },
+  "args": {
+    "title": "Synthetic live canary: canonical_label normalization and ASCII validation",
+    "body": "Draft synthetic live-canary PR containing both authorized tasks. Task 1 normalizes ASCII case and whitespace. Task 2 rejects non-ASCII input with ValueError while retaining Task 1 behavior. Four focused unittest regressions passed locally in the confined worker. No production, jobpipe, Sonary, accounts, or application changes."
+  },
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "canary-c9fb3f1154054dbe0e258331-1-edit",
+      "canary-c9fb3f1154054dbe0e258331-1-test",
+      "canary-c9fb3f1154054dbe0e258331-1-commit",
+      "canary-c9fb3f1154054dbe0e258331-1-publish",
+      "canary-c9fb3f1154054dbe0e258331-1-ci",
+      "canary-c9fb3f1154054dbe0e258331-2-edit",
+      "canary-c9fb3f1154054dbe0e258331-2-test",
+      "canary-c9fb3f1154054dbe0e258331-2-commit"
+    ],
+    "goal_state": "in_progress"
+  }
+}
