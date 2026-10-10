@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import stat
 from pathlib import Path
 
 from .core.schema import atomic_json, canonical_json
@@ -132,16 +131,33 @@ def observe_original_codex_attempt(config: dict) -> dict:
     scope = sealed_codex_canary(config)
     home = Path(config["operator_home"])
     path = home / ".do_again" / "codex-canary-attempts" / scope.nonce / "task-1.json"
-    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+    for item in (path, path.parent, path.parent.parent, path.parent.parent.parent):
+        if item.is_symlink():
+            raise ExecutionBlocked("Codex original model journal path is aliased")
+    if not path.exists():
         return {"state": "not_reserved", "replay": False}
-    record = json.loads(path.read_text())
-    if (record.get("nonce") != scope.nonce or record.get("task") != 1
+    info = path.stat()
+    if (not path.is_file() or info.st_nlink != 1 or info.st_uid != os.getuid()
+            or info.st_mode & 0o077 or info.st_size > 131072):
+        raise ExecutionBlocked("Codex original model journal ownership or size differs")
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        raise ExecutionBlocked("Codex original model journal is malformed") from None
+    if (not isinstance(record, dict)
+            or record.get("nonce") != scope.nonce or record.get("task") != 1
             or record.get("source_sha") != scope.source_sha
             or record.get("baseline") != scope.baseline
-            or record.get("cli_sha256") != scope.cli_sha256):
+            or record.get("cli_sha256") != scope.cli_sha256
+            or record.get("transport") != "codex-cli"
+            or record.get("model_calls_reserved") != 1
+            or record.get("published") is not False
+            or record.get("executed") is not False):
         raise ExecutionBlocked("Codex original model journal identity differs")
-    if record.get("state") != "candidate_ready":
+    if record.get("state") == "model_started":
         return {"state": "model_started_uncertain", "replay": False}
+    if record.get("state") != "candidate_ready":
+        raise ExecutionBlocked("Codex original model journal has an unknown state")
     candidate = validate_prepared_edit(
         record["request"], nonce=scope.nonce, task=1,
         expected_head=scope.baseline)
