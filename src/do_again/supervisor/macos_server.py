@@ -202,6 +202,9 @@ class ProjectBroker:
         if packet == {'operation': 'codex_ci_checkpoint'}:
             from .model_checkpoint import certify_first_task_ci
             return certify_first_task_ci(self,packet)
+        if packet == {'operation': 'codex_canary_complete'}:
+            from .model_completion import finalize_codex_canary
+            return finalize_codex_canary(self,packet)
         if packet == {'operation': 'codex_ci_status'}:
             if getattr(self,'codex',None) is None:
                 raise ExecutionBlocked('no root-installed Codex canary for CI status')
