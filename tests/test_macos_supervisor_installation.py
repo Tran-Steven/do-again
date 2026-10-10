@@ -97,6 +97,23 @@ class InstallationTests(unittest.TestCase):
             birth.assert_not_called()
         self.assertEqual(journal.read_bytes(),original)
 
+    def test_install_rejects_reused_canary_chat_before_privileged_effects(self):
+        current=self.root/'current';current.mkdir()
+        stage=self.root/'stage';stage.mkdir()
+        old={'live_canary':{'nonce':'a'*24,'chat_url':'https://chatgpt.com/c/old'}}
+        candidate={'live_canary':{'nonce':'b'*24,'chat_url':'https://chatgpt.com/c/old'},
+                   'source_sha':'b'*40}
+        (current/'config.json').write_text(json.dumps(old))
+        (stage/'config.json').write_text(json.dumps(candidate))
+        with patch.object(self.module,'ROOT',self.root), \
+             patch.object(self.module.os,'geteuid',return_value=0), \
+             patch.object(self.module,'verify_stage',return_value={'source_sha':'b'*40}), \
+             patch.object(self.module,'secure_directory') as privileged:
+            with self.assertRaisesRegex(RuntimeError,'distinct ChatGPT conversation'):
+                self.module.install(stage)
+            privileged.assert_not_called()
+        self.assertEqual(json.loads((current/'config.json').read_text()),old)
+
     def test_runtime_executable_paths_are_validated_before_cutover(self):
         current=self.root/'current'
         valid={'python':str(current/'runtimes/python/bin/python3'),
