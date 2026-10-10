@@ -41,6 +41,9 @@ class SecondCodexNativeStageTests(unittest.TestCase):
             if stage=="commit":
                 original["args"]={**original["args"],
                     "message":"Validate synthetic Codex canary task 2"}
+            if stage=="ci":
+                original["args"]={
+                    "original_request_id":"canary-"+nonce+"-2-publish"}
             first.requests[stage]=original
             prior=stage
         first.ledger.requests={
