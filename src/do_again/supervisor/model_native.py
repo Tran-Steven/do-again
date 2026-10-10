@@ -184,3 +184,57 @@ def create_codex_broker(config,parent):
                 yield
     child.admission=admission
     return child
+
+
+
+def activate_codex(broker):
+    """One administrator-controlled stage-before-activate gesture; production off."""
+    from ..core.schema import atomic_json
+    from .macos_server import verify_installation
+    from .worker_service import service_spec
+    import os
+    import sys
+    if (sys.platform!="darwin" or os.geteuid()!=0
+            or getattr(broker,"codex",None) is None
+            or broker.config.get("production_ready") is not False):
+        raise ExecutionBlocked("Codex activation requires its installed maintenance root broker")
+    authority=broker.codex
+    with broker.lock,broker.admission():
+        authority.parent_check()
+        verify_installation(broker.config)
+        status=broker.registry.status(broker.project.repo)
+        if (status["intent"]!="maintenance" or not broker._verified()
+                or broker.ledger.pending(broker.project.key)
+                or broker._inflight()):
+            raise ExecutionBlocked("Codex activation requires native-qualified child maintenance")
+        epoch=status["epoch"]+1
+        label,service=service_spec(broker,epoch)
+        if "--codex-canary" not in service["ProgramArguments"]:
+            raise ExecutionBlocked("Codex worker service is not bound to non-browser transport")
+        journal=broker.state/"worker-deployment.json"
+        if not journal.is_file() or journal.is_symlink():
+            raise ExecutionBlocked("Codex child launchd worker has not been staged")
+        try:
+            state=json.loads(journal.read_text())
+        except (OSError,ValueError):
+            raise ExecutionBlocked("Codex worker deployment journal is invalid") from None
+        if (state.get("phase")!="staged" or state.get("epoch")!=epoch
+                or state.get("source_sha")!=broker.config["source_sha"]
+                or state.get("label")!=label):
+            raise ExecutionBlocked("Codex worker staged source and authority epoch differ")
+        path=broker.state/"codex-canary-activation.json"
+        if path.exists() or path.is_symlink():
+            raise ExecutionBlocked("Codex canary original activation already exists; never repeat")
+        atomic_json(path,{
+            "source_sha":broker.config["source_sha"],
+            "nonce":authority.scope.nonce,
+            "epoch":epoch,"started_at":time.time(),
+            "transport":"codex-cli","production_ready":False,
+        })
+        actual=broker.registry.set_intent(
+            broker.project.repo,"active",goal_revision=status["goal_revision"])
+        if actual!=epoch:
+            raise ExecutionBlocked("Codex activation authority epoch changed")
+    return {"epoch":epoch,"source_sha":broker.config["source_sha"],
+            "transport":"codex-cli","production_ready":False,
+            "native_sealed":True,"started":False}
