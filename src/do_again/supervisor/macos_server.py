@@ -196,6 +196,9 @@ class ProjectBroker:
         if packet.get('operation') == 'codex_request_publish':
             from .codex_request_publish import publish_codex_edit
             return publish_codex_edit(self,packet)
+        if packet.get('operation') == 'codex_followup_publish':
+            from .model_followup_publish import publish_codex_followup
+            return publish_codex_followup(self,packet)
         if packet.get('operation') in {'control_sync','control_publish','control_reconcile'}:
             from .control_history import sync_control,publish_control,reconcile_control
             return {'control_sync':sync_control,'control_publish':publish_control,'control_reconcile':reconcile_control}[packet['operation']](self,packet)
