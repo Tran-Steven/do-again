@@ -41,7 +41,7 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
             args=argv[3:]
             if args[0]=="fetch": out=""
             elif args[0]=="rev-parse":out=self.sha
-            elif args[0]=="ls-remote":out=self.sha+"\\trefs/heads/operator-control"
+            elif args[0]=="ls-remote":out=self.sha+"\trefs/heads/operator-control"
             elif args[0]=="show":
                 spec=args[1]
                 if "/requests/" in spec:out=json.dumps(request) if request is not False else ""
@@ -50,7 +50,7 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
                 if out=="":
                     return SimpleNamespace(returncode=1,stdout="",stderr="not found")
             else:raise AssertionError(args)
-            return SimpleNamespace(returncode=0,stdout=out+"\\n",stderr="")
+            return SimpleNamespace(returncode=0,stdout=out+"\n",stderr="")
         return run
 
     def test_prepares_exact_single_status_request_without_browser(self):
