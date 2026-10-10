@@ -73,6 +73,7 @@ def bootstrap_live_canary(
     ticket = home / ".do_again" / "canary-bootstrap" / (nonce + ".json")
     record = browser.browser_paths().projects / (project_identity(repo)[:12] + ".json")
     if (repo.exists() or repo.is_symlink() or record.exists() or record.is_symlink()
+            or ticket.exists() or ticket.is_symlink()
             or output.exists() or output.is_symlink()):
         raise ExecutionBlocked("fresh canary identity, chat binding, or grant already exists")
     for path in (ticket, output, repo, record):
