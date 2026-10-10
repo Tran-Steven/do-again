@@ -60,9 +60,13 @@ class CodexAttemptTests(unittest.TestCase):
         self.login_patch = patch("do_again.model_attempt.login_ready", return_value=True)
         self.quota_patch = patch("do_again.model_attempt.require_model_capacity",
                                  return_value={"allowed": True})
+        self.parent_patch = patch("do_again.model_attempt.require_codex_parent_maintenance",
+                                  return_value={"_doagain_da": {"maintenance": True}})
         self.home_patch.start()
         self.login_patch.start()
         self.quota = self.quota_patch.start()
+        self.parent_gate = self.parent_patch.start()
+        self.addCleanup(self.parent_patch.stop)
         self.addCleanup(self.home_patch.stop)
         self.addCleanup(self.login_patch.stop)
         self.addCleanup(self.quota_patch.stop)
@@ -101,6 +105,16 @@ class CodexAttemptTests(unittest.TestCase):
         self.assertEqual(observed["state"],"candidate_ready")
         self.assertFalse(observed["replay"])
         self.assertEqual(observed["request"],first["request"])
+
+    def test_revoked_parent_authority_never_attempts_inference_or_reservation(self):
+        with patch("do_again.model_attempt.require_codex_parent_maintenance",
+                   side_effect=ExecutionBlocked("parent epoch changed")) as parent, patch(
+                   "do_again.model_attempt.generate_structured") as model:
+            with self.assertRaisesRegex(ExecutionBlocked, "parent epoch changed"):
+                self.call()
+        parent.assert_called_once()
+        model.assert_not_called()
+        self.assertFalse(self.journal().exists())
 
     def test_quota_exhaustion_does_not_consume_reserved_model_call(self):
         with patch("do_again.model_attempt.require_model_capacity",
