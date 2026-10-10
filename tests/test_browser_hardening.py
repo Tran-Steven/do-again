@@ -166,6 +166,35 @@ class BrowserHardeningTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in launch.call_args_list], ["headless", "background"])
         self.assertEqual(browser.load_config()["resolved_mode"], "background")
 
+    def test_auto_refuses_existing_background_without_stopping_or_sending(self):
+        config = browser.load_config()
+        config.update(preferred_mode="auto", resolved_mode="background")
+        browser.save_config(config)
+        with patch.object(browser, "browser_status", return_value={"running": True, "mode": "background", "port": 9223}), patch.object(browser, "stop_browser") as stop, patch.object(browser, "launch_browser") as launch, patch.object(browser, "wait_for_authenticated") as auth:
+            with self.assertRaisesRegex(browser.BrowserError, "refuses an existing GUI browser"):
+                browser.ensure_browser_running()
+        stop.assert_not_called()
+        launch.assert_not_called()
+        auth.assert_not_called()
+
+    def test_auto_ignores_stale_background_resolution_for_unattended_launch(self):
+        config = browser.load_config()
+        config.update(preferred_mode="auto", resolved_mode="background")
+        browser.save_config(config)
+        with patch.object(browser, "browser_status", side_effect=[{"running": False}, {"running": True, "mode": "headless", "port": 9223}]), patch.object(browser, "launch_browser", return_value={"mode": "headless", "port": 9223}) as launch:
+            observed = browser.ensure_browser_running(verify_auth=False)
+        self.assertEqual(observed["mode"], "headless")
+        launch.assert_called_once()
+        self.assertEqual(launch.call_args.args[0], "headless")
+
+    def test_auto_headless_launch_failure_never_creates_background_window(self):
+        with patch.object(browser, "browser_status", return_value={"running": False}), patch.object(browser, "launch_browser", side_effect=browser.BrowserError("headless unavailable")) as launch, patch.object(browser, "stop_browser") as stop:
+            with self.assertRaisesRegex(browser.BrowserError, "headless unavailable"):
+                browser.ensure_browser_running(verify_auth=False)
+        launch.assert_called_once()
+        self.assertEqual(launch.call_args.args[0], "headless")
+        stop.assert_not_called()
+
     def test_explicit_mode_change_restarts_an_existing_browser(self):
         config = browser.load_config()
         config["preferred_mode"] = "background"
