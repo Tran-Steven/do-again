@@ -1,4 +1,5 @@
 """Native ChatGPT browser canary grant is bound to root, never stale legacy DB."""
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from do_again.supervisor.canary_bootstrap import _protected_parent_state
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 
+@unittest.skipUnless(os.name == "posix", "protected canary root identity uses POSIX paths")
 class RootChatGPTBootstrapGateTests(unittest.TestCase):
     def setUp(self):
         self.home="/Users/isolated-operator"
