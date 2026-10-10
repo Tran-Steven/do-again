@@ -6,7 +6,7 @@ caller-provided project state is never accepted as equivalent evidence.
 """
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from .model_grant import CodexCanaryScope
 from .supervisor.macos_execution import ExecutionBlocked
@@ -31,7 +31,7 @@ def require_codex_parent_maintenance(config: dict, scope: CodexCanaryScope, *, r
     for account in ("_doagain_da", "_doagain_jp"):
         project = by_account[account]
         repo = project.get("repo")
-        if not isinstance(repo, str) or not Path(repo).is_absolute():
+        if (not isinstance(repo, str) or not PurePosixPath(repo).is_absolute()):
             raise ExecutionBlocked("Codex project path was not sealed")
         result = reader(Path(repo), {"operation": "status"})
         if not isinstance(result, dict):
