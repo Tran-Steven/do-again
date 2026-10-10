@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-c9fb3f1154054dbe0e258331-1-publish",
+  "operation": "git_publish",
+  "issued_at_utc": "2026-10-10T03:09:40.688Z",
+  "expires_at_utc": "2026-10-10T03:19:40.688Z",
+  "expected": {
+    "repo_head": "727fd422442749dde2649337d4669a13fd779f47"
+  },
+  "args": {
+    "title": "Synthetic live canary: canonical_label normalization",
+    "body": "Draft synthetic live-canary PR. Task 1 introduces canonical_label for ASCII case and whitespace normalization, with three unittest regressions. No production, account, application, jobpipe, or Sonary changes. Task 2 will add non-ASCII rejection after broker-verified CI continuation."
+  },
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "canary-c9fb3f1154054dbe0e258331-1-edit",
+      "canary-c9fb3f1154054dbe0e258331-1-test",
+      "canary-c9fb3f1154054dbe0e258331-1-commit"
+    ],
+    "goal_state": "in_progress"
+  }
+}
