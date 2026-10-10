@@ -5,10 +5,17 @@
 # Run only with the explicitly registered self-hosted macOS ARM64 runner
 # labeled do-again-control. The workflow has no parameters, write permissions,
 # checkout, shell commands supplied remotely, or privileged installation.
+# The sole GitHub-control trigger is an added requests/health-*.json file
+# on the main branch of the PRIVATE companion repository. Its contents are
+# ignored; this workflow executes the same fixed, read-only check every time.
 name: Mac maintenance health (read only)
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'requests/health-*.json'
 
 permissions: {}
 
