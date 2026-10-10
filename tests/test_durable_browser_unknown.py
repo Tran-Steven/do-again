@@ -51,6 +51,11 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
         self.assertTrue(queued.exists())
         self.assertFalse(daemon._uncertain_delivery_path(self.state).exists())
         self.assertEqual(notify.call_count,1)
+        info=json.loads((self.state/"browser_status.json").read_text())
+        self.assertEqual(info["state"],"pre_dispatch_blocked")
+        alert=json.loads((self.state/"attention.json").read_text())
+        self.assertEqual(alert["state"],"pre_dispatch_blocked")
+        self.assertIn("no browser submission",alert["reason"])
         # A later independent attempt is permitted; still requires real
         # ChatGPT message and acknowledgment rather than a fake click result.
         notify.side_effect=None
