@@ -74,6 +74,12 @@ class OneGestureDeliveryTests(unittest.TestCase):
 
     def setUp(self):
         self.target = cdp.Target("synthetic", "https://chatgpt.com/c/synthetic", "", "ws://127.0.0.1/synthetic")
+        # Focus policy has isolated tests in test_browser_send_focus.
+        # These cases exercise the pre-existing one-gesture/timeout protocol
+        # without connecting to a real Chrome CDP endpoint.
+        focus = patch.object(browser, "_require_send_target_focus")
+        focus.start()
+        self.addCleanup(focus.stop)
 
     def mocks(self):
         from contextlib import ExitStack
