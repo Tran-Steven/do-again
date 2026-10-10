@@ -15,6 +15,7 @@ from do_again.model_canary import (
     canary_model_schema,
     canary_task_prompt,
     prepare_canary_edit,
+    validate_prepared_edit,
 )
 from do_again.core.schema import validate_request
 
@@ -92,6 +93,47 @@ class CodexCanaryPreparationTests(unittest.TestCase):
                 )
             finally:
                 os.chdir(previous)
+
+    def test_publisher_reconstructs_exact_canonical_edit_without_execution(self):
+        original = self.build()
+        reproduced = validate_prepared_edit(original, nonce=self.nonce,
+                                            task=1, expected_head=self.sha)
+        self.assertEqual(reproduced, original)
+
+    def test_publisher_rejects_script_append_and_source_substitution(self):
+        base = self.build()
+        changes = [
+            {"args": {**base["args"], "content":
+                      base["args"]["content"] + "\\nimport os\\nos.system('id')\\n"}},
+            {"args": {**base["args"], "content":
+                      base["args"]["content"].replace("source_code = ",
+                          "source_code = 42\\nignored = ")}},
+            {"args": {**base["args"], "argv": ["--unsafe"]}},
+            {"operation": "git_commit"},
+            {"limits": {"timeout_seconds": 3600}},
+            {"expires_at_utc": base["issued_at_utc"]},
+            {"expected": {"repo_head": "f"*40}},
+            {"extra_authority": True},
+        ]
+        for change in changes:
+            candidate = {**base, **change}
+            with self.subTest(fields=list(change)), self.assertRaises(CodexCanaryProposalRejected):
+                validate_prepared_edit(candidate, nonce=self.nonce,
+                                      task=1, expected_head=self.sha)
+
+    def test_publisher_blocks_forged_canary_and_double_source_bindings(self):
+        base = self.build()
+        for scope in ({"nonce": "f"*24, "task": 1, "expected_head": self.sha},
+                      {"nonce": self.nonce, "task": 2, "expected_head": self.sha},
+                      {"nonce": self.nonce, "task": 1, "expected_head": "f"*40}):
+            with self.subTest(scope=scope), self.assertRaises(CodexCanaryProposalRejected):
+                validate_prepared_edit(base, **scope)
+        candidate = dict(base)
+        candidate["args"] = dict(base["args"], content=(
+            base["args"]["content"] + "\\nsource_code = 'overridden'\\n"))
+        with self.assertRaises(CodexCanaryProposalRejected):
+            validate_prepared_edit(candidate, nonce=self.nonce,
+                                  task=1, expected_head=self.sha)
 
     def test_second_task_is_scoped_and_retains_expected_head(self):
         candidate = self.build(task=2)
