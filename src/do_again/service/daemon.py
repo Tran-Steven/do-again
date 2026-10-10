@@ -324,7 +324,18 @@ def _drain_browser_outbox_locked(repo: Path, state_dir: Path, *, daemon_pid: int
             # session may attempt delivery. Anything post-dispatch, unknown,
             # or unexpected still requires read-only reconciliation.
             _uncertain_delivery_path(state_dir).unlink(missing_ok=True)
-            _record_browser_state(state_dir, "recovering", error=str(exc))
+            if isinstance(exc, BrowserPreDispatchBlocked):
+                # Recoverable non-delivery, distinct from an uncertain Send.
+                # The queued event is retained; surface why autonomous
+                # background delivery cannot currently proceed.
+                _record_browser_state(state_dir, "pre_dispatch_blocked", error=str(exc))
+                atomic_json(state_dir / "attention.json", {
+                    "state": "pre_dispatch_blocked",
+                    "reason": str(exc)[:300],
+                    "action": "Verify an authenticated true-headless ChatGPT session or explicitly approve a visible session. Do not replay an uncertain Send.",
+                })
+            else:
+                _record_browser_state(state_dir, "recovering", error=str(exc))
             if isinstance(exc, BrowserAuthRequired):
                 raise
             return 0
