@@ -125,6 +125,8 @@ class ProjectBroker:
             raise ExecutionBlocked('peer is not the trusted operator identity')
         if getattr(self,'canary',None) is not None:
             self.canary.packet(packet)
+        if getattr(self,'codex',None) is not None:
+            self.codex.packet(packet)
         if packet == {'operation': 'status'}:
             status = self.registry.status(self.project.repo)
             return {'operator_intent': status['intent'], 'epoch': status['epoch'],
@@ -191,6 +193,9 @@ class ProjectBroker:
         if packet.get('operation') == 'browser_tick':
             from .browser_broker import browser_tick
             return browser_tick(self,packet)
+        if packet.get('operation') == 'codex_request_publish':
+            from .codex_request_publish import publish_codex_edit
+            return publish_codex_edit(self,packet)
         if packet.get('operation') in {'control_sync','control_publish','control_reconcile'}:
             from .control_history import sync_control,publish_control,reconcile_control
             return {'control_sync':sync_control,'control_publish':publish_control,'control_reconcile':reconcile_control}[packet['operation']](self,packet)
@@ -278,9 +283,9 @@ class ProjectBroker:
     @contextmanager
     def probe_admission(self):
         with self.admission():
-            child=getattr(self,'live_canary_child',None)
-            if child is not None and (child.registry.status(child.project.repo)['intent']=='active' or child.ledger.pending(child.project.key)):
-                raise ExecutionBlocked('live canary owns the dedicated execution identity')
+            for child in (getattr(self,'live_canary_child',None),getattr(self,'codex_canary_child',None)):
+                if child is not None and (child.registry.status(child.project.repo)['intent']=='active' or child.ledger.pending(child.project.key)):
+                    raise ExecutionBlocked('sealed canary owns the dedicated execution identity')
             if self.registry.status(self.project.repo)['intent'] != 'maintenance':
                 raise ExecutionBlocked('operator intent changed before installation probe')
             yield
@@ -319,9 +324,10 @@ class ProjectBroker:
             return {'registered':True,'repository':project_config['github_repository']}
 
     def _canary_authorized(self):
-        if getattr(self,'canary',None) is None:return False
+        authority = getattr(self,'canary',None) or getattr(self,'codex',None)
+        if authority is None:return False
         try:
-            self.canary.check()
+            authority.check()
             return True
         except (ExecutionBlocked,OSError,ValueError,KeyError):return False
 
@@ -437,10 +443,17 @@ def main() -> None:
     os.chmod(SOCKET_ROOT, 0o755)
     brokers={project['key']:ProjectBroker(config,project) for project in config['projects']}
     projects=list(config['projects'])
+    if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+        raise ExecutionBlocked('browser and Codex canary grants cannot coexist')
     if config.get('live_canary') is not None:
         from .live_canary import create_broker
         parent=next(b for b in brokers.values() if b.project.account=='_doagain_da')
         child=create_broker(config,parent);brokers[child.project.key]=child
+        projects.append(next(p for p in child.config['projects']))
+    if config.get('codex_canary') is not None:
+        from .model_native import create_codex_broker
+        parent=next(b for b in brokers.values() if b.project.account=='_doagain_da')
+        child=create_codex_broker(config,parent);brokers[child.project.key]=child
         projects.append(next(p for p in child.config['projects']))
     threads = [threading.Thread(target=serve_project, args=(config,project,brokers[project['key']]))
                for project in projects]
