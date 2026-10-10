@@ -18,6 +18,9 @@ class CodexTransportTests(unittest.TestCase):
         self.home = Path(self.temp.name)
         self.binary = self.home / "codex"
         self.binary.touch()
+        self.capacity_guard = patch("do_again.model_quota.require_model_capacity", return_value={"allowed": True})
+        self.capacity_guard.start()
+        self.addCleanup(self.capacity_guard.stop)
         self.schema = {
             "type": "object",
             "properties": {"reply": {"type": "string", "maxLength": 120}},
@@ -161,6 +164,18 @@ class CodexTransportTests(unittest.TestCase):
         self.assertIn("quota_or_rate_limit", str(raised.exception))
         self.assertNotIn("private-auth-stuff", str(raised.exception))
         run.assert_called_once()
+
+    def test_exhausted_account_blocks_before_model_launch_without_retry(self):
+        from do_again.model_quota import CodexQuotaUnavailable
+        with patch.object(transport, "login_ready", return_value=True), patch(
+                "do_again.model_quota.require_model_capacity",
+                side_effect=CodexQuotaUnavailable("weekly usage exhausted; no model call attempted")
+        ) as quota, patch.object(transport.subprocess, "run") as run:
+            with self.assertRaisesRegex(transport.CodexTransportBlocked, "weekly usage exhausted"):
+                transport.generate_structured(
+                    "test", self.schema, binary=self.binary, home=self.home, allow_model_call=True)
+        quota.assert_called_once_with(self.binary, self.home.resolve())
+        run.assert_not_called()
 
     def test_nonzero_return_is_uncertain_and_never_retried(self):
         with patch.object(transport, "login_ready", return_value=True), patch.object(
