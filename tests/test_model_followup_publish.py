@@ -137,6 +137,7 @@ class FollowupTests(unittest.TestCase):
         self.ledger=FakeLedger()
         authority=CodexCanaryAuthority.__new__(CodexCanaryAuthority)
         authority.scope=self.scope
+        authority.second_ready=lambda: (_ for _ in ()).throw(ExecutionBlocked("first CI checkpoint not installed"))
         self.broker=SimpleNamespace(
             codex=authority,ledger=self.ledger,
             registry=SimpleNamespace(status=lambda repo:{"epoch":7}),
