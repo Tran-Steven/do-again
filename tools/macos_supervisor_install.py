@@ -173,9 +173,15 @@ def provision_worktree(config, project, current):
 
 def verify_worker_quiescence(config):
     """A maintenance runtime cutover never replaces code beneath a live worker."""
+    if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+        raise RuntimeError('browser and Codex canary grants may not coexist')
     if config.get('live_canary') is not None:
         from do_again.supervisor.live_canary import scope
         _,_,canary=scope(config)
+        config=dict(config,projects=[*config['projects'],canary])
+    if config.get('codex_canary') is not None:
+        from do_again.supervisor.model_native import codex_project
+        _,_,canary=codex_project(config)
         config=dict(config,projects=[*config['projects'],canary])
     for project in config['projects']:
         journal=ROOT/'state'/project['key']/'worker-deployment.json'
@@ -440,9 +446,15 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
                 if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
                     raise RuntimeError('existing authority admits work; upgrade deferred')
         for project in config['projects']:provision_worktree(config,project,current)
-        if config.get('live_canary') is not None:
-            from do_again.supervisor.live_canary import scope
-            grant,_,canary=scope(config)
+        if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+            raise RuntimeError('cannot provision overlapping browser and Codex grants')
+        if config.get('live_canary') is not None or config.get('codex_canary') is not None:
+            if config.get('live_canary') is not None:
+                from do_again.supervisor.live_canary import scope
+                _,_,canary=scope(config)
+            else:
+                from do_again.supervisor.model_native import codex_project
+                _,_,canary=codex_project(config)
             repo=Path(canary['repo']);repo.mkdir(parents=True,exist_ok=True,mode=0o700)
             if repo.is_symlink() or any(repo.iterdir()):raise RuntimeError('canary identity directory is not empty and isolated')
             os.chown(repo,config['operator_uid'],config['operator_gid'])
