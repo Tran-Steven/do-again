@@ -37,12 +37,17 @@ def publish_codex_edit(broker, packet: dict, *, api=None) -> dict:
         raise ExecutionBlocked("Codex publisher requires a root-constructed sealed authority")
     scope = authority.scope
     original = packet["value"]
-    rid = "canary-" + scope.nonce + "-1-edit"
-    if packet["request_id"] != "codex-publish-" + scope.nonce + "-1-edit":
-        raise ExecutionBlocked("Codex publisher has no matching one-shot identity")
+    match = __import__("re").fullmatch(
+        "codex-publish-" + scope.nonce + r"-([12])-edit",packet["request_id"])
+    if match is None:
+        raise ExecutionBlocked("Codex publisher has no matching two-task identity")
+    task=int(match[1])
+    checkpoint=authority.second_ready() if task==2 else None
+    expected_head=checkpoint["head_sha"] if checkpoint else scope.baseline
+    rid = "canary-" + scope.nonce + "-" + str(task) + "-edit"
     try:
-        validate_prepared_edit(original, nonce=scope.nonce, task=1,
-                               expected_head=scope.baseline)
+        validate_prepared_edit(original, nonce=scope.nonce, task=task,
+                               expected_head=expected_head)
     except Exception:
         raise ExecutionBlocked("Codex candidate is not the canonical bounded synthetic edit") from None
     path = "automation/do_again/requests/" + rid + ".json"
@@ -67,11 +72,14 @@ def publish_codex_edit(broker, packet: dict, *, api=None) -> dict:
             before, commit, entries = snapshot(api)
             if path in entries:
                 raise ExecutionBlocked("Codex original request ID already exists remotely")
-            if any(
-                p.startswith("automation/do_again/requests/canary-" + scope.nonce + "-")
-                for p in entries
+            prefix="automation/do_again/requests/canary-" + scope.nonce + "-"
+            if any(p.startswith(prefix + str(task) + "-") for p in entries):
+                raise ExecutionBlocked("Codex task already has remote original requests")
+            if task==2 and not (
+                any(p==prefix+"1-publish.json" for p in entries)
+                and any(p==prefix+"1-ci.json" for p in entries)
             ):
-                raise ExecutionBlocked("Codex request history already contains this canary; reconcile")
+                raise ExecutionBlocked("Codex second model edit has no durable first-task CI history")
             stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
             message = "Do Again sealed Codex canary request " + rid
             broker.ledger.reserve(broker.project.key, packet["request_id"], digest,
