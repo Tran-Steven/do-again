@@ -515,3 +515,42 @@ CI continuation, tied to its run, conversation, generation, and current source.
 The earlier publication receipt acknowledgment alone cannot release a request.
 Final CI is delivered through the same reserved protocol, and canary completion
 waits for that final acknowledgment before closing admission.
+
+
+### Automatic headless canary conversation bootstrap
+
+Never ask the operator to manually create or initialize a ChatGPT tab for the
+live canary. Once the installed protected helper is in maintenance and a fresh
+public baseline is selected, the operator-side automation can execute this
+one-shot command as the unprivileged macOS operator:
+
+```sh
+python3 tools/bootstrap_live_canary.py \
+  --baseline <EXACT_PUBLIC_MAIN_SHA> \
+  --grant-file "$HOME/.do_again/canary-grants/next.json"
+```
+
+It allocates a fresh 24-character identity, opens a **new** ChatGPT tab inside
+Do Again's dedicated browser profile (true headless where authenticated;
+background fallback otherwise), sends one small non-development initialization
+message, waits for its **exact reply**, and privately seals the resulting
+`nonce`, `chat_url`, `binding_identity`, baseline and parent epoch. It prints
+the derived control branch and grant path for the existing branch/protected
+installer process. It does **not** start a worker, enable production, publish
+a GitHub PR, or authorize an application submission.
+
+This bootstrap writes a durable exclusive ticket **before** any browser effect
+and a durable `dispatch_started` marker before the **single Send gesture**.
+If the browser hangs, a send is uncertain, the assistant fails to return the
+exact marker, or a process crashes, the nonce is **consumed**. The automation
+must not replay the message or reuse that target: preserve the ticket and
+inspect it read-only, then use a newly authorized identity after resolution.
+A previous live canary's ChatGPT conversation is never an acceptable successor,
+even with a different nonce. Login/Cloudflare challenges or macOS administrator
+prompts still require human action; ordinary tab creation does not.
+
+The generated grant is intended as input to
+`tools/prepare_macos_supervisor.py --canary-grant`. Only a separate, explicit
+administrator approval can install it. Run post-install native confinement
+probes before activating its isolated worker; evidence from a previous installed
+source does not suffice.
