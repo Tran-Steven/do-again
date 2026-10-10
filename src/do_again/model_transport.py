@@ -143,7 +143,16 @@ def generate_structured(
         raise CodexTransportBlocked("model prompt is empty or exceeds the bounded input budget")
     if not _response_schema_valid(schema):
         raise CodexTransportBlocked("model output schema is not the approved flat string-object shape")
-    serialized_schema = json.dumps(schema, sort_keys=True, separators=(",", ":"))
+    # Structured Outputs accepts only a subset of JSON Schema keywords.
+    # Keep maxLength as a strict local policy, but omit it from the provider
+    # schema so model variations cannot reject the request up front.
+    provider_schema = {
+        "type": "object",
+        "properties": {key: {"type": "string"} for key in schema["properties"]},
+        "required": list(schema["required"]),
+        "additionalProperties": False,
+    }
+    serialized_schema = json.dumps(provider_schema, sort_keys=True, separators=(",", ":"))
     if len(serialized_schema.encode("utf-8")) > _MAX_SCHEMA_BYTES:
         raise CodexTransportBlocked("model output schema exceeds its size limit")
     if model is not None and (not isinstance(model, str) or not _SAFE_MODEL.fullmatch(model)):
