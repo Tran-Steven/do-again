@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from do_again.browser.errors import BrowserSubmissionUncertain
+from do_again.browser.errors import BrowserError, BrowserPreDispatchBlocked, BrowserSubmissionUncertain
 from do_again.browser import runtime as browser
 from do_again.service import daemon
 
@@ -39,6 +39,52 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
 
     def _uncertain(self):
         return json.loads(daemon._uncertain_delivery_path(self.state).read_text())
+
+    def test_proven_focus_blocker_keeps_outbox_but_clears_preparing_intent(self):
+        queued=self._enqueue("req-no-focus")
+        _,notify=self._mocks()
+        notify.side_effect=BrowserPreDispatchBlocked(
+            "unattended auto mode refuses GUI tab focus; no browser submission was attempted")
+        # The known failure is before the only allowed Send gesture. Retire
+        # just the ephemeral preparing marker so healthy future focus can work.
+        self.assertEqual(daemon._drain_browser_outbox_locked(self.repo,self.state),0)
+        self.assertTrue(queued.exists())
+        self.assertFalse(daemon._uncertain_delivery_path(self.state).exists())
+        self.assertEqual(notify.call_count,1)
+        # A later independent attempt is permitted; still requires real
+        # ChatGPT message and acknowledgment rather than a fake click result.
+        notify.side_effect=None
+        notify.return_value={"response":"submitted"}
+        with self.assertRaisesRegex(BrowserSubmissionUncertain,"not yet verified"):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        self.assertEqual(notify.call_count,2)
+        self.assertTrue(daemon._uncertain_delivery_path(self.state).exists())
+
+    def test_generic_browser_error_after_preparing_remains_uncertain(self):
+        queued=self._enqueue("req-ambiguous")
+        _,notify=self._mocks()
+        notify.side_effect=BrowserError("CDP session closed at unknown time")
+        with self.assertRaisesRegex(BrowserError,"unknown time"):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        self.assertTrue(queued.exists())
+        self.assertEqual(self._uncertain()["state"],"preparing")
+        # Even if the first attempt may have raced a click, the second tick
+        # must be reconciliation only; never retry notify_receipts.
+        with self.assertRaises(BrowserSubmissionUncertain):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        notify.assert_called_once()
+
+    def test_uncertain_type_cannot_clear_preparing_intent(self):
+        queued=self._enqueue("req-uncertain")
+        _,notify=self._mocks()
+        notify.side_effect=BrowserSubmissionUncertain("Send possibly accepted")
+        with self.assertRaises(BrowserSubmissionUncertain):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        self.assertTrue(queued.exists())
+        self.assertEqual(self._uncertain()["state"],"preparing")
+        with self.assertRaises(BrowserSubmissionUncertain):
+            daemon._drain_browser_outbox_locked(self.repo,self.state)
+        notify.assert_called_once()
 
     def test_timeout_persists_exact_batch_and_never_replays(self):
         a = self._enqueue("req-a")
