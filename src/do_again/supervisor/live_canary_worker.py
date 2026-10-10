@@ -12,6 +12,19 @@ from .macos_execution import INSTALL_ROOT, ExecutionBlocked
 from .macos_client import broker_request
 
 
+def reconciled_status(repo, *, read_status, rpc=broker_request):
+    """Observe stopped effects once; never replay or reconcile live dispatch."""
+    status=read_status(repo)
+    inflight=status.get('inflight_request_ids',[])
+    unresolved=status.get('unresolved_executions')
+    if (status.get('operator_intent')=='active'
+            and isinstance(unresolved,list)
+            and any(row.get('request_id') not in inflight for row in unresolved)):
+        rpc(repo,{'operation':'canary_reconcile'})
+        status=read_status(repo)
+    return status
+
+
 def main(config,args):
     from .immutable_worker import validate_control_paths,read_admission_status
     from .macos_server import verify_installation
@@ -29,7 +42,7 @@ def main(config,args):
     policy=INSTALL_ROOT/'current/package/do_again/worker_policy.json'
     validate_control_paths(control,state,os.getuid())
     def check():
-        result=read_admission_status(repo)
+        result=reconciled_status(repo,read_status=read_admission_status)
         unresolved=result.get('unresolved_executions')
         inflight=result.get('inflight_request_ids',[])
         if (result.get('source_sha')!=config['source_sha'] or result.get('epoch')!=args.expected_epoch

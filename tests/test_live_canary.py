@@ -8,6 +8,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from unittest.mock import Mock
 
 from do_again.core.schema import atomic_json
 from do_again.supervisor.authority import AuthorityRegistry,project_identity
@@ -17,6 +18,31 @@ from do_again.supervisor.control_history import canary_entries,gate
 
 
 class LiveCanaryTests(unittest.TestCase):
+    def test_worker_reconciles_lost_control_response_read_only_before_admission(self):
+        from do_again.supervisor.live_canary_worker import reconciled_status
+        repo=Path('/synthetic/canary')
+        pending={'operator_intent':'active','inflight_request_ids':[],
+                 'unresolved_executions':[{'request_id':'original-control','state':'started'}]}
+        complete={**pending,'unresolved_executions':[]}
+        read=Mock(side_effect=[pending,complete]);rpc=Mock(return_value={'replay':False})
+        self.assertEqual(reconciled_status(repo,read_status=read,rpc=rpc),complete)
+        rpc.assert_called_once_with(repo,{'operation':'canary_reconcile'})
+        self.assertEqual(read.call_count,2)
+
+    def test_worker_reconciliation_never_replays_uncertainty_or_runs_after_pause(self):
+        from do_again.supervisor.live_canary_worker import reconciled_status
+        pending={'operator_intent':'active','inflight_request_ids':[],
+                 'unresolved_executions':[{'request_id':'uncertain-execution','state':'started'}]}
+        rpc=Mock(return_value={'replay':False,'remaining':pending['unresolved_executions']})
+        self.assertEqual(reconciled_status(Path('/scope'),read_status=Mock(return_value=pending),rpc=rpc),pending)
+        rpc.assert_called_once()
+        for status in ({**pending,'operator_intent':'paused'},
+                       {**pending,'inflight_request_ids':['uncertain-execution']},
+                       {**pending,'unresolved_executions':[]}):
+            rpc=Mock()
+            self.assertEqual(reconciled_status(Path('/scope'),read_status=Mock(return_value=status),rpc=rpc),status)
+            rpc.assert_not_called()
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve();self.nonce='a'*24;self.source='b'*40;self.head='c'*40

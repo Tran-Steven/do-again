@@ -486,3 +486,11 @@ then requires the repaired test to pass. A second failed test stops that task;
 there is no second repair identity or automatic replay of the first attempt.
 Source-generation instructions require actual line breaks and compilation before
 writing to catch JSON/Python escaping errors at the request-generation boundary.
+
+Canary admission observes inactive uncertain effects before each loop, not only
+at startup. It invokes the existing read-only reconciliation handlers once and
+then rereads authoritative status. A live dispatch is allowed to drain without
+reconciliation; paused admission cannot trigger it. Missing or conflicting
+evidence remains unresolved and prevents further effects. This closes the live
+control-publication lost-response stall without resubmitting browser messages,
+GitHub objects, claims, or coding requests.
