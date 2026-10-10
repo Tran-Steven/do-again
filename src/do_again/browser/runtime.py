@@ -807,6 +807,33 @@ return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: 
     return result
 
 
+def _require_send_target_focus(target: cdp.Target) -> None:
+    """A hidden background target must be activated before a one-shot Send.
+
+    Activation occurs before insertion or the durable dispatch boundary. A
+    refused/uncertain activation must never cause an alternate Send gesture.
+    This targets only Do Again's dedicated Chrome profile, not the user's
+    normal browser.
+    """
+    probe = r"""(() => ({
+        focused: document.hasFocus(),
+        visibility: document.visibilityState
+    }))()"""
+    observed = cdp.evaluate(target, probe, timeout=10.0)
+    if not (isinstance(observed, dict)
+            and observed.get("focused") is True
+            and observed.get("visibility") == "visible"):
+        cdp.target_call(target, "Page.bringToFront", {}, timeout=10.0)
+        observed = cdp.evaluate(target, probe, timeout=10.0)
+    if not (isinstance(observed, dict)
+            and observed.get("focused") is True
+            and observed.get("visibility") == "visible"):
+        raise BrowserError(
+            "ChatGPT automation tab lacks visible document focus before Send; "
+            "no browser submission was attempted"
+        )
+
+
 def send_message(
     target: cdp.Target,
     text: str,
@@ -815,6 +842,7 @@ def send_message(
     wait_for_response: bool = True,
     before_dispatch: Any = None,
 ) -> dict[str, Any]:
+    _require_send_target_focus(target)
     baseline = _assistant_snapshot(target)
     if baseline.get("busy"):
         raise BrowserError("ChatGPT is still generating; retry delivery later")
