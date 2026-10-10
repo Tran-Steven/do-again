@@ -7,6 +7,7 @@ import unittest
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from do_again.model_canary import prepare_canary_edit
 from do_again.supervisor.model_native import codex_project,CodexCanaryAuthority
@@ -94,7 +95,10 @@ class CodexRootChildTests(unittest.TestCase):
              +self.nonce+"-2-test.json"},
         ):
             with self.subTest(operation=packet.get("operation"),
-                              request_id=packet.get("request_id")),self.assertRaises(ExecutionBlocked):
+                              request_id=packet.get("request_id")),patch(
+                    "do_again.supervisor.model_stage_gate.read_sealed_request",
+                    side_effect=ExecutionBlocked("no authorized remote request")
+                ),self.assertRaises(ExecutionBlocked):
                 self.authority.packet(packet)
 
     def test_sibling_started_native_execution_blocks_codex_child_authority(self):
