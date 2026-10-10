@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "request_id": "canary-c9fb3f1154054dbe0e258331-1-ci",
+  "operation": "ci_observe",
+  "issued_at_utc": "2026-10-10T03:11:10.310Z",
+  "expires_at_utc": "2026-10-10T03:21:10.310Z",
+  "expected": {
+    "repo_head": "727fd422442749dde2649337d4669a13fd779f47"
+  },
+  "args": {
+    "original_request_id": "canary-c9fb3f1154054dbe0e258331-1-publish"
+  },
+  "limits": {
+    "timeout_seconds": 120
+  },
+  "continuation": {
+    "acknowledged_receipts": [
+      "canary-c9fb3f1154054dbe0e258331-1-edit",
+      "canary-c9fb3f1154054dbe0e258331-1-test",
+      "canary-c9fb3f1154054dbe0e258331-1-commit",
+      "canary-c9fb3f1154054dbe0e258331-1-publish"
+    ],
+    "goal_state": "in_progress"
+  }
+}
