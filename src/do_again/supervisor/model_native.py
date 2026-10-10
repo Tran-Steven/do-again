@@ -114,13 +114,13 @@ class CodexCanaryAuthority:
                     raise ExecutionBlocked("Codex child receipt is outside task one")
                 return
             raise ExecutionBlocked("Codex child cannot write requests through ordinary control_publish")
-        if operation=="ci_observe":
-            if packet.get("request_id")!=self.scope.request_prefix+"1-publish":
-                raise ExecutionBlocked("Codex CI observation has no original publication identity")
+        if operation in {"execute","git_commit","git_publish","ci_observe"}:
+            from .model_stage_gate import admit_first_task_packet
+            admit_first_task_packet(self.broker,self.scope,packet)
             return
-        # Existing worker capabilities remain denied until the new confined
-        # Codex worker is installed, native-qualified and stage-gated.
-        raise ExecutionBlocked("Codex child execution is not yet v1-authorized")
+        # Any native operation outside the exact root-read original request
+        # and successful preceding broker stages is blocked, not degraded.
+        raise ExecutionBlocked("Codex child capability is not part of the sealed canary")
 
 
 def create_codex_broker(config,parent):
