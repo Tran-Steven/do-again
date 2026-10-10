@@ -110,8 +110,14 @@ class CodexCanaryAuthority:
                 # Reuse the existing typed stage set, not an arbitrary worker
                 # recipient. Terminal broker checks bind each receipt.
                 rid=path.rsplit("/",1)[-1].removesuffix(".json")
-                if not rid.startswith(self.scope.request_prefix+"1-"):
-                    raise ExecutionBlocked("Codex child receipt is outside task one")
+                if rid not in {
+                    self.scope.request_prefix+"1-"+stage
+                    for stage in ("edit","test","commit","publish","ci")
+                } or not path.endswith(".json"):
+                    raise ExecutionBlocked("Codex child receipt is outside the fixed task-one stages")
+                value=packet.get("value")
+                if not isinstance(value,dict) or value.get("request_id")!=rid:
+                    raise ExecutionBlocked("Codex child control record mismatches its original request")
                 return
             raise ExecutionBlocked("Codex child cannot write requests through ordinary control_publish")
         if operation in {"execute","git_commit","git_publish","ci_observe"}:
