@@ -51,11 +51,31 @@ def _write_original(path: Path, value: dict) -> None:
             os.close(fd)
 
 
+def _github_slug(layout: RuntimeLayout) -> str:
+    """Resolve the actual configured repository; do not expose local paths."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(layout.repo), "remote", "get-url", layout.remote],
+            capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ServiceError("cannot resolve the configured GitHub remote") from exc
+    if result.returncode != 0:
+        raise ServiceError("configured GitHub remote is unavailable")
+    raw = result.stdout.strip()
+    found = re.fullmatch(
+        r"(?:https://github\\.com/|git@github\\.com:|ssh://git@github\\.com/)"
+        r"([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\\.git)?/?", raw)
+    if found is None:
+        raise ServiceError("regular ChatGPT GitHub handoff requires a GitHub repository remote")
+    return found[1]
+
+
 def prepare(layout: RuntimeLayout, *, nonce: str | None = None,
             now: datetime | None = None) -> dict[str, Any]:
     """Generate a harmless status request to paste into an ordinary ChatGPT chat."""
     if not layout.branch or layout.branch in {"main", "master", "trunk"}:
         raise ServiceError("ChatGPT handoff requires a separate control branch")
+    slug = _github_slug(layout)
     nonce = secrets.token_hex(12) if nonce is None else nonce
     if not re.fullmatch(r"[0-9a-f]{24}", nonce):
         raise ServiceError("ChatGPT verification identity must be 24 hex characters")
@@ -71,7 +91,8 @@ def prepare(layout: RuntimeLayout, *, nonce: str | None = None,
     validate_request(request, max_ttl_seconds=1200)
     witness = {
         "schema_version": 1, "transport": "regular_chatgpt",
-        "repository": str(layout.repo), "remote": layout.remote,
+        "repository": str(layout.repo), "github_repository": slug,
+        "remote": layout.remote,
         "control_branch": layout.branch, "request": request,
         "request_fingerprint": request_fingerprint(request),
         "status": "prepared_not_submitted",
@@ -82,7 +103,7 @@ def prepare(layout: RuntimeLayout, *, nonce: str | None = None,
         "Do Again regular-ChatGPT verification (no Codex CLI or browser automation). "
         "Use the connected GitHub tools to create exactly ONE file at " + path
         + " on the dedicated branch " + layout.branch + " of the Git repository "
-        + str(layout.repo) + ". The file content must be this exact JSON: "
+        + slug + ". The file content must be this exact JSON: "
         + json.dumps(request, sort_keys=True, separators=(",", ":"))
         + ". Do not edit the worktree, apply to production, submit real applications, "
         "or invent a receipt. After publishing, inspect the matching "
@@ -125,6 +146,7 @@ def observe(layout: RuntimeLayout, request_id: str, *, runner=None) -> dict[str,
     request = original.get("request")
     if (original.get("transport") != "regular_chatgpt"
             or original.get("repository") != str(layout.repo)
+            or original.get("github_repository") != _github_slug(layout)
             or original.get("remote") != layout.remote
             or original.get("control_branch") != layout.branch
             or not isinstance(request, dict)
