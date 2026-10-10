@@ -33,7 +33,7 @@ class ControllerTimeoutTests(unittest.TestCase):
         with (
             patch.object(browser, "_assistant_snapshot", return_value={"busy": False}),
             patch.object(browser, "_context_limit_warning", return_value=""),
-            patch.object(cdp, "evaluate", side_effect=["ready", cdp.CdpTimeoutError("CDP Runtime.evaluate response timed out")]) as evaluate,
+            patch.object(cdp, "evaluate", side_effect=["ready", True, cdp.CdpTimeoutError("CDP Runtime.evaluate response timed out")]) as evaluate,
             patch.object(cdp, "insert_text") as insert,
             patch.object(cdp, "click_send") as enter,
             patch.object(browser.time, "sleep"),
@@ -42,12 +42,12 @@ class ControllerTimeoutTests(unittest.TestCase):
                 browser.send_message(self.target, "DO_AGAIN_TEST id=unique", wait_for_response=False)
         insert.assert_called_once()
         enter.assert_called_once()
-        self.assertEqual(evaluate.call_count, 2)  # No duplicate click after an uncertain submit.
+        self.assertEqual(evaluate.call_count, 3)  # One readiness check, one post-click observation.
 
     def test_former_fallback_click_is_never_attempted(self):
-        # The former click fallback is unreachable even when the composer
-        # never clears; only the original Enter may have caused an effect.
-        outcomes = ["ready"] + [False] * 20 + [cdp.CdpTimeoutError("CDP Runtime.evaluate response timed out")]
+        # The submit button was ready and clicked exactly once; never retry
+        # merely because the composer never clears.
+        outcomes = ["ready", True] + [False] * 20
         with (
             patch.object(browser, "_assistant_snapshot", return_value={"busy": False}),
             patch.object(browser, "_context_limit_warning", return_value=""),
@@ -60,13 +60,13 @@ class ControllerTimeoutTests(unittest.TestCase):
                 browser.send_message(self.target, "DO_AGAIN_TEST id=clicked", wait_for_response=False)
         insert.assert_called_once()
         enter.assert_called_once()
-        self.assertEqual(evaluate.call_count, 21)
+        self.assertEqual(evaluate.call_count, 22)
 
     def test_enter_then_no_send_button_is_uncertain(self):
         with (
             patch.object(browser,"_assistant_snapshot",return_value={"busy":False}),
             patch.object(browser,"_context_limit_warning",return_value=""),
-            patch.object(cdp,"evaluate",side_effect=["ready"]+[False]*20+["no_button"]) as evaluate,
+            patch.object(cdp,"evaluate",side_effect=["ready",True]+[False]*20) as evaluate,
             patch.object(cdp,"insert_text") as insert,
             patch.object(cdp,"click_send") as enter,
             patch.object(browser.time,"sleep"),
