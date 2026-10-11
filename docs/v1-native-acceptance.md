@@ -114,7 +114,12 @@ The grant rejects an unrecognized mode or unexpected fields.
 
 The browser's genuine document focus and visibility checks remain mandatory:
 no forced window activation, blind Send, manual challenge bypass, second click,
-or retry after uncertain dispatch. A background tab that cannot prove focus
-is a blocked transport, not passing live canary evidence.
+or retry after uncertain dispatch. Before nonce reservation, a separate
+`tools/preflight_live_canary_browser.py` command inspects only existing Chrome
+targets and reports the background focus block without launching a browser,
+creating a chat, or touching the one-shot grant. A passing preflight on an
+already focused tab is PROVISIONAL; it cannot establish focus for the fresh
+canary tab, and the actual send gate must still pass. A blocked preflight
+means no new canary grant or admin installation should be attempted.
 Background authentication alone does not satisfy the two-task release gate
 or authorize production or changes to Sonary/jobpipe.

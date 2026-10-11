@@ -78,6 +78,64 @@ def _protected_parent_state(installed: dict, *, rpc=None) -> dict:
     return statuses["_doagain_da"]
 
 
+
+def preflight_background_delivery(*, browser=None, cdp_module=None) -> dict:
+    """Read-only feasibility check before consuming any live canary nonce.
+
+    Inspect ONLY existing Chrome/ChatGPT targets. Never launch Chrome, create
+    a tab, activate a target/window, write a journal, or attempt a Send.
+    A focused existing tab is only provisional: a fresh tab may lose focus.
+    """
+    from ..browser import runtime as default_browser, cdp as default_cdp
+    browser = default_browser if browser is None else browser
+    cdp_module = default_cdp if cdp_module is None else cdp_module
+
+    def outcome(state, reason):
+        return {"state": state, "reason": reason, "mode": "background",
+                "read_only": True, "nonce_consumed": False,
+                "message_submitted": False, "delivery_verified": False}
+
+    try:
+        config = browser.load_config()
+        status = browser.browser_status(verify_session=False)
+        if (config.get("preferred_mode") != "background"
+                or status.get("mode") != "background"
+                or status.get("running") is not True
+                or status.get("authenticated") is not True
+                or status.get("auth_required") is True):
+            return outcome("blocked", "dedicated background Chrome is not authenticated and running")
+        port = status.get("port")
+        if type(port) is not int or not 1 <= port <= 65535:
+            return outcome("blocked", "dedicated Chrome CDP port is unavailable")
+        targets = [target for target in cdp_module.targets(port)
+                   if target.url.startswith("https://chatgpt.com/")]
+        if not targets:
+            return outcome("blocked", "no existing ChatGPT tab to inspect without opening a tab")
+        expression = """(() => ({
+            focused: document.hasFocus() === true,
+            visible: document.visibilityState === 'visible',
+            composer: !!document.querySelector(
+                '#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]'),
+            challenge: !!document.querySelector('iframe[src*="challenges.cloudflare.com"],.cf-turnstile')
+                || /just a moment|verify you are human|checking your browser/i.test(document.title)
+        }))()"""
+        for target in targets:
+            observed = cdp_module.evaluate(target, expression, timeout=10.0)
+            if (isinstance(observed, dict)
+                    and observed.get("focused") is True
+                    and observed.get("visible") is True
+                    and observed.get("composer") is True
+                    and observed.get("challenge") is False):
+                return outcome("preflight_eligible",
+                    "existing tab has document focus; fresh-tab dispatch is NOT yet proven")
+        return outcome("blocked",
+            "existing ChatGPT tabs are unfocused, hidden, challenged or lack composer; "
+            "background Send would fail its immutable focus gate")
+    except Exception:
+        return outcome("blocked",
+            "read-only Chrome/CDP observation failed; no effect was attempted")
+
+
 def bootstrap_live_canary(
     installed: dict,
     *,
@@ -101,6 +159,14 @@ def bootstrap_live_canary(
             or not re.fullmatch(r"[0-9a-f]{40}", str(baseline))):
         raise ExecutionBlocked("canary bootstrap needs maintenance-only operator and exact baseline")
     status = _protected_parent_state(installed)
+    if allow_background:
+        # This is an early NEGATIVE gate, not send readiness. It may reject
+        # an unfocused GUI session without reserving a disposable identity.
+        # send_message independently checks the actual fresh target.
+        preflight = preflight_background_delivery(browser=browser)
+        if preflight["state"] != "preflight_eligible":
+            raise ExecutionBlocked("background Chrome preflight blocked before canary nonce: "
+                                   + preflight["reason"])
     nonce = secrets.token_hex(12) if nonce is None else nonce
     if not re.fullmatch(r"[0-9a-f]{24}", str(nonce)):
         raise ExecutionBlocked("invalid canary bootstrap nonce")
