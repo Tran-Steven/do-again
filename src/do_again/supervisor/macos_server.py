@@ -308,8 +308,14 @@ class ProjectBroker:
         if intent not in {'active','paused','maintenance','stopped'}:
             raise ExecutionBlocked('invalid operator intent')
         with self.admission():
-            if intent == 'active' and (not self.config.get('production_ready',False) or not self._verified()):
-                raise ExecutionBlocked('resume requires migrated entrypoints and verified native enforcement')
+            if intent == 'active':
+                if not self._verified():
+                    raise ExecutionBlocked('resume requires verified native enforcement')
+                if self.config.get('development_scope') is not None:
+                    from .jobpipe_development import require_broker_jobpipe_development
+                    require_broker_jobpipe_development(self)
+                elif self.config.get('production_ready') is not True:
+                    raise ExecutionBlocked('resume requires sealed production or jobpipe-only development admission')
             status = self.registry.status(self.project.repo)
             epoch = self.registry.set_intent(self.project.repo, intent, goal_revision=status['goal_revision'])
             return {'intent':intent,'epoch':epoch}

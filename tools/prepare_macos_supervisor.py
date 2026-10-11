@@ -1,6 +1,7 @@
 """Build a private, hash-sealed installation bundle without administrator access."""
 from __future__ import annotations
 import argparse
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -124,9 +125,11 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False):
     if canary_grant is not None and codex_grant is not None:
         raise ValueError('browser and Codex canary grants cannot coexist')
+    if jobpipe_offline_development and (canary_grant is not None or codex_grant is not None or classify_canary_partial):
+        raise ValueError('jobpipe offline development and synthetic canary grants cannot coexist')
     if codex_grant is not None and classify_canary_partial:
         raise ValueError('Codex canary cannot inherit browser partial-publication disposition')
     if classify_canary_partial and canary_grant is None:
@@ -280,6 +283,19 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                                       else 'sonary-enrolled-maintenance-v1')
         else:
             project['goal_revision']=status['goal_revision']
+    if jobpipe_offline_development:
+        from do_again.supervisor.jobpipe_development import require_jobpipe_grant
+        from do_again.supervisor.macos_execution import project_from_dict
+        jobpipe_project=next(p for p in projects if p['account']=='_doagain_jp')
+        issued=datetime.now(timezone.utc).replace(microsecond=0)
+        expires=issued+timedelta(days=14)
+        config['development_scope']={
+            'kind':'jobpipe-offline-v1', 'source_sha':source_sha,
+            'project_key':jobpipe_project['key'], 'goal_revision':jobpipe_project['goal_revision'],
+            'issued_at_utc':issued.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'expires_at_utc':expires.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'network_access':False, 'application_submissions':False}
+        require_jobpipe_grant(config,project_from_dict(jobpipe_project),now=issued)
     selected_grant=canary_grant if canary_grant is not None else codex_grant
     if selected_grant is not None:
         grant_path=Path(selected_grant).resolve(strict=True)
@@ -363,10 +379,12 @@ if __name__=='__main__':
     grants=parser.add_mutually_exclusive_group()
     grants.add_argument('--canary-grant',type=Path)
     grants.add_argument('--codex-grant',type=Path)
+    grants.add_argument('--jobpipe-offline-development',action='store_true',help='Seal a 14-day jobpipe-only offline coding grant; does not resume or start workers')
     parser.add_argument('--classify-canary-partial-publication',action='store_true')
     args=parser.parse_args()
     print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
                              dependency_lock=args.dependency_lock,canary_grant=args.canary_grant,
                              codex_grant=args.codex_grant,
                              classify_canary_partial=args.classify_canary_partial_publication,
-                              sonary_repo=args.sonary_repo),indent=2))
+                              sonary_repo=args.sonary_repo,
+                              jobpipe_offline_development=args.jobpipe_offline_development),indent=2))

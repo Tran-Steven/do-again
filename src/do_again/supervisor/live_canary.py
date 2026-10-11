@@ -66,7 +66,12 @@ def effect_authorized(broker):
         codex.check()
         return True
     if canary is None:
+        if broker.config.get('development_scope') is not None:
+            from .jobpipe_development import require_broker_jobpipe_development
+            return require_broker_jobpipe_development(broker)
         return broker.config.get('production_ready') is True
+    if broker.config.get('development_scope') is not None:
+        raise ExecutionBlocked('offline development and canary authorities cannot coexist')
     canary.check()
     return True
 

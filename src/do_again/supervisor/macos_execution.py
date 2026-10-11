@@ -107,6 +107,12 @@ def load_configuration(path: Path) -> dict[str, Any]:
     operator = pwd.getpwuid(config['operator_uid'])
     if operator.pw_gid != config['operator_gid'] or operator.pw_dir != config['operator_home']:
         raise ExecutionBlocked('operator identity changed')
+    if config.get('development_scope') is not None:
+        from .jobpipe_development import require_jobpipe_grant
+        candidate = next((p for p in projects if p.get('account') == '_doagain_jp'), None)
+        if candidate is None:
+            raise ExecutionBlocked('offline development project is missing')
+        require_jobpipe_grant(config, project_from_dict(candidate))
     for item in projects:
         from .github import validate_control_branch
         validate_control_branch(item.get('control_branch', 'operator-control'))

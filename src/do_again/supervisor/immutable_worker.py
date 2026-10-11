@@ -47,7 +47,7 @@ def validate_worker_context(
         raise OperatorError("worker requires its unprivileged operator identity")
     if config.get("operator_uid") != uid:
         raise OperatorError("worker operator identity differs from the installed supervisor")
-    if (config.get('schema_version') != 1 or config.get('production_ready') is not True
+    if (config.get('schema_version') != 1 or type(config.get('production_ready')) is not bool
             or not isinstance(config.get('source_sha'), str)
             or SHA40.fullmatch(config['source_sha']) is None):
         raise OperatorError('installed production authority or source identity is invalid')
@@ -82,6 +82,17 @@ def validate_worker_context(
             or not 400 <= project['uid'] < 500 or project['uid'] == uid
             or len({p.get('uid') for p in projects}) != len(projects)):
         raise OperatorError('dedicated project identity or workspace binding differs')
+    if config.get('development_scope') is not None:
+        from .jobpipe_development import require_jobpipe_grant
+        from .macos_execution import ExecutionBlocked
+        from types import SimpleNamespace
+        try:
+            require_jobpipe_grant(config, SimpleNamespace(account=project['account'], repo=repo,
+                                                       key=full_key), status)
+        except ExecutionBlocked as exc:
+            raise OperatorError(str(exc)) from exc
+    elif config.get('production_ready') is not True:
+        raise OperatorError('worker requires root-sealed production or jobpipe development authority')
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     base = Path(home_value) / ".do_again" / "projects" / key
     control, state = base / "sealed-control", base / "state"
@@ -99,7 +110,7 @@ def validate_worker_context(
             and isinstance(row.get('request_id'),str) and row['request_id'] in inflight for row in unresolved))
     if (status.get("source_sha") != config.get("source_sha")
             or status.get("operator_intent") != "active"
-            or status.get("production_ready") is not True
+            or status.get("production_ready") is not config.get("production_ready")
             or status.get("enforcement_verified") is not True
             or status.get("enforcement_blocker") is not None
             or (unresolved != [] and not known_inflight)):

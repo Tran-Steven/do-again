@@ -59,6 +59,14 @@ def validate_project_scope(config, previous=None):
                 or type(p.get('uid')) is not int or not 400<=p['uid']<500
                 or p.get('gid')!=p['uid']):
             raise RuntimeError('protected project repository or identity scope changed')
+    if config.get('development_scope') is not None:
+        from do_again.supervisor.jobpipe_development import require_jobpipe_grant
+        from do_again.supervisor.macos_execution import project_from_dict
+        target=next(p for p in projects if p['account']=='_doagain_jp')
+        try:
+            require_jobpipe_grant(config,project_from_dict(target))
+        except Exception as exc:
+            raise RuntimeError('root-sealed jobpipe offline grant is invalid') from exc
     if previous is None:
         if len(projects)!=2 or config.get('scope_enrollment') is not None:
             raise RuntimeError('initial protected installation cannot implicitly enroll Sonary')
