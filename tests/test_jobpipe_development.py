@@ -119,5 +119,74 @@ class OfflineJobpipeDevelopmentTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):require_broker_jobpipe_development(broker,now=self.now)
 
 
+    def test_effect_authorization_and_resume_are_jobpipe_only(self):
+        from contextlib import nullcontext
+        from do_again.supervisor.live_canary import effect_authorized
+        from do_again.supervisor.macos_server import ProjectBroker
+        statuses={self.repo:dict(self.status),
+                  Path(self.parent["repo"]):{"intent":"maintenance"},
+                  Path(self.sonary["repo"]):{"intent":"maintenance"}}
+        registry=SimpleNamespace(status=lambda repo:statuses[repo],
+                                 set_intent=Mock(return_value=2))
+        broker=SimpleNamespace(config=self.config,project=self.project,
+            registry=registry,ledger=SimpleNamespace(pending=lambda key:[]),
+            admission=nullcontext,_verified=lambda:True)
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        self.config["development_scope"]["issued_at_utc"]=(now-timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.config["development_scope"]["expires_at_utc"]=(now+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertTrue(effect_authorized(broker))
+        result=ProjectBroker.operator_intent(broker,"active")
+        self.assertEqual(result,{"intent":"active","epoch":2})
+        registry.set_intent.assert_called_once_with(self.repo,"active",goal_revision=self.goal)
+        for sibling in (self.parent,self.sonary):
+            registry.set_intent.reset_mock()
+            sibling_broker=SimpleNamespace(**{**vars(broker),
+                "project":SimpleNamespace(account=sibling["account"],
+                    repo=Path(sibling["repo"]),key=sibling["key"])})
+            with self.assertRaises(ExecutionBlocked):
+                ProjectBroker.operator_intent(sibling_broker,"active")
+            registry.set_intent.assert_not_called()
+        statuses[Path(self.sonary["repo"])]={"intent":"active"}
+        with self.assertRaises(ExecutionBlocked):
+            ProjectBroker.operator_intent(broker,"active")
+
+    def test_immutable_worker_accepts_only_the_sealed_jobpipe_grant(self):
+        from do_again.core.schema import OperatorError
+        from do_again.supervisor.immutable_worker import validate_worker_context, WORKER_OPERATIONS
+        from do_again.supervisor.macos_execution import EXECUTION_ROOT
+        cfg=copy.deepcopy(self.config)
+        cfg.update(schema_version=1,operator_uid=501,python="/sealed/current/runtimes/python/bin/python3")
+        cfg["projects"][0].update(uid=401,gid=401)
+        cfg["projects"][1].update(uid=402,gid=402)
+        cfg["projects"][2].update(uid=403,gid=403)
+        cfg["projects"][1]["worktree"]=str(EXECUTION_ROOT/self.key/"worktree")
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        cfg["development_scope"]["issued_at_utc"]=(now-timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cfg["development_scope"]["expires_at_utc"]=(now+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        base=Path("/sealed")
+        status={
+            "source_sha":cfg["source_sha"],"operator_intent":"active",
+            "production_ready":False,"enforcement_verified":True,
+            "enforcement_blocker":None,"unresolved_executions":[],
+            "inflight_request_ids":[],"goal_revision":self.goal,"epoch":2,
+            "authority":{"repo_head":"d"*40},
+            "worktree":cfg["projects"][1]["worktree"],"uid":402,
+        }
+        policy={"worker_policy_schema":1,"control_branch":"operator-control",
+                "allowed_operations":list(WORKER_OPERATIONS)}
+        kwargs=dict(installed_root=base,
+                    module_path=base/"current/package/do_again/supervisor/immutable_worker.py",
+                    interpreter=base/"current/runtimes/python/bin/python3",
+                    uid=501,euid=501)
+        self.assertEqual(validate_worker_context("jobpipe",cfg,status,policy,**kwargs)[0],self.repo)
+        tampered=copy.deepcopy(cfg);tampered["development_scope"]["application_submissions"]=True
+        with self.assertRaises(OperatorError):
+            validate_worker_context("jobpipe",tampered,status,policy,**kwargs)
+        with self.assertRaises(OperatorError):
+            validate_worker_context("Sonary",cfg,status,policy,**kwargs)
+        with self.assertRaises(OperatorError):
+            validate_worker_context("do-again",cfg,status,policy,**kwargs)
+
+
 if __name__=="__main__":
     unittest.main()
