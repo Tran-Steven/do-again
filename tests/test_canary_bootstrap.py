@@ -114,14 +114,34 @@ class CanaryBootstrapTests(unittest.TestCase):
         self.browser.send_message.assert_called_once()
         self.closed.assert_not_called()
 
+    def test_unfocused_background_preflight_blocks_without_consuming_identity(self):
+        self.browser.ensure_browser_running.return_value = {
+            "port": 9224, "mode": "background", "authenticated": True,
+            "session_ready": True}
+        with patch("do_again.supervisor.canary_bootstrap.preflight_background_delivery",
+                   return_value={"state":"blocked","reason":"no focused tab"}) as preflight:
+            with self.assertRaisesRegex(ExecutionBlocked, "before canary nonce"):
+                bootstrap_live_canary(self.config, baseline=self.baseline,
+                    nonce=self.nonce, output=self.output, browser=self.browser,
+                    allow_background=True)
+        preflight.assert_called_once_with(browser=self.browser)
+        self.assertFalse(self.output.exists())
+        self.assertFalse((self.home/".do_again/canary-bootstrap"/(self.nonce+".json")).exists())
+        self.create.assert_not_called()
+        self.browser.send_message.assert_not_called()
+        self.browser.register_project.assert_not_called()
+
     def test_explicit_background_bootstrap_seals_transport_and_remains_one_shot(self):
         self.browser.ensure_browser_running.return_value = {
             "port": 9224, "mode": "background", "authenticated": True,
             "session_ready": True}
         self.browser.send_message.side_effect = self.succeed
-        result = bootstrap_live_canary(self.config, baseline=self.baseline,
-            nonce=self.nonce, output=self.output, browser=self.browser,
-            allow_background=True)
+        with patch("do_again.supervisor.canary_bootstrap.preflight_background_delivery",
+                   return_value={"state":"preflight_eligible"}) as preflight:
+            result = bootstrap_live_canary(self.config, baseline=self.baseline,
+                nonce=self.nonce, output=self.output, browser=self.browser,
+                allow_background=True)
+        preflight.assert_called_once_with(browser=self.browser)
         self.assertEqual(result["browser_mode"], "background")
         grant = json.loads(self.output.read_text())
         self.assertEqual(grant["browser_mode"], "background")
@@ -140,7 +160,9 @@ class CanaryBootstrapTests(unittest.TestCase):
             "session_ready": True}
         self.browser.send_message.side_effect = BrowserPreDispatchBlocked(
             "unfocused GUI automation tab; no browser submission attempted")
-        with self.assertRaises(BrowserPreDispatchBlocked):
+        with (patch("do_again.supervisor.canary_bootstrap.preflight_background_delivery",
+                    return_value={"state":"preflight_eligible"}),
+              self.assertRaises(BrowserPreDispatchBlocked)):
             bootstrap_live_canary(self.config, baseline=self.baseline,
                 nonce=self.nonce, output=self.output, browser=self.browser,
                 allow_background=True)
