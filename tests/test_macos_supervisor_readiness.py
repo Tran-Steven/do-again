@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import importlib.util
 import io
 import json
@@ -66,7 +67,7 @@ class SupervisorReadinessTests(unittest.TestCase):
                 calls.append(self.path)
                 if failure_once and not refused[0]:
                     refused[0] = True
-                    raise ConnectionRefusedError(111, "refused")
+                    raise ConnectionRefusedError(errno.ECONNREFUSED, "refused")
 
             def sendall(self, raw):
                 self.request = json.loads(raw)
