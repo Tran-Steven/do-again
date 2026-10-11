@@ -820,86 +820,84 @@ return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: 
 
 
 def _ensure_high_reasoning(target: cdp.Target) -> None:
-    """Require the actual ChatGPT High UI setting before a development chat Send.
+    """Select and verify ChatGPT High before a model-authored development Send.
 
-    A prompt saying "think deeply" does not select the product's reasoning
-    level. This code only operates the dedicated browser's visible model picker
-    and three-position effort slider; unknown UI or unsupported accounts stop
-    before any prompt dispatch. It does not change the selected model family.
+    Product-level effort must be selected in the real UI; prompt instructions
+    cannot do it. Unknown or unavailable controls fail *before* any Send.
+    Keyboard End is verified on the Oct 2026 three-stop slider; a pointer click
+    was rejected because the model dropdown overlays the High tick.
     """
     opened = cdp.evaluate(target, r"""(() => {
-        const options=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+        const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
             .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled;});
-        if(options.length!==1)return 'missing_picker';
-        const button=options[0];
-        if(button.getAttribute('aria-expanded')==='true')return 'already_open';
-        button.click();
+        if(buttons.length!==1)return 'missing_picker';
+        if(buttons[0].getAttribute('aria-expanded')==='true')return 'already_open';
+        buttons[0].click();
         return 'opened';
     })()""", timeout=10.0, user_gesture=True)
     if opened not in {'opened', 'already_open'}:
-        raise BrowserPreDispatchBlocked("ChatGPT model picker is unavailable; refusing non-High reasoning")
+        raise BrowserPreDispatchBlocked("ChatGPT High reasoning picker is unavailable; no prompt submitted")
     try:
-        observation = None
+        observed = None
         for _ in range(12):
-            observation = cdp.evaluate(target, r"""(() => {
+            observed = cdp.evaluate(target, r"""(() => {
                 const sliders=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
                     .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
                 if(sliders.length!==1)return null;
-                const slider=sliders[0],track=slider.closest('[data-orientation="horizontal"][aria-disabled="false"]');
+                const el=sliders[0],track=el.closest('[data-orientation="horizontal"][aria-disabled="false"]');
                 if(!track || track.querySelectorAll('[role="slider"]').length!==1)return null;
-                const rect=track.getBoundingClientRect();
-                const ticks=track.querySelectorAll('[data-selected]');
-                if(ticks.length!==3 || rect.width<70 || rect.height<8)return null;
-                const x=rect.right-13,y=rect.top+rect.height/2;
-                const hit=document.elementFromPoint(x,y);
-                if(!hit || !(track===hit || track.contains(hit)))return null;
-                return {value:slider.getAttribute('aria-valuenow'),
-                    min:slider.getAttribute('aria-valuemin'),
-                    max:slider.getAttribute('aria-valuemax'),x,y};
+                const r=track.getBoundingClientRect();
+                if(track.querySelectorAll('[data-selected]').length!==3 || r.width<70 || r.height<8)return null;
+                return {value:el.getAttribute('aria-valuenow'),
+                    min:el.getAttribute('aria-valuemin'),max:el.getAttribute('aria-valuemax')};
             })()""", timeout=10.0)
-            if isinstance(observation, dict):
+            if isinstance(observed, dict):
                 break
             time.sleep(0.15)
-        if (not isinstance(observation, dict)
-                or observation.get('min') != '0' or observation.get('max') != '2'
-                or observation.get('value') not in {'0', '1', '2'}):
+        if (not isinstance(observed, dict) or observed.get('min')!='0'
+                or observed.get('max')!='2'
+                or observed.get('value') not in {'0','1','2'}):
             raise BrowserPreDispatchBlocked(
-                "ChatGPT High reasoning slider cannot be verified; no prompt submitted")
-        if observation['value'] != '2':
-            point = {k: observation.get(k) for k in ('x', 'y')}
-            if any(type(v) not in (float, int) or not 0 <= v < 100000 for v in point.values()):
-                raise BrowserPreDispatchBlocked("ChatGPT High endpoint is unavailable")
-            common={'x':point['x'],'y':point['y'],'button':'left','clickCount':1}
-            cdp.target_call(target, 'Input.dispatchMouseEvent',
-                            {'type':'mousePressed',**common,'buttons':1},timeout=10.0)
-            cdp.target_call(target, 'Input.dispatchMouseEvent',
-                            {'type':'mouseReleased',**common,'buttons':0},timeout=10.0)
+                "ChatGPT High reasoning slider is unavailable or changed; no prompt submitted")
+        if observed['value']!='2':
+            focused=cdp.evaluate(target, r"""(() => {
+                const sliders=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
+                    .filter(el=>el.getBoundingClientRect().width>0);
+                if(sliders.length!==1)return false;
+                sliders[0].focus({preventScroll:true});
+                return document.activeElement===sliders[0];
+            })()""",timeout=10.0,user_gesture=True)
+            if focused is not True:
+                raise BrowserPreDispatchBlocked(
+                    "ChatGPT High slider could not take keyboard focus; no prompt submitted")
+            for kind in ('keyDown','keyUp'):
+                cdp.target_call(target,'Input.dispatchKeyEvent',{
+                    'type':kind,'key':'End','code':'End',
+                    'windowsVirtualKeyCode':35,'nativeVirtualKeyCode':35},timeout=10.0)
         verified=False
         for _ in range(12):
-            verified = cdp.evaluate(target, r"""(() => {
+            verified=cdp.evaluate(target, r"""(() => {
                 const picker=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
-                   .filter(el=>el.getBoundingClientRect().width>0);
+                  .filter(el=>el.getBoundingClientRect().width>0);
                 if(picker.length!==1)return false;
                 const slider=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
-                   .filter(el=>el.getBoundingClientRect().width>0);
+                  .filter(el=>el.getBoundingClientRect().width>0);
                 if(slider.length===1)return slider[0].getAttribute('aria-valuenow')==='2'
                     && slider[0].getAttribute('aria-valuemax')==='2';
                 return (picker[0].innerText||'').trim()==='High';
             })()""",timeout=10.0) is True
-            if verified:
-                break
+            if verified:break
             time.sleep(0.15)
         if not verified:
             raise BrowserPreDispatchBlocked(
-                "ChatGPT did not confirm High reasoning after selection; no prompt submitted")
+                "ChatGPT did not verify High after keyboard selection; no prompt submitted")
     finally:
-        if opened == 'opened':
-            # Dismiss only our menu; never select another model or Send.
-            cdp.evaluate(target, r"""(() => {
-                const btn=document.querySelector('button[aria-label="Select ChatGPT model"]');
-                if(btn && btn.getAttribute('aria-expanded')==='true')btn.click();
-                return true;
-            })()""",timeout=10.0,user_gesture=True)
+        # Escape dismisses Radix's menu without clicking an overlapping model
+        # radio item, changing the selected model, or sending any prompt.
+        for kind in ('keyDown','keyUp'):
+            cdp.target_call(target,'Input.dispatchKeyEvent',{
+                'type':kind,'key':'Escape','code':'Escape',
+                'windowsVirtualKeyCode':27,'nativeVirtualKeyCode':27},timeout=10.0)
 
 
 def _require_send_target_focus(target: cdp.Target) -> None:
