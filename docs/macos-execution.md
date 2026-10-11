@@ -575,3 +575,25 @@ The generated grant is intended as input to
 administrator approval can install it. Run post-install native confinement
 probes before activating its isolated worker; evidence from a previous installed
 source does not suffice.
+
+
+### Optional Sonary third-project enrollment (source candidate only)
+
+The original maintenance supervisor has two protected project identities
+(Do Again UID 401 and jobpipe UID 402 on the operator's Mac). Sonary's
+legacy `do-again list` entry is **not** a protected enrollment. Source support
+for a third identity is opt-in: the bundle preparer accepts
+`--sonary-repo /Users/<operator>/Sonary` only for a previously installed
+maintenance supervisor and checks the exact Sonary GitHub remote, operator-home
+path, and separately allocated UID/GID. The installer must verify an original
+maintenance source marker, identical existing parent scopes, and a single
+add-only Sonary scope before making any effects. No project is automatically
+enrolled during a normal two-parent upgrade, and later upgrades must explicitly
+retain Sonary. A rollback may not silently remove an enrolled third scope.
+
+Preparing code **does not** activate the project. After reviewing an exact
+candidate and full CI, an administrator-approved package installation is still
+required, followed by Sonary's independent UID isolation probe and synthetic
+worker qualification. `production_ready=false` and Sonary's maintenance intent
+stay in force. This does not prove browser delivery, existing ChatGPT chat
+takeover, real audio recovery, or permission to deploy or resume Sonary.

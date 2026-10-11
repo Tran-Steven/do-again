@@ -259,6 +259,48 @@ else:
         self.assertEqual((current/'version').read_text(),'new')
         self.assertEqual((Path(ticket['retained_path'])/'version').read_text(),'old')
 
+
+    def test_sonary_enrollment_is_explicit_add_only_and_preserves_parent_snapshots(self):
+        from do_again.supervisor.authority import project_identity
+        from do_again.supervisor.macos_execution import EXECUTION_ROOT
+        home=Path('/Users/fixture')
+        def scoped(name,account,uid):
+            repo=home/name;key=project_identity(repo)
+            return {'repo':str(repo),'key':key,'uid':uid,'gid':uid,'account':account,
+                    'worktree':str(EXECUTION_ROOT/key/'worktree'),
+                    'github_repository':'Tran-Steven/'+name,
+                    'source_sha':str(uid)*40,'goal_revision':'maintenance-fixture'}
+        parents=[scoped('do-again','_doagain_da',401),scoped('jobpipe','_doagain_jp',402)]
+        old={'source_sha':'a'*40,'operator_home':str(home),'production_ready':False,
+             'projects':parents}
+        next_cfg={**old,'source_sha':'b'*40,'projects':[dict(p) for p in parents]}
+        self.assertFalse(self.module.validate_project_scope(old))
+        self.assertFalse(self.module.validate_project_scope(next_cfg,old))
+        sonary=scoped('Sonary','_doagain_so',403)
+        new={**next_cfg,'projects':[ *next_cfg['projects'],sonary ],
+             'scope_enrollment':{'kind':'sonary_add_only','previous_source_sha':'a'*40}}
+        self.assertTrue(self.module.validate_project_scope(new,old))
+        self.assertFalse(self.module.validate_project_scope(
+            {**new,'source_sha':'c'*40,'scope_enrollment':None},new))
+        for candidate in (
+            {**new,'scope_enrollment':None},
+            {**new,'scope_enrollment':{'kind':'sonary_add_only','previous_source_sha':'c'*40}},
+            {**new,'projects':[parents[0],sonary]},
+            {**new,'projects':[parents[0],{**parents[1],'source_sha':'c'*40},sonary]},
+            {**new,'projects':[ *parents,{**sonary,'uid':402,'gid':402}]},
+            {**new,'projects':[ *parents,{**sonary,'repo':str(home/'sonary')}]},
+            {**new,'projects':[ *parents,{**sonary,'github_repository':'Tran-Steven/jobpipe'}]},
+            {**new,'projects':[ *parents,{**sonary,'worktree':parents[1]['worktree']}]},
+            {**new,'projects':[ *parents,{**sonary,'account':'_doagain_other'}]},
+            {**new,'projects':[ *parents,sonary,{**sonary,'account':'_doagain_x','uid':404,'gid':404}]},
+        ):
+            with self.subTest(candidate=candidate),self.assertRaises(RuntimeError):
+                self.module.validate_project_scope(candidate,old)
+        with self.assertRaisesRegex(RuntimeError,'scope'):
+            self.module.validate_project_scope(next_cfg,new)
+        with self.assertRaisesRegex(RuntimeError,'implicitly enroll'):
+            self.module.validate_project_scope(new)
+
     def test_account_collision_requires_trusted_provenance_without_mutation(self):
         project={'account':'_doagain_da','uid':400,'gid':400}
         with patch.object(self.module.pwd,'getpwnam',return_value=Mock()),patch.object(self.module,'run') as run:
