@@ -409,8 +409,8 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
         layout = runtime_layout(repo)
         if not layout.browser_enabled:
             raise ServiceError(
-                "end-to-end verification requires browser automation; "
-                "enable it with do-again setup"
+                "unattended verification requires browser automation and a configured ChatGPT browser; "
+                "for normal ChatGPT conversations use do-again chatgpt prepare/check"
             )
         service = service_status(repo)
         if not service.get("running"):
@@ -1042,6 +1042,85 @@ def _browser_action(action: str, *, mode: str = "auto", run_test: bool = True) -
         return 1
 
 
+def _model_action(action: str, *, allow_model_call: bool = False,
+                  nonce: str | None = None, task: int | None = None,
+                  expected_head: str | None = None) -> int:
+    from .model_transport import (
+        CodexTransportBlocked,
+        discover_codex,
+        generate_structured,
+        login_ready,
+    )
+    binary = discover_codex()
+    if action in {"status", "limits"}:
+        from .model_quota import CodexQuotaUnavailable, query_codex_rate_limits
+        authenticated = login_ready(binary) if binary else False
+        status = {"transport": "codex", "installed": binary is not None,
+                  "authenticated": authenticated,
+                  "browser_required": False, "production_enabled": False}
+        if authenticated:
+            try:
+                capacity = query_codex_rate_limits(binary, Path.home().resolve())
+                status["capacity"] = capacity
+                status["model_ready"] = capacity["allowed"] is True
+            except CodexQuotaUnavailable:
+                status["capacity"] = {"allowed": None, "reason": "quota_observation_unavailable"}
+                status["model_ready"] = False
+        else:
+            status["model_ready"] = False
+        print(json.dumps(status, sort_keys=True))
+        return 0 if status["model_ready"] else 2
+    if action == "canary-draft":
+        from .model_canary import (
+            CodexCanaryProposalRejected,
+            canary_model_schema,
+            canary_task_prompt,
+            prepare_canary_edit,
+        )
+        try:
+            if not allow_model_call:
+                raise CodexTransportBlocked("canary draft requires explicit model-call authorization")
+            prompt = canary_task_prompt(nonce=nonce, task=task)
+            proposal = generate_structured(
+                prompt, canary_model_schema(),
+                allow_model_call=True, binary=binary, timeout_seconds=180,
+            )
+            request = prepare_canary_edit(
+                proposal, nonce=nonce, task=task, expected_head=expected_head,
+            )
+        except (CodexTransportBlocked, CodexCanaryProposalRejected) as exc:
+            print(f"do-again: model: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps({
+            "state": "proposal_only",
+            "published": False,
+            "executed": False,
+            "request": request,
+        }, indent=2, sort_keys=True))
+        return 0
+    if action == "smoke":
+        try:
+            response = generate_structured(
+                "Return exactly the word ready in the reply field. Do not read files, use tools, or perform other actions.",
+                {"type": "object",
+                 "properties": {"reply": {"type": "string", "maxLength": 64}},
+                 "required": ["reply"], "additionalProperties": False},
+                allow_model_call=allow_model_call,
+                binary=binary,
+                timeout_seconds=120,
+            )
+        except CodexTransportBlocked as exc:
+            print(f"do-again: model: {exc}", file=sys.stderr)
+            return 1
+        if response.get("reply", "").strip().lower() != "ready":
+            print("do-again: model: structured response did not match smoke marker", file=sys.stderr)
+            return 1
+        print("CODEX_READ_ONLY_SMOKE_OK")
+        return 0
+    print("do-again: model: unknown transport action", file=sys.stderr)
+    return 2
+
+
 def _chat_cleanup_action(
     action: str,
     path: str,
@@ -1122,7 +1201,7 @@ def main() -> int:
     )
     verify_parser = sub.add_parser(
         "verify",
-        help="Verify the ChatGPT-to-control-to-local-to-receipt round trip",
+        help="Verify unattended ChatGPT browser round trip; use chatgpt prepare/check for regular chat",
     )
     verify_parser.add_argument("path", nargs="?", default=".")
     verify_parser.add_argument(
@@ -1131,6 +1210,21 @@ def main() -> int:
         default=90.0,
         help="Maximum seconds to wait for the end-to-end verification receipt",
     )
+    # Browser-free option for an ordinary ChatGPT chat with GitHub access.
+    # Does not contact Codex, invoke CDP, activate a worker, or submit an effect.
+    chatgpt_parser = sub.add_parser(
+        "chatgpt", help="Use the regular ChatGPT conversation + Git receipts (no Codex)"
+    )
+    chatgpt_sub = chatgpt_parser.add_subparsers(dest="chatgpt_command", required=True)
+    chatgpt_prepare = chatgpt_sub.add_parser(
+        "prepare", help="Prepare one browser-free status verification prompt"
+    )
+    chatgpt_prepare.add_argument("path", nargs="?", default=".")
+    chatgpt_check = chatgpt_sub.add_parser(
+        "check", help="Read-only reconcile the original ChatGPT Git receipt"
+    )
+    chatgpt_check.add_argument("request_id")
+    chatgpt_check.add_argument("path", nargs="?", default=".")
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
     summary_parser = sub.add_parser(
@@ -1241,6 +1335,24 @@ def main() -> int:
     run_parser.add_argument("path", nargs="?", default=".")
     run_parser.add_argument("--once", action="store_true")
 
+    model_parser = sub.add_parser(
+        "model",
+        help="Optional non-browser Codex transport readiness and read-only inference smoke",
+    )
+    model_sub = model_parser.add_subparsers(dest="model_command", required=True)
+    model_sub.add_parser("status", help="Check Codex login and account capacity without inference")
+    model_sub.add_parser("limits", help="Read only the authenticated Codex allowance and reset time")
+    model_smoke = model_sub.add_parser("smoke", help="One explicit, read-only Codex inference")
+    model_smoke.add_argument("--allow-model-call", action="store_true",
+        help="Explicitly authorize one model call against your Codex usage allowance")
+    model_canary = model_sub.add_parser("canary-draft",
+        help="Prepare but never publish one exact-head synthetic canary edit request")
+    model_canary.add_argument("--nonce", required=True)
+    model_canary.add_argument("--task", type=int, choices=(1, 2), required=True)
+    model_canary.add_argument("--head", required=True)
+    model_canary.add_argument("--allow-model-call", action="store_true",
+        help="Explicitly authorize one non-browser model proposal")
+
     browser_parser = sub.add_parser(
         "browser",
         help="Advanced browser runtime diagnostics and controls",
@@ -1276,6 +1388,23 @@ def main() -> int:
         )
     if args.command == "verify":
         return verify_project(args.path, timeout_seconds=args.timeout)
+    if args.command == "chatgpt":
+        from .chatgpt_handoff import prepare, observe
+        try:
+            layout = runtime_layout(find_repo(args.path))
+            if args.chatgpt_command == "prepare":
+                outcome = prepare(layout)
+            elif args.chatgpt_command == "check":
+                outcome = observe(layout, args.request_id)
+            else:
+                chatgpt_parser.print_help()
+                return 2
+        except (ServiceError, OSError, ValueError) as exc:
+            print(f"do-again: chatgpt: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(outcome, indent=2, sort_keys=True))
+        return 0 if (args.chatgpt_command == "prepare" or
+                     outcome.get("completed") is True) else 2
     if args.command == "status":
         return status(args.path)
     if args.command == "summary":
@@ -1309,6 +1438,14 @@ def main() -> int:
         return init_project(args.path)
     if args.command in {"start", "stop", "restart", "install", "uninstall"}:
         return _service_action(args.command, args.path)
+    if args.command == "model":
+        return _model_action(
+            args.model_command,
+            allow_model_call=bool(getattr(args, "allow_model_call", False)),
+            nonce=getattr(args, "nonce", None),
+            task=getattr(args, "task", None),
+            expected_head=getattr(args, "head", None),
+        )
     if args.command == "browser":
         return _browser_action(
             args.browser_command,

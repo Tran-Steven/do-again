@@ -108,6 +108,11 @@ class BrowserRuntimeTests(unittest.TestCase):
 
     def test_setup_auto_falls_back_to_background_when_headless_auth_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}):
+                config = load_config()
+                config["allow_visible_fallback"] = True
+                from do_again.browser.runtime import save_config
+                save_config(config)
             fake_binary = Path(tmp) / "chrome"
             fake_binary.write_text("", encoding="utf-8")
             fake_target = cdp.Target("target", "https://chatgpt.com/", "", "ws://127.0.0.1/x")
@@ -148,6 +153,37 @@ class BrowserRuntimeTests(unittest.TestCase):
             with patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}):
                 saved = load_config()
             self.assertEqual(saved["resolved_mode"], "background")
+
+    def test_setup_auto_refuses_headless_auth_failure_without_visible_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_binary = Path(tmp) / "chrome"
+            fake_binary.write_text("", encoding="utf-8")
+            fake_target = cdp.Target("target", "https://chatgpt.com/", "", "ws://127.0.0.1/x")
+            launches = []
+            auth_calls = 0
+
+            def launch(mode, **kwargs):
+                launches.append(mode)
+                return {"pid": 123, "port": 9223, "mode": mode}
+
+            def auth(*args, **kwargs):
+                nonlocal auth_calls
+                auth_calls += 1
+                if auth_calls == 2:
+                    raise BrowserAuthRequired("headless authentication failed")
+                return fake_target, {"prompt": True, "url": "https://chatgpt.com/"}
+
+            with (
+                patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}),
+                patch("do_again.browser.runtime.discover_browser", return_value=fake_binary),
+                patch("do_again.browser.runtime.launch_browser", side_effect=launch),
+                patch("do_again.browser.runtime.stop_browser"),
+                patch("do_again.browser.runtime.wait_for_authenticated", side_effect=auth),
+            ):
+                with self.assertRaisesRegex(BrowserError, "refusing GUI fallback"):
+                    setup_browser(mode="auto", run_iteration_test=False)
+                self.assertEqual(launches, ["visible", "headless"])
+                self.assertIsNone(load_config()["resolved_mode"])
 
     def test_existing_project_chat_is_reused_without_new_message(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -449,6 +485,7 @@ class BrowserRuntimeTests(unittest.TestCase):
                 config = load_config()
                 config["preferred_mode"] = "auto"
                 config["resolved_mode"] = "headless"
+                config["allow_visible_fallback"] = True
                 config["authenticated"] = True
                 save_config(config)
                 statuses = [
@@ -578,6 +615,35 @@ class BrowserRuntimeTests(unittest.TestCase):
             self.assertIn("req-b state=failed", sent)
             self.assertFalse(send_mock.call_args.kwargs["wait_for_response"])
             self.assertEqual(value["response"], "submitted")
+
+    def test_receipt_dispatch_hook_uses_post_rollover_conversation_and_payload(self):
+        import hashlib
+        from do_again.browser import runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            repo=Path(tmp)/'repo';repo.mkdir();events=[]
+            old=cdp.Target('old','https://chatgpt.com/c/old','','ws://127.0.0.1/old')
+            new=cdp.Target('new','https://chatgpt.com/c/new','','ws://127.0.0.1/new')
+            with patch.dict(os.environ,{'DO_AGAIN_HOME':str(Path(tmp)/'home')}):
+                register_project(repo,chat_url=old.url,control_branch='operator-control')
+                def rollover(*args,**kwargs):return new,register_project(repo,chat_url=new.url)
+                def send(target,text,**kwargs):
+                    kwargs['before_dispatch']();events.append(('gesture',target.url))
+                    return {'response':'submitted','chat_url':target.url}
+                with patch.object(runtime,'ensure_browser_running',return_value={'port':9223}),\
+                     patch.object(runtime,'_find_chatgpt_target',return_value=old),\
+                     patch.object(runtime,'_rollover_needed',return_value=True),\
+                     patch.object(runtime,'_rollover_project_chat',side_effect=rollover),\
+                     patch.object(runtime,'wait_for_authenticated',return_value=(new,{})),\
+                     patch.object(runtime,'_assistant_snapshot',return_value={'busy':False}),\
+                     patch.object(runtime,'_page_contains',return_value=False),\
+                     patch.object(runtime,'send_message',side_effect=send) as submit:
+                    notify_receipts(repo,[{'request_id':'rollover','state':'succeeded'}],
+                                    before_dispatch=lambda evidence:events.append(('commit',evidence)))
+                evidence=events[0][1]
+                self.assertEqual(events[0][0],'commit');self.assertEqual(events[1],('gesture',new.url))
+                self.assertEqual(evidence['chat_url'],new.url)
+                self.assertEqual(evidence['binding_identity'],runtime.binding_identity(project_record(repo)))
+                self.assertEqual(evidence['payload_sha256'],hashlib.sha256(submit.call_args.args[1].encode()).hexdigest())
 
     def test_duplicate_receipt_marker_is_not_sent_twice(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
