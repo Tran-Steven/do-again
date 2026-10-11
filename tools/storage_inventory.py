@@ -175,6 +175,8 @@ def inventory(roots: list[Path], *, min_age_days: int = 14, limit: int = 20, now
             resolved = expanded.resolve(strict=True)
         except OSError as exc:
             raise InventoryError(f"cannot resolve root: {expanded}") from exc
+        if resolved == Path(resolved.anchor) or resolved == Path.home().resolve():
+            raise InventoryError(f"refusing broad inventory root: {resolved}")
         if resolved in roots_normalized:
             continue
         roots_normalized.append(resolved)
