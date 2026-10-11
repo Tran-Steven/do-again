@@ -395,8 +395,14 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
     from ..supervisor.admission import require_active
-    require_active(repo)
-    if admission_check is not None:
+    if admission_check is None or control_transport is None or browser_effect is None:
+        # Unsealed and legacy entrypoints never inherit the offline grant.
+        require_active(repo)
+    else:
+        # The immutable worker supplies all three sealed callbacks. Verify its
+        # exact root-sealed jobpipe grant before invoking any callback or agent.
+        from ..supervisor.admission import require_worker_active
+        require_worker_active(repo)
         admission_check()
     state_dir = Path(args.state_dir).resolve()
     layout = runtime_layout(repo)
