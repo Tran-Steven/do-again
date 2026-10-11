@@ -36,7 +36,7 @@ class ChatSendFocusTests(unittest.TestCase):
         call.assert_not_called()
 
     def test_unfocused_gui_tab_never_activates_or_dispatches(self):
-        for mode in ("background", "visible"):
+        for mode in ("background", "visible", None):
             with self.subTest(mode=mode):
                 commit = Mock()
                 with patch.object(runtime, "load_config", return_value={"preferred_mode": mode}), patch.object(
@@ -65,7 +65,7 @@ class ChatSendFocusTests(unittest.TestCase):
         self.assertEqual(evaluate.call_count, 2)
 
     def test_activated_but_unfocused_target_fails_closed(self):
-        with patch.object(cdp, "evaluate", side_effect=[
+        with patch.object(runtime, "load_state", return_value={"mode": "headless"}), patch.object(cdp, "evaluate", side_effect=[
                 {"focused": False, "visibility": "hidden"},
                 {"focused": False, "visibility": "visible"}]), patch.object(
                 cdp, "target_call") as call:
@@ -83,7 +83,7 @@ class ChatSendFocusTests(unittest.TestCase):
 
     def test_send_message_cannot_modify_composer_or_commit_dispatch_without_focus(self):
         commit = Mock()
-        with patch.object(cdp, "evaluate", return_value={
+        with patch.object(runtime, "load_state", return_value={"mode": "headless"}), patch.object(cdp, "evaluate", return_value={
                     "focused": False, "visibility": "hidden"}), patch.object(
                     cdp, "target_call") as bring, patch.object(
                     cdp, "insert_text") as insert, patch.object(
@@ -100,7 +100,7 @@ class ChatSendFocusTests(unittest.TestCase):
 
     def test_bring_to_front_error_is_not_retried_or_dispatched(self):
         commit = Mock()
-        with patch.object(cdp, "evaluate", return_value={
+        with patch.object(runtime, "load_state", return_value={"mode": "headless"}), patch.object(cdp, "evaluate", return_value={
                     "focused": False, "visibility": "hidden"}), patch.object(
                     cdp, "target_call", side_effect=BrowserError("CDP lost")) as call, patch.object(
                     cdp, "click_send") as click:

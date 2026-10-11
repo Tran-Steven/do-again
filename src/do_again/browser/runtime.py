@@ -820,13 +820,7 @@ return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: 
 
 
 def _require_send_target_focus(target: cdp.Target) -> None:
-    """A hidden background target must be activated before a one-shot Send.
-
-    Activation occurs before insertion or the durable dispatch boundary. A
-    refused/uncertain activation must never cause an alternate Send gesture.
-    This targets only Do Again's dedicated Chrome profile, not the user's
-    normal browser.
-    """
+    """Require document focus without activating desktop GUI windows."""
     config = load_config()
     state = load_state()
     if (config.get("preferred_mode") == "auto"
@@ -841,7 +835,7 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     if not (isinstance(observed, dict)
             and observed.get("focused") is True
             and observed.get("visibility") == "visible"):
-        if state.get("mode") in {"background", "visible"}:
+        if state.get("mode") != "headless":
             raise BrowserPreDispatchBlocked(
                 "unfocused GUI automation tab; refusing window activation; "
                 "no browser submission was attempted"
