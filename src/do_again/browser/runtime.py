@@ -1895,6 +1895,7 @@ def _rollover_project_chat(
     target = cdp.create_target(port, CHATGPT_URL, background=True)
     try:
         target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
+        _ensure_high_reasoning(target)
         result = send_message(target, prompt, timeout=180.0)
         new_url = str(result.get("chat_url") or "")
         transaction["successor_chat_url"] = new_url or None
@@ -2055,6 +2056,7 @@ def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, A
     target = cdp.create_target(port, CHATGPT_URL, background=True)
     try:
         target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
+        _ensure_high_reasoning(target)
         result = send_message(target, prompt, timeout=180.0)
         if "DO_AGAIN_PROJECT_READY" not in result.get("response", ""):
             raise BrowserError("ChatGPT bootstrap did not return the expected readiness marker")
@@ -2251,6 +2253,9 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
 
     dispatch_options={'before_dispatch':commit_dispatch} if before_dispatch is not None else {}
 
+    # Re-check the real UI before every autonomous receipt/continuation message.
+    # Model/effort preferences can change between runs; no lower-effort fallback.
+    _ensure_high_reasoning(target)
     try:
         return send_message(
             target,
