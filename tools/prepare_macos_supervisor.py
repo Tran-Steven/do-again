@@ -252,7 +252,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         except AuthorityDenied:
             if project['account']!='_doagain_so':raise
             status=None
-        if status is not None and status['intent']!='maintenance':
+        accepted={'maintenance','paused','stopped'} if project['account']=='_doagain_so' else {'maintenance'}
+        if status is not None and status['intent'] not in accepted:
             raise ValueError('installation requires closed project admission')
         if status is None:
             prior=next((p for p in (installed or {}).get('projects',[])

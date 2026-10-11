@@ -496,7 +496,8 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
             if project['account']!='_doagain_so':
                 raise
             status=None
-        if status is not None and (status['intent']!='maintenance'
+        accepted={'maintenance','paused','stopped'} if project['account']=='_doagain_so' else {'maintenance'}
+        if status is not None and (status['intent'] not in accepted
                                     or status['goal_revision']!=project['goal_revision']):
             raise RuntimeError('operator admission changed after preparation')
         if status is None and project['account']=='_doagain_so':
