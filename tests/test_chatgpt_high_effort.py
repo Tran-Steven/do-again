@@ -25,10 +25,11 @@ class HighReasoningSelectionTests(unittest.TestCase):
             runtime._ensure_high_reasoning(self.target)
         self.assertEqual(ev.call_count,4)
         self.assertEqual([c.args[1] for c in call.call_args_list],
-                         ["Input.dispatchMouseEvent","Input.dispatchMouseEvent"])
+                         ["Input.dispatchKeyEvent"]*4)
+        self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
+                         ["End","End","Escape","Escape"])
         self.assertEqual([c.args[2]["type"] for c in call.call_args_list],
-                         ["mousePressed","mouseReleased"])
-        self.assertEqual(call.call_args_list[0].args[2]["x"],1130)
+                         ["keyDown","keyUp","keyDown","keyUp"])
 
     def test_already_high_is_idempotent_and_does_not_click_slider(self):
         values=iter(["opened",{"min":"0","max":"2","value":"2","x":1130,"y":460},
@@ -36,7 +37,8 @@ class HighReasoningSelectionTests(unittest.TestCase):
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(values)), \
              patch.object(cdp,"target_call") as call:
             runtime._ensure_high_reasoning(self.target)
-        call.assert_not_called()
+        self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
+                         ["Escape","Escape"])
 
     def test_unknown_selector_fails_before_any_mouse_or_message(self):
         for state in ["missing_picker","other"]:
