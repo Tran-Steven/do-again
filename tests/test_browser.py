@@ -33,6 +33,12 @@ from do_again.browser.runtime import (
 
 
 class BrowserRuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # These older fixture tests simulate a composer, not ChatGPT's actual
+        # reasoning slider. The isolated picker tests exercise the High gate.
+        high = patch("do_again.browser.runtime._ensure_high_reasoning")
+        high.start()
+        self.addCleanup(high.stop)
     def test_headless_command_uses_dedicated_profile_and_cdp(self) -> None:
         binary = Path("browser-bin")
         profile = Path("profile-dir")
