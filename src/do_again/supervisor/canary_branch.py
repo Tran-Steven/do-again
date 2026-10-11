@@ -123,9 +123,12 @@ def provision_control_branch(*, nonce: str, baseline: str, grant: Path,
         value = json.loads(grant.read_text())
     except (OSError, ValueError):
         raise ExecutionBlocked("canary grant is not valid JSON") from None
+    required = {"nonce", "baseline", "parent_epoch", "chat_url", "binding_identity"}
     if (not isinstance(value, dict) or value.get("nonce") != nonce
-            or value.get("baseline") != baseline or set(value) != {
-                "nonce", "baseline", "parent_epoch", "chat_url", "binding_identity"}):
+            or value.get("baseline") != baseline
+            or not (set(value) == required or
+                    (set(value) == required | {"browser_mode"}
+                     and value.get("browser_mode") == "background"))):
         raise ExecutionBlocked("canary branch authority differs from sealed grant")
 
     _check_operator_authority(installed, value)

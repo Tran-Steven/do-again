@@ -28,7 +28,11 @@ def require_fresh_conversation(previous, candidate):
 
 def scope(config):
     value = config.get('live_canary')
-    if (not isinstance(value,dict) or set(value) != {'nonce','baseline','parent_epoch','chat_url','binding_identity'}
+    required = {'nonce','baseline','parent_epoch','chat_url','binding_identity'}
+    if (not isinstance(value,dict) or
+            not (set(value) == required or
+                 (set(value) == required | {'browser_mode'}
+                  and value.get('browser_mode') == 'background'))
             or config.get('production_ready') is not False
             or not re.fullmatch(r'[0-9a-f]{24}',str(value.get('nonce','')))
             or not re.fullmatch(r'[0-9a-f]{40}',str(value.get('baseline','')))

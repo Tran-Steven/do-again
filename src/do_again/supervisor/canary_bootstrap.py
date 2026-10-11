@@ -85,9 +85,11 @@ def bootstrap_live_canary(
     output: Path,
     nonce: str | None = None,
     browser=None,
+    allow_background: bool = False,
 ) -> dict:
     """Create and verify a fresh chat entirely through the dedicated browser.
 
+    Background mode is explicitly opt-in and retains the no-activation focus gate.
     Call only as the trusted operator, before the protected canary installer.
     Never retry an attempt with the same nonce, even after a pre-send failure.
     """
@@ -128,8 +130,11 @@ def bootstrap_live_canary(
     dispatch_started = False
     try:
         session = browser.ensure_browser_running(verify_auth=True)
-        if session.get("mode") != "headless" or session.get("session_ready") is not True:
-            raise ExecutionBlocked("live canary requires authenticated true-headless Chrome; GUI fallback is not acceptance")
+        expected_mode = "background" if allow_background else "headless"
+        if (session.get("mode") != expected_mode
+                or session.get("session_ready") is not True
+                or session.get("authenticated") is not True):
+            raise ExecutionBlocked("live canary requires authenticated explicitly selected browser mode; no automatic GUI fallback")
         target = cdp.create_target(int(session["port"]), browser.CHATGPT_URL, background=True)
         target, _ = browser.wait_for_authenticated(
             int(session["port"]), chat_url=target.url, timeout=30.0, target=target)
@@ -160,6 +165,8 @@ def bootstrap_live_canary(
             raise ExecutionBlocked("parent authority changed during canary bootstrap")
         grant = {"nonce": nonce, "baseline": baseline, "parent_epoch": status["epoch"],
                  "chat_url": url, "binding_identity": "0" * 64}
+        if allow_background:
+            grant["browser_mode"] = "background"
         # Reject the last installed chat even when the nonce is new.
         require_fresh_conversation(installed, {"live_canary": grant})
         atomic_json(ticket, {"schema_version": 1, "state": "chat_verified",
@@ -175,7 +182,8 @@ def bootstrap_live_canary(
                              "nonce": nonce, "chat_url": url,
                              "grant_path": str(output), "binding_identity": grant["binding_identity"]})
         return {"nonce": nonce, "grant_path": str(output), "chat_url": url,
-                "control_branch": branch, "production_ready": False}
+                "control_branch": branch, "browser_mode": expected_mode,
+                "production_ready": False}
     except BaseException:
         # Keep the tab and exact ticket after any possibly-sent message for
         # read-only reconciliation. Never resubmit the original prompt.
