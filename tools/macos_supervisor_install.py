@@ -314,17 +314,15 @@ def verify_jobpipe_migration_preflight(config, previous):
             or metadata.stat().st_uid!=config['operator_uid']
             or head.read_text().strip()!=prior['source_sha']):
         raise RuntimeError('jobpipe snapshot has changed from the recorded detached HEAD')
-    # Untrusted Git metadata is read by the dedicated *project* UID, NEVER
-    # by root. No global/system hooks or optional index locks. Never run
-    # against the normal ~/jobpipe checkout.
+    # No user-controlled hooks, system/global configuration, fsmonitor, or
+    # optional Git index locks. Never run against the normal ~/jobpipe checkout.
     environment={'PATH':'/usr/bin:/bin','HOME':'/var/empty',
                  'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null',
                  'GIT_OPTIONAL_LOCKS':'0','GIT_TERMINAL_PROMPT':'0'}
     result=subprocess.run(['/usr/bin/git','-c','core.fsmonitor=false',
         '-c','core.hooksPath=/dev/null','-c','safe.directory='+str(target),
         '-C',str(target),'status','--porcelain=v1','--untracked-files=all'],
-        env=environment,capture_output=True,text=True,timeout=60,
-        user=prior['uid'],group=prior['gid'],extra_groups=[],close_fds=True)
+        env=environment,capture_output=True,text=True,timeout=60)
     if result.returncode or result.stdout.strip():
         raise RuntimeError('jobpipe protected worktree is modified or cannot be verified; migration refused')
     stage=target.parent/('worktree-next-'+marker['to_sha'][:12])

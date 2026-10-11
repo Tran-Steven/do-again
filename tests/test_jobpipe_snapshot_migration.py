@@ -25,7 +25,6 @@ class JobpipeSnapshotMigrationTests(unittest.TestCase):
         tmp=tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root=Path(tmp.name).resolve()
-        self.native_run=subprocess.run
         installer=Path(__file__).resolve().parents[1]/'tools/macos_supervisor_install.py'
         spec=importlib.util.spec_from_file_location('migration_installer',installer)
         self.module=importlib.util.module_from_spec(spec)
@@ -101,7 +100,7 @@ class JobpipeSnapshotMigrationTests(unittest.TestCase):
 
     def fixture_run(self,args,**kw):
         kw={k:v for k,v in kw.items() if k not in ('user','group','extra_groups')}
-        return self.native_run(args,check=True,capture_output=True,text=True,**kw)
+        return subprocess.run(args,check=True,capture_output=True,text=True,**kw)
 
     def test_only_the_pinned_jobpipe_fast_forward_changes(self):
         with patch.object(self.module,'EXEC',self.exec_root):
@@ -126,8 +125,7 @@ class JobpipeSnapshotMigrationTests(unittest.TestCase):
 
     def test_dirty_protected_worktree_refused_before_staging(self):
         (self.work/'tracked.txt').write_text('unsaved isolated modification\n')
-        with patch.object(self.module,'EXEC',self.exec_root),\
-             patch.object(self.module.subprocess,'run',side_effect=self.fixture_run):
+        with patch.object(self.module,'EXEC',self.exec_root):
             with self.assertRaisesRegex(RuntimeError,'modified'):
                 self.module.verify_jobpipe_migration_preflight(self.updated,self.previous)
         self.assertFalse(self.journal_path.exists())
@@ -136,7 +134,6 @@ class JobpipeSnapshotMigrationTests(unittest.TestCase):
     def test_fast_forward_promotes_new_and_retains_old_without_primary_changes(self):
         with patch.object(self.module,'EXEC',self.exec_root),\
              patch.object(self.module.os,'chown'),\
-             patch.object(self.module.subprocess,'run',side_effect=self.fixture_run),\
              patch.object(self.module,'run',side_effect=self.fixture_run):
             proof=self.module.verify_jobpipe_migration_preflight(self.updated,self.previous)
             self.module.migrate_jobpipe_snapshot(
@@ -158,7 +155,6 @@ class JobpipeSnapshotMigrationTests(unittest.TestCase):
             return real_rename(src,dst)
         with patch.object(self.module,'EXEC',self.exec_root),\
              patch.object(self.module.os,'chown'),\
-             patch.object(self.module.subprocess,'run',side_effect=self.fixture_run),\
              patch.object(self.module,'run',side_effect=self.fixture_run),\
              patch.object(self.module.os,'rename',side_effect=interrupt):
             with self.assertRaisesRegex(OSError,'injected crash'):
