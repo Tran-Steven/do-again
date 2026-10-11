@@ -135,6 +135,21 @@ class CanaryControlBranchTests(unittest.TestCase):
             api.assert_not_called()
         self.assertFalse(self.ledger.exists())
 
+    def test_unknown_fourth_project_never_skips_native_scope_gate(self):
+        self.installed['projects']=[
+            {'account':'_doagain_da','repo':str(self.root/'do-again')},
+            {'account':'_doagain_jp','repo':str(self.root/'jobpipe')},
+            {'account':'_doagain_so','repo':str(self.root/'Sonary')},
+            {'account':'_doagain_unknown','repo':str(self.root/'unexpected')},
+        ]
+        with (patch.object(canary_branch,"_api") as api,
+              patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
+                    side_effect=ExecutionBlocked("invalid parent roster")) as authority):
+            with self.assertRaisesRegex(ExecutionBlocked,"invalid parent roster"):
+                self.provision()
+            authority.assert_called_once()
+            api.assert_not_called()
+
     def test_private_grant_and_nonce_are_required_without_github_effects(self):
         self.grant.chmod(0o644)
         with patch.object(canary_branch, "_api") as api:
