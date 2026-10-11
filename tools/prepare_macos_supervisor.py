@@ -18,7 +18,7 @@ def git(repo, *args):
     return subprocess.check_output(['git','-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-C',str(repo),*args],text=True).strip()
 
 
-def available_ids():
+def available_ids(count=2):
     occupied=set()
     for category,attribute in (('Users','UniqueID'),('Groups','PrimaryGroupID')):
         result=subprocess.check_output(['/usr/bin/dscl','.','-list','/'+category,attribute],text=True)
@@ -26,8 +26,8 @@ def available_ids():
             try:occupied.add(int(line.split()[-1]))
             except (ValueError,IndexError):continue
     free=[value for value in range(400,500) if value not in occupied]
-    if len(free)<2:raise ValueError('no collision-free execution identities available')
-    return free[:2]
+    if len(free)<count:raise ValueError('no collision-free execution identities available')
+    return free[:count]
 
 
 def project_key(repo):
@@ -108,7 +108,7 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None):
     if canary_grant is not None and codex_grant is not None:
         raise ValueError('browser and Codex canary grants cannot coexist')
     if codex_grant is not None and classify_canary_partial:
@@ -117,12 +117,19 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         raise ValueError('explicit partial disposition requires a fresh sealed canary grant')
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
+    if sonary_repo is not None:
+        sonary_repo=sonary_repo.resolve(strict=True)
     if git(source,'status','--porcelain'):raise ValueError('commit and validate supervisor source before preparation')
     source_sha=git(source,'rev-parse','HEAD')
     uid=os.getuid();gid=os.getgid();identity=pwd.getpwuid(uid)
     if uid==0:raise ValueError('prepare the bundle as the operator, not root')
     installed=None
     installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')
+    if sonary_repo is not None and sonary_repo != Path(identity.pw_dir)/'Sonary':
+        raise ValueError('Sonary requires its exact operator-home checkout')
+    parents={str(do_again_repo):'_doagain_da',str(jobpipe):'_doagain_jp'}
+    sonary={str(sonary_repo):'_doagain_so'} if sonary_repo is not None else {}
+    enrolling_sonary=False
     if installed_path.exists():
         sys.path.insert(0,str(source/'src'))
         from do_again.supervisor.macos_execution import private_root_file
@@ -130,21 +137,36 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         installed=json.loads(installed_path.read_text())
         if installed.get('production_ready') is not False or installed['operator_uid']!=uid:
             raise ValueError('existing supervisor requires guarded upgrade reconciliation')
-        expected={str(do_again_repo):'_doagain_da',str(jobpipe):'_doagain_jp'}
-        if {p['repo']:p['account'] for p in installed['projects']}!=expected:
-            raise ValueError('existing installation project scope differs')
+        actual={p['repo']:p['account'] for p in installed['projects']}
+        if actual not in (parents,{**parents,**sonary}) or (len(actual)==3 and not sonary):
+            raise ValueError('existing installation scope differs or Sonary was omitted')
         for project in installed['projects']:
             account=pwd.getpwnam(project['account'])
             if (account.pw_uid,account.pw_gid,account.pw_dir,account.pw_shell)!=(project['uid'],project['gid'],'/var/empty','/usr/bin/false'):
                 raise ValueError('existing execution identity changed')
-        ids=[next(p['uid'] for p in installed['projects'] if p['repo']==str(repo)) for repo in (do_again_repo,jobpipe)]
-    elif ids is None:ids=available_ids()
+        ids=[next(p['uid'] for p in installed['projects'] if p['repo']==str(repo))
+             for repo in (do_again_repo,jobpipe)]
+        if sonary:
+            previous=next((p for p in installed['projects'] if p['account']=='_doagain_so'),None)
+            if previous is None:
+                enrolling_sonary=True
+                ids.extend(available_ids(1))
+            else:
+                ids.append(previous['uid'])
+    else:
+        if sonary:
+            raise ValueError('Sonary requires an existing two-project maintenance installation')
+        if ids is None:
+            ids=available_ids()
     if classify_canary_partial and (installed is None or not installed.get('live_canary')):
         raise ValueError('partial disposition requires the exact installed canary scope')
-    if len(ids)!=2 or len(set(ids))!=2 or any(not 400<=value<500 or value==uid for value in ids):raise ValueError('invalid execution IDs')
-    for repo,name in ((source,'do-again'),(jobpipe,'jobpipe')):
+    if (len(ids)!=(3 if sonary else 2) or len(set(ids))!=len(ids)
+            or any(type(value) is not int or not 400<=value<500 or value==uid for value in ids)):
+        raise ValueError('invalid execution IDs')
+    for repo,name in [(source,'do-again'),(jobpipe,'jobpipe'),*([(sonary_repo,'Sonary')] if sonary else [])]:
         remote=git(repo,'remote','get-url','origin')
-        if remote not in (f'https://github.com/Tran-Steven/{name}.git',f'git@github.com:Tran-Steven/{name}.git'):
+        if remote not in (f'https://github.com/Tran-Steven/{name}.git',
+                          f'git@github.com:Tran-Steven/{name}.git'):
             raise ValueError('source repository identity does not match approved projects')
     output.mkdir(parents=True,mode=0o700)
     payload=output/'payload';payload.mkdir(mode=0o700)
