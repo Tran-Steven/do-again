@@ -13,6 +13,11 @@ from do_again.service import daemon
 
 class ContinuationOutboxTests(unittest.TestCase):
     def setUp(self):
+        # The synthetic browser fixture has no ChatGPT thinking-effort UI.
+        # Actual High selector admission is tested in test_chatgpt_high_effort.
+        high=patch("do_again.browser.runtime._ensure_high_reasoning")
+        high.start()
+        self.addCleanup(high.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.state = Path(temporary.name) / 'state'
