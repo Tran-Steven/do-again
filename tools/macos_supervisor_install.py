@@ -324,7 +324,7 @@ def preview_cutover(config, registry, live):
             verify_stage(ROOT/'current')
             if old.get('production_ready') is not False or config.get('production_ready') is not False:
                 raise RuntimeError('production helper upgrade requires guarded rollout')
-            validate_project_scope(config,old)
+            enrolling_sonary=validate_project_scope(config,old)
             for project in sorted(config['projects'],key=lambda p:p['key']):
                 path=ROOT/'state'/project['key']/'admission.lock'
                 if path.is_symlink() or path.parent.is_symlink():raise RuntimeError('aliased admission fence')
@@ -332,8 +332,15 @@ def preview_cutover(config, registry, live):
                 fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
             # Recheck immediately before the service effect, while spawn and
             # operator-intent transitions are excluded by the same fences.
+            from do_again.supervisor.authority import AuthorityDenied
             for project in config['projects']:
-                if registry.status(Path(project['repo']))['intent']=='active':
+                try:
+                    status=registry.status(Path(project['repo']))
+                except AuthorityDenied:
+                    if enrolling_sonary and project['account']=='_doagain_so':
+                        continue  # Root creates only this missing maintenance row after cutover.
+                    raise
+                if status['intent']=='active':
                     raise RuntimeError('authority admits execution; cutover deferred')
             with sqlite3.connect(registry.path) as db:
                 if db.execute("SELECT 1 FROM execution WHERE state='started' LIMIT 1").fetchone():
@@ -512,6 +519,12 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
         raise RuntimeError('existing service definition has unknown provenance')
     runtimes=runtime_executables(config,current)
     for project in config['projects']:create_account(project,journal_path,journal)
+    if enrolling_sonary:
+        new_project=next(p for p in config['projects'] if p['account']=='_doagain_so')
+        # A new project has no existing admission fence. Create its empty,
+        # protected state container before taking the same cross-project locks.
+        # Existing parents' protected state is never recreated or replaced.
+        secure_directory(ROOT/'state'/new_project['key'],0o700)
     with preview_cutover(config,registry,live.returncode==0):
         select_runtime(stage,current,journal_path,journal,config['source_sha'],recovery=recovery)
         for runtime in runtimes:runtime.chmod(0o755)
