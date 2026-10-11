@@ -392,7 +392,9 @@ else:
         (self.root/'state/test').mkdir(parents=True)
         path=self.root/'authority.sqlite';ExecutionLedger(path).reserve('test','request-ambiguous','fingerprint')
         registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
-        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'),patch.object(self.module,'run') as run:
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'), \
+             patch.object(self.module,'validate_project_scope',return_value=False), \
+             patch.object(self.module,'run') as run:
             for live in (True,False):
                 with self.subTest(supervisor_running=live),self.assertRaisesRegex(RuntimeError,'ambiguous'):
                     with self.module.preview_cutover(config,registry,live):self.fail('unsafe cutover admitted')
