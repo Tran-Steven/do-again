@@ -60,6 +60,8 @@ class StorageInventoryTests(unittest.TestCase):
         self.assertFalse(candidate["eligible_for_deletion"])
 
     def test_symlink_escape_not_followed(self):
+        if os.name == "nt":
+            self.skipTest("Windows symlink privileges are not guaranteed")
         outside = Path(self.temp.name) / "outside"
         outside.mkdir()
         (outside / "secret").write_bytes(b"x" * 1000)
@@ -70,6 +72,8 @@ class StorageInventoryTests(unittest.TestCase):
         self.assertTrue((outside / "secret").exists())
 
     def test_rejects_symlink_root_and_overlapping_roots(self):
+        if os.name == "nt":
+            self.skipTest("Windows symlink privileges are not guaranteed")
         link = Path(self.temp.name) / "link"
         link.symlink_to(self.root, target_is_directory=True)
         with self.assertRaises(module.InventoryError):
