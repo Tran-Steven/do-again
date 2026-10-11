@@ -18,7 +18,8 @@ from ..core.schema import OperatorError
 from .macos_execution import INSTALL_ROOT, EXECUTION_ROOT, private_root_file
 from .macos_client import broker_request
 
-PROJECT_ACCOUNTS = {"do-again": "_doagain_da", "jobpipe": "_doagain_jp"}
+PROJECT_ACCOUNTS = {"do-again": "_doagain_da", "jobpipe": "_doagain_jp", "Sonary": "_doagain_so"}
+REQUIRED_ACCOUNTS = frozenset({"_doagain_da", "_doagain_jp"})
 WORKER_OPERATIONS = frozenset({
     "status", "run_tests", "repo_script", "scratch_script", "extended_exec",
     "git_commit", "git_publish", "dependency_install", "git_publication_reconcile", "ci_observe",
@@ -56,10 +57,13 @@ def validate_worker_context(
     if interpreter != current / "runtimes/python/bin/python3" or config.get("python") != str(interpreter):
         raise OperatorError("worker interpreter is not the immutable installed runtime")
     projects = config.get("projects")
-    if not isinstance(projects, list) or len(projects) != 2:
-        raise OperatorError("worker requires exactly two installed project scopes")
+    if not isinstance(projects, list) or len(projects) not in (2, 3):
+        raise OperatorError("worker requires two parent scopes and optional Sonary")
     accounts = [p.get("account") for p in projects if isinstance(p, dict)]
-    if len(accounts) != 2 or set(accounts) != set(PROJECT_ACCOUNTS.values()):
+    allowed = set(PROJECT_ACCOUNTS.values())
+    if (len(accounts) != len(projects) or len(set(accounts)) != len(projects)
+            or not REQUIRED_ACCOUNTS.issubset(accounts)
+            or not set(accounts).issubset(allowed)):
         raise OperatorError("worker installation project identities differ")
     project = next(p for p in projects if p["account"] == PROJECT_ACCOUNTS[project_name])
     repo_value = project.get("repo")
@@ -76,7 +80,7 @@ def validate_worker_context(
     if (project.get('key') != full_key or project.get('worktree') != str(EXECUTION_ROOT/full_key/'worktree')
             or type(project.get('uid')) is not int or project.get('gid') != project['uid']
             or not 400 <= project['uid'] < 500 or project['uid'] == uid
-            or len({p.get('uid') for p in projects}) != 2):
+            or len({p.get('uid') for p in projects}) != len(projects)):
         raise OperatorError('dedicated project identity or workspace binding differs')
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     base = Path(home_value) / ".do_again" / "projects" / key

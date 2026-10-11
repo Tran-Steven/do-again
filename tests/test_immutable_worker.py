@@ -51,6 +51,32 @@ class WorkerAdmissionTests(unittest.TestCase):
         self.assertEqual(second[0],self.home/'jobpipe')
         self.assertNotEqual(first[1],second[1]);self.assertNotEqual(first[2],second[2])
 
+
+    def test_optional_sonary_has_separate_identity_and_exact_canonical_case(self):
+        sonary=self.home/'Sonary';key=project_identity(sonary)
+        addition={'repo':str(sonary),'key':key,'uid':403,'gid':403,
+                  'account':'_doagain_so','worktree':str(EXECUTION_ROOT/key/'worktree')}
+        projects=[*self.projects,addition]
+        cfg={**self.config,'projects':projects}
+        status={**self.status,'uid':403,'worktree':addition['worktree']}
+        result=self.context(project_name='Sonary',config=cfg,status=status)
+        self.assertEqual(result[0],sonary)
+        self.assertNotEqual(result[1],self.context()[1])
+        self.assertNotEqual(result[2],self.context(project_name='jobpipe',status={
+            **self.status,'uid':402,'worktree':self.projects[1]['worktree']})[2])
+        for altered in (
+            [projects[0],addition],
+            [projects[0],projects[0],addition],
+            [projects[0],projects[1],{**addition,'uid':402,'gid':402}],
+            [projects[0],projects[1],{**addition,'repo':str(self.home/'sonary')}],
+            [projects[0],projects[1],{**addition,'account':'_doagain_other'}],
+            [*projects,{**addition,'uid':404,'gid':404}],
+        ):
+            with self.subTest(altered=altered),self.assertRaises(OperatorError):
+                self.context(project_name='Sonary',config={**cfg,'projects':altered},status=status)
+        with self.assertRaises(OperatorError):
+            self.context(project_name='sonary',config=cfg,status=status)
+
     def test_root_other_identity_mutable_module_and_executable_are_rejected(self):
         for values in ({'uid':0,'euid':0},{'uid':502,'euid':502},{'uid':501,'euid':0},
                        {'uid':True,'euid':True},{'project_name':'sonary'},

@@ -112,6 +112,8 @@ class WorkerServiceTests(unittest.TestCase):
         self.assertIn('b'*40,spec['ProgramArguments']);self.assertEqual(spec['ProgramArguments'][-1],'2')
         self.broker.project.account='_doagain_jp'
         self.assertIn('jobpipe',service.service_spec(self.broker,2)[1]['ProgramArguments'])
+        self.broker.project.account='_doagain_so'
+        self.assertIn('Sonary',service.service_spec(self.broker,2)[1]['ProgramArguments'])
         self.broker.project.account='_doagain_other'
         with self.assertRaises(ExecutionBlocked):service.service_spec(self.broker,2)
 

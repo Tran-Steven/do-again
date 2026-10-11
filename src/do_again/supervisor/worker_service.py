@@ -17,7 +17,7 @@ AGENTS=Path('/Library/LaunchAgents')
 
 def service_spec(broker,epoch):
     key=broker.project.key[:12];label='io.github.tran-steven.do-again.worker.'+key
-    name={'_doagain_da':'do-again','_doagain_jp':'jobpipe'}.get(broker.project.account)
+    name={'_doagain_da':'do-again','_doagain_jp':'jobpipe','_doagain_so':'Sonary'}.get(broker.project.account)
     if name is None:raise ExecutionBlocked('worker service project is excluded')
     return label,{'Label':label,'ProgramArguments':[broker.config['python'],'-I','-S','-B',
         str(INSTALL_ROOT/'current/worker-bootstrap.py'),'--project',name,
