@@ -10,7 +10,8 @@ from pathlib import Path
 
 from ..core.schema import canonical_json
 from .git_broker import validate_packet
-from .github import GitHubRepository, publish_commit, matching_pull_requests, branch_pull_requests, validate_publication_paths
+from .github import (GitHubRepository, PROJECT_REPOSITORIES, publish_commit,
+                     matching_pull_requests, branch_pull_requests, validate_publication_paths)
 from .macos_execution import EXECUTION_ROOT, INSTALL_ROOT, REQUEST_ID, ExecutionBlocked, MacOSProcesses, capture, launch_spec, private_root_file
 
 
@@ -36,8 +37,7 @@ def publish_via_broker(broker, packet: dict) -> dict:
         raise ExecutionBlocked('invalid pull request content')
     project_config = next(p for p in broker.config['projects'] if p['key']==broker.project.key)
     repository = project_config.get('github_repository')
-    expected = {'_doagain_da':'Tran-Steven/do-again','_doagain_jp':'Tran-Steven/jobpipe'}
-    if repository != expected.get(broker.project.account):
+    if repository != PROJECT_REPOSITORIES.get(broker.project.account):
         raise ExecutionBlocked('publication repository is not sealed for this project')
     api = GitHubRepository(repository,read_credential(broker))
     fingerprint = hashlib.sha256(canonical_json(packet)).hexdigest()

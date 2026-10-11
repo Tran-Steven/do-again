@@ -169,6 +169,34 @@ class ControlHistoryTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):
             GitHubRepository('Tran-Steven/do-again','x'*32,control_branch=branch)
 
+
+    def test_sonary_control_scope_is_exact_and_excludes_cross_project_credentials(self):
+        from do_again.supervisor.control_history import api_for
+        token='s'*32
+        identity={'key':'sonary-project','github_repository':'Tran-Steven/Sonary',
+                  'control_branch':'operator-control'}
+        broker=SimpleNamespace(
+            project=SimpleNamespace(key='sonary-project',account='_doagain_so'),
+            config={'projects':[identity]})
+        with patch('do_again.supervisor.control_history.read_credential',return_value=token) as credential:
+            api=api_for(broker)
+            self.assertEqual(api.repository,'Tran-Steven/Sonary')
+            self.assertTrue(api.control)
+            self.assertEqual(credential.call_count,1)
+            for foreign in ('Tran-Steven/jobpipe','Tran-Steven/do-again',
+                            'Tran-Steven/sonary','Tran-Steven/Sonary-fork'):
+                with self.subTest(foreign=foreign),self.assertRaisesRegex(ExecutionBlocked,'binding'):
+                    api_for(SimpleNamespace(
+                        project=broker.project,
+                        config={'projects':[{**identity,'github_repository':foreign}]}))
+            broker.project.account='_doagain_unknown'
+            with self.assertRaisesRegex(ExecutionBlocked,'binding'):api_for(broker)
+        for repository in ('Tran-Steven/Sonary','Tran-Steven/do-again','Tran-Steven/jobpipe'):
+            self.assertEqual(GitHubRepository(repository,token).repository,repository)
+        for foreign in ('Tran-Steven/other','Tran-Steven/sonary','Other/Sonary'):
+            with self.assertRaisesRegex(ExecutionBlocked,'excluded'):
+                GitHubRepository(foreign,token)
+
     def test_control_api_cannot_mutate_main_or_force_any_branch(self):
         api=GitHubRepository('Tran-Steven/do-again','x'*32,control=True)
         for endpoint,payload in [('git/refs/heads/main',{'sha':'a'*40,'force':False}),

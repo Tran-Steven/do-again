@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from ..core.schema import canonical_json
-from .github import GitHubRepository, validate_control_branch
+from .github import GitHubRepository, validate_control_branch, PROJECT_REPOSITORIES
 from .macos_execution import ExecutionBlocked, REQUEST_ID
 from .publication import read_credential
 
@@ -34,8 +34,7 @@ def blob_sha(data):
 
 def api_for(broker):
     project=next(p for p in broker.config['projects'] if p['key']==broker.project.key)
-    expected={'_doagain_da':'Tran-Steven/do-again','_doagain_jp':'Tran-Steven/jobpipe'}
-    if project.get('github_repository') != expected.get(broker.project.account):
+    if project.get('github_repository') != PROJECT_REPOSITORIES.get(broker.project.account):
         raise ExecutionBlocked('control repository binding is excluded')
     return GitHubRepository(project['github_repository'],read_credential(broker),control=True,
         control_branch=project.get('control_branch','operator-control'))

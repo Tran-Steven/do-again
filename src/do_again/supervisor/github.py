@@ -9,6 +9,14 @@ from .git_capabilities import SHA, _safe_relative
 from .macos_execution import ExecutionBlocked
 from .network import https_bytes
 
+# Exact allowlist shared by native control, publication, and operator enrollment.
+# Never derive a writable repository from the incoming request packet.
+PROJECT_REPOSITORIES = {
+    '_doagain_da': 'Tran-Steven/do-again',
+    '_doagain_jp': 'Tran-Steven/jobpipe',
+    '_doagain_so': 'Tran-Steven/Sonary',
+}
+
 
 def validate_control_branch(branch: str) -> str:
     """Only the legacy branch or an isolated canary namespace can be sealed."""
@@ -21,7 +29,7 @@ def validate_control_branch(branch: str) -> str:
 class GitHubRepository:
     def __init__(self, repository: str, token: str, *, control: bool = False,
                  control_branch: str = "operator-control"):
-        if repository not in {'Tran-Steven/do-again','Tran-Steven/jobpipe'}:
+        if repository not in PROJECT_REPOSITORIES.values():
             raise ExecutionBlocked('repository publication scope is excluded')
         if not isinstance(token,str) or not re.fullmatch('[A-Za-z0-9_]{20,255}',token):
             raise ExecutionBlocked('repository credential is unavailable')
