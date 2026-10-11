@@ -75,12 +75,13 @@ def commit_via_broker(broker, packet: dict) -> dict:
     if sys.platform != 'darwin' or os.geteuid() != 0:
         raise ExecutionBlocked('local Git capability requires the immutable root macOS broker')
     validate_packet(packet)
+    from .live_canary import effect_authorized
     from .macos_server import verify_installation, worktree_authority
     with broker.lock:
         def gate(*, head=True):
             status = broker.registry.status(broker.project.repo)
             if (status['intent'] != 'active' or status['epoch'] != packet['expected_epoch']
-                    or broker.config.get('production_ready') is not True or not broker._verified()):
+                    or not effect_authorized(broker) or not broker._verified()):
                 raise ExecutionBlocked('operator authority or native qualification blocks Git')
             if head and worktree_authority(broker.project.worktree)['repo_head'] != packet['expected_head']:
                 raise ExecutionBlocked('assigned Git head changed')
@@ -114,7 +115,9 @@ def commit_via_broker(broker, packet: dict) -> dict:
             gate()
             if processes.owned(broker.project.uid):
                 raise ExecutionBlocked('dedicated identity has unresolved processes')
-            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint)
+            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint,
+                intent={'operation':packet['operation'],'source_sha':broker.config['source_sha'],
+                        'request_fingerprint':packet.get('request_fingerprint')})
         # No authoritative effect occurs in the candidate phase.
         try:
             for path in (scratch, cache):

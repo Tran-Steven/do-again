@@ -47,9 +47,7 @@ const addMessage = (role, text) => {
   node.append(content);
   document.querySelector('#messages').append(node);
 };
-editor.addEventListener('keydown', event => {
-  if (event.key !== 'Enter' || event.shiftKey) return;
-  event.preventDefault();
+document.querySelector('button[aria-label="Send"]').addEventListener('click', () => {
   const text = editor.innerText.trim();
   if (!text) return;
   addMessage('user', text);

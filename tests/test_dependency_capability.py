@@ -184,6 +184,15 @@ class DependencyBrokerTests(unittest.TestCase):
 
 
 class SupervisorTrustTests(unittest.TestCase):
+    def test_trusted_query_reaches_exact_http_request(self):
+        connection=Mock()
+        response=Mock(status=200)
+        response.read.side_effect=[b'{}',b'']
+        connection.getresponse.return_value=response
+        with patch('do_again.supervisor.network.trusted_context'), patch('do_again.supervisor.network.http.client.HTTPSConnection',return_value=connection):
+            self.assertEqual(https_bytes('https://api.github.com/repos/Tran-Steven/do-again/pulls?state=all',host='api.github.com',limit=10,allow_query=True),(200,b'{}'))
+        self.assertEqual(connection.request.call_args.args[:2],('GET','/repos/Tran-Steven/do-again/pulls?state=all'))
+
     def test_tls_context_uses_sealed_ca_despite_host_environment(self):
         from do_again.supervisor.network import trusted_context
         from do_again.supervisor.macos_execution import INSTALL_ROOT

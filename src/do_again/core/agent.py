@@ -41,12 +41,16 @@ class Agent:
         remote: str = "origin",
         receipt_callback: Callable[[dict[str, Any]], None] | None = None,
         executor: Any | None = None,
+        admission_check: Callable[[], Any] | None = None,
+        control_transport: Any | None = None,
     ):
         self.repo = repo.resolve()
         self.control_worktree = control_worktree.resolve()
         self.branch = branch
         self.remote = remote
         self.receipt_callback = receipt_callback
+        self.admission_check = admission_check
+        self.control_transport = control_transport
         self.policy_path = policy_path.resolve()
         self.state_dir = state_dir.resolve()
         self.policy = read_json(self.policy_path)
@@ -73,6 +77,10 @@ class Agent:
         self.poll_seconds = max(1.0, float(self.policy.get("poll_seconds", 3)))
 
     def git(self, *args: str, timeout: float = 60) -> subprocess.CompletedProcess[str]:
+        if getattr(self,"control_transport",None) is not None:
+            raise OperatorError("sealed worker cannot execute host control Git")
+        if self.admission_check is not None:
+            self.admission_check()
         return subprocess.run(
             ["git", "-C", str(self.control_worktree), *args],
             text=True,
@@ -169,6 +177,9 @@ class Agent:
         return proc.stdout
 
     def sync(self) -> None:
+        if self.control_transport is not None:
+            self.control_transport.sync()
+            return
         status = self.require_git("status", "--porcelain")
         if status.strip():
             raise OperatorError("operator control worktree is dirty")
@@ -196,6 +207,9 @@ class Agent:
             self.require_git("push", self.remote, f"HEAD:{self.branch}", timeout=90)
 
     def publish_json(self, relative: Path, value: dict[str, Any], message: str) -> None:
+        if self.control_transport is not None:
+            self.control_transport.publish(relative,value)
+            return
         for attempt in range(4):
             try:
                 self.sync()
@@ -286,6 +300,8 @@ class Agent:
         return value if isinstance(value, dict) else None
 
     def acquire_remote_claim(self, request: dict[str, Any]) -> bool:
+        if self.control_transport is not None:
+            return self.control_transport.claim(self,request)
         if isinstance(self.executor, BrokerExecutor):
             from ..supervisor.admission import require_active
             require_active(self.repo)
@@ -544,6 +560,9 @@ class Agent:
         return value if isinstance(value, dict) else None
 
     def write_ledger(self, request_id: str, value: dict[str, Any]) -> None:
+        if (value.get('state')=='terminal' and isinstance(value.get('receipt'),dict)
+                and self.receipt_callback is not None and 'notification_pending' not in value):
+            value=dict(value,notification_pending=True)
         atomic_json(self.ledger_path(request_id), value)
 
     def record_operator_progress(
@@ -650,6 +669,9 @@ class Agent:
             return
         try:
             self.receipt_callback(receipt)
+            local=self.local_ledger(str(receipt['request_id']))
+            if local and local.get('notification_pending') is True and local.get('receipt')==receipt:
+                self.write_ledger(str(receipt['request_id']),dict(local,notification_pending=False))
         except Exception as exc:
             atomic_json(
                 self.state_dir / "receipt_callback_error.json",
@@ -699,6 +721,9 @@ class Agent:
                 existing_receipt.get("request_fingerprint") or ""
             )
             if self._request_matches_fingerprint(raw, existing_fingerprint):
+                local=self.local_ledger(request_id)
+                if local and local.get('notification_pending') is True and local.get('receipt')==existing_receipt:
+                    self.notify_receipt(existing_receipt)
                 return False
             return self.publish_conflict(
                 request=raw,
@@ -716,6 +741,9 @@ class Agent:
                     existing_receipt.get("request_fingerprint") or ""
                 )
                 if self._request_matches_fingerprint(raw, existing_fingerprint):
+                    local=self.local_ledger(request_id)
+                    if local and local.get('notification_pending') is True and local.get('receipt')==existing_receipt:
+                        self.notify_receipt(existing_receipt)
                     return False
                 return self.publish_conflict(
                     request=raw,
@@ -739,11 +767,23 @@ class Agent:
                 stored_receipt = ledger.get("receipt")
                 if ledger_state == "terminal" and isinstance(stored_receipt, dict):
                     self.publish_receipt(stored_receipt)
+                    if ledger.get('notification_pending') is True:self.notify_receipt(stored_receipt)
                     return True
                 if ledger_state == "started":
                     started_at = str(
                         ledger.get("started_at_utc") or utc_now().isoformat()
                     )
+                    recover=getattr(self.executor,'recover',None)
+                    recovered=recover(raw) if callable(recover) else None
+                    if recovered is not None:
+                        receipt=self.make_receipt(request=raw,
+                            state='succeeded' if self.result_succeeded(recovered) else 'failed',
+                            started_at=started_at,result=recovered)
+                        self.write_ledger(request_id,{'state':'terminal',
+                            'request_fingerprint':fingerprint,'receipt':receipt})
+                        self.publish_receipt(receipt)
+                        self.notify_receipt(receipt)
+                        return True
                     receipt = self.make_receipt(
                         request=raw,
                         state="blocked_ambiguous_replay",
@@ -894,7 +934,13 @@ class Agent:
         return [path for _, _, path in values]
 
     def run(self, once: bool = False) -> int:
-        if isinstance(self.executor, BrokerExecutor):
+        if self.admission_check is not None:
+            from ..supervisor.authority import AuthorityDenied
+            try:
+                self.admission_check()
+            except AuthorityDenied:
+                return 0
+        elif isinstance(self.executor, BrokerExecutor):
             from ..supervisor.admission import require_active
             require_active(self.repo)
         self.ledger_dir.mkdir(parents=True, exist_ok=True)
@@ -904,6 +950,8 @@ class Agent:
             print(f"do-again initial status publish failed: {exc}", file=sys.stderr, flush=True)
         while not self.stop_requested:
             try:
+                if self.admission_check is not None:
+                    self.admission_check()
                 self.sync()
                 did_work = False
                 for path in self.request_paths():
@@ -916,6 +964,11 @@ class Agent:
                 if not did_work:
                     time.sleep(self.poll_seconds)
             except Exception as exc:
+                from ..supervisor.authority import AuthorityDenied
+                if isinstance(exc, AuthorityDenied):
+                    # Authority loss is an operator handoff, not a recoverable
+                    # polling error. Do not publish remote status after pause.
+                    return 0
                 print(f"do-again loop error: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
                 if once:
                     return 1
