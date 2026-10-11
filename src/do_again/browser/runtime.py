@@ -819,6 +819,89 @@ return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: 
     return result
 
 
+def _ensure_high_reasoning(target: cdp.Target) -> None:
+    """Require the actual ChatGPT High UI setting before a development chat Send.
+
+    A prompt saying "think deeply" does not select the product's reasoning
+    level. This code only operates the dedicated browser's visible model picker
+    and three-position effort slider; unknown UI or unsupported accounts stop
+    before any prompt dispatch. It does not change the selected model family.
+    """
+    opened = cdp.evaluate(target, r"""(() => {
+        const options=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+            .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled;});
+        if(options.length!==1)return 'missing_picker';
+        const button=options[0];
+        if(button.getAttribute('aria-expanded')==='true')return 'already_open';
+        button.click();
+        return 'opened';
+    })()""", timeout=10.0, user_gesture=True)
+    if opened not in {'opened', 'already_open'}:
+        raise BrowserPreDispatchBlocked("ChatGPT model picker is unavailable; refusing non-High reasoning")
+    try:
+        observation = None
+        for _ in range(12):
+            observation = cdp.evaluate(target, r"""(() => {
+                const sliders=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
+                    .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
+                if(sliders.length!==1)return null;
+                const slider=sliders[0],track=slider.closest('[data-orientation="horizontal"][aria-disabled="false"]');
+                if(!track || track.querySelectorAll('[role="slider"]').length!==1)return null;
+                const rect=track.getBoundingClientRect();
+                const ticks=track.querySelectorAll('[data-selected]');
+                if(ticks.length!==3 || rect.width<70 || rect.height<8)return null;
+                const x=rect.right-13,y=rect.top+rect.height/2;
+                const hit=document.elementFromPoint(x,y);
+                if(!hit || !(track===hit || track.contains(hit)))return null;
+                return {value:slider.getAttribute('aria-valuenow'),
+                    min:slider.getAttribute('aria-valuemin'),
+                    max:slider.getAttribute('aria-valuemax'),x,y};
+            })()""", timeout=10.0)
+            if isinstance(observation, dict):
+                break
+            time.sleep(0.15)
+        if (not isinstance(observation, dict)
+                or observation.get('min') != '0' or observation.get('max') != '2'
+                or observation.get('value') not in {'0', '1', '2'}):
+            raise BrowserPreDispatchBlocked(
+                "ChatGPT High reasoning slider cannot be verified; no prompt submitted")
+        if observation['value'] != '2':
+            point = {k: observation.get(k) for k in ('x', 'y')}
+            if any(type(v) not in (float, int) or not 0 <= v < 100000 for v in point.values()):
+                raise BrowserPreDispatchBlocked("ChatGPT High endpoint is unavailable")
+            common={'x':point['x'],'y':point['y'],'button':'left','clickCount':1}
+            cdp.target_call(target, 'Input.dispatchMouseEvent',
+                            {'type':'mousePressed',**common,'buttons':1},timeout=10.0)
+            cdp.target_call(target, 'Input.dispatchMouseEvent',
+                            {'type':'mouseReleased',**common,'buttons':0},timeout=10.0)
+        verified=False
+        for _ in range(12):
+            verified = cdp.evaluate(target, r"""(() => {
+                const picker=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                   .filter(el=>el.getBoundingClientRect().width>0);
+                if(picker.length!==1)return false;
+                const slider=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
+                   .filter(el=>el.getBoundingClientRect().width>0);
+                if(slider.length===1)return slider[0].getAttribute('aria-valuenow')==='2'
+                    && slider[0].getAttribute('aria-valuemax')==='2';
+                return (picker[0].innerText||'').trim()==='High';
+            })()""",timeout=10.0) is True
+            if verified:
+                break
+            time.sleep(0.15)
+        if not verified:
+            raise BrowserPreDispatchBlocked(
+                "ChatGPT did not confirm High reasoning after selection; no prompt submitted")
+    finally:
+        if opened == 'opened':
+            # Dismiss only our menu; never select another model or Send.
+            cdp.evaluate(target, r"""(() => {
+                const btn=document.querySelector('button[aria-label="Select ChatGPT model"]');
+                if(btn && btn.getAttribute('aria-expanded')==='true')btn.click();
+                return true;
+            })()""",timeout=10.0,user_gesture=True)
+
+
 def _require_send_target_focus(target: cdp.Target) -> None:
     """Require document focus without activating desktop GUI windows."""
     config = load_config()
