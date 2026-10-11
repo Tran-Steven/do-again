@@ -59,14 +59,41 @@ def validate_project_scope(config, previous=None):
                 or type(p.get('uid')) is not int or not 400<=p['uid']<500
                 or p.get('gid')!=p['uid']):
             raise RuntimeError('protected project repository or identity scope changed')
-    if config.get('development_scope') is not None:
-        from do_again.supervisor.jobpipe_development import require_jobpipe_grant
-        from do_again.supervisor.macos_execution import project_from_dict
-        target=next(p for p in projects if p['account']=='_doagain_jp')
+    # This preflight runs in /usr/bin/python3 -I -S before the sealed package
+    # is inserted into sys.path. Validate the grant using stdlib only; repeat
+    # full scope/expiration checks with the sealed module after import.
+    grant=config.get('development_scope')
+    if grant is not None:
+        from datetime import datetime,timezone,timedelta
+        fields={'kind','source_sha','project_key','goal_revision','issued_at_utc',
+                'expires_at_utc','network_access','application_submissions'}
+        jp=next(p for p in projects if p['account']=='_doagain_jp')
+        if (not isinstance(grant,dict) or set(grant)!=fields
+                or config.get('production_ready') is not False
+                or config.get('live_canary') is not None
+                or config.get('codex_canary') is not None
+                or grant.get('kind')!='jobpipe-offline-v1'
+                or grant.get('network_access') is not False
+                or grant.get('application_submissions') is not False
+                or not isinstance(config.get('source_sha'),str)
+                or not re.fullmatch('[0-9a-f]{40}',config['source_sha'])
+                or grant.get('source_sha')!=config['source_sha']
+                or grant.get('project_key')!=jp['key']
+                or not isinstance(grant.get('goal_revision'),str)
+                or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,127}',
+                                    grant['goal_revision'])
+                or grant['goal_revision']!=jp.get('goal_revision')):
+            raise RuntimeError('root-sealed jobpipe offline grant is invalid')
         try:
-            require_jobpipe_grant(config,project_from_dict(target))
-        except Exception as exc:
-            raise RuntimeError('root-sealed jobpipe offline grant is invalid') from exc
+            issued=datetime.strptime(grant['issued_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            expires=datetime.strptime(grant['expires_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            if (issued.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['issued_at_utc']
+                    or expires.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['expires_at_utc']
+                    or not issued<=datetime.now(timezone.utc)<=expires
+                    or not timedelta(0)<expires-issued<=timedelta(days=14)):
+                raise ValueError('invalid jobpipe development grant lifetime')
+        except (ValueError,TypeError,KeyError) as exc:
+            raise RuntimeError('root-sealed jobpipe offline grant lifetime is invalid') from exc
     if previous is None:
         if len(projects)!=2 or config.get('scope_enrollment') is not None:
             raise RuntimeError('initial protected installation cannot implicitly enroll Sonary')
@@ -465,6 +492,14 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
     if current.exists() and not existing_installation:
         raise RuntimeError('existing package has unknown installation provenance')
     sys.path.insert(0,str(stage/'package'))
+    if config.get('development_scope') is not None:
+        from do_again.supervisor.jobpipe_development import require_jobpipe_grant
+        from do_again.supervisor.macos_execution import project_from_dict
+        target=next(p for p in config['projects'] if p['account']=='_doagain_jp')
+        try:
+            require_jobpipe_grant(config,project_from_dict(target))
+        except Exception as exc:
+            raise RuntimeError('sealed jobpipe grant fails admission') from exc
     from do_again.supervisor.authority import AuthorityRegistry, AuthorityDenied
     registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
     if classify_canary_partial:

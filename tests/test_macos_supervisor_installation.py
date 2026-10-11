@@ -51,6 +51,50 @@ else:
                               str(self.root),str(stage)],capture_output=True,text=True)
         self.assertEqual(child.returncode,0,child.stderr[-800:])
 
+    def test_jobpipe_development_grant_preflight_uses_isolated_system_python(self):
+        from datetime import datetime, timedelta, timezone
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        home=self.root/'operator'
+        projects=[]
+        for name,account,uid in [('do-again','_doagain_da',401),
+                                 ('jobpipe','_doagain_jp',402)]:
+            repo=home/name
+            key=hashlib.sha256(os.fsencode(repo)).hexdigest()
+            projects.append({'account':account,'repo':str(repo),'key':key,
+                             'uid':uid,'gid':uid,'worktree':str(self.module.EXEC/key/'worktree'),
+                             'github_repository':'Tran-Steven/'+name,
+                             'source_sha':'a'*40,
+                             'goal_revision':'maintenance-test'})
+        config={'operator_home':str(home),'source_sha':'b'*40,
+                'production_ready':False,'projects':projects}
+        config['development_scope']={'kind':'jobpipe-offline-v1',
+                'project_key':projects[1]['key'],'source_sha':config['source_sha'],
+                'goal_revision':'maintenance-test',
+                'issued_at_utc':(now-timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'expires_at_utc':(now+timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'network_access':False,'application_submissions':False}
+        child_script="""
+import importlib.util,json,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installer',sys.argv[1])
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+config=json.loads(sys.argv[2])
+previous=dict(config,source_sha='a'*40,development_scope=None)
+assert module.validate_project_scope(config,previous) is False
+config['development_scope']['application_submissions']=True
+try:
+    module.validate_project_scope(config,previous)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('unauthorized application scope admitted')
+"""
+        child=subprocess.run([sys.executable,'-I','-S','-B','-c',child_script,
+                              str(Path(__file__).resolve().parents[1]/'tools/macos_supervisor_install.py'),
+                              json.dumps(config)],capture_output=True,text=True,timeout=15)
+        self.assertEqual(child.returncode,0,child.stderr[-1200:])
+
     def test_installer_refuses_mixed_browser_and_codex_grants_before_any_service_effect(self):
         cfg={'live_canary':{'nonce':'a'*24},
              'codex_canary':{'nonce':'b'*24},
