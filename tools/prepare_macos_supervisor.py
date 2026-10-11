@@ -148,11 +148,15 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None):
     if canary_grant is not None and codex_grant is not None:
         raise ValueError('browser and Codex canary grants cannot coexist')
     if jobpipe_offline_development and (canary_grant is not None or codex_grant is not None or classify_canary_partial):
         raise ValueError('jobpipe offline development and synthetic canary grants cannot coexist')
+    if jobpipe_migration_sha is not None and (not jobpipe_offline_development
+            or not isinstance(jobpipe_migration_sha,str)
+            or not re.fullmatch('[0-9a-f]{40}',jobpipe_migration_sha)):
+        raise ValueError('jobpipe migration requires an exact target and offline development')
     if codex_grant is not None and classify_canary_partial:
         raise ValueError('Codex canary cannot inherit browser partial-publication disposition')
     if classify_canary_partial and canary_grant is None:
@@ -212,10 +216,21 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             raise ValueError('source repository identity does not match approved projects')
     if enrolling_sonary:
         require_fresh_sonary_snapshot(sonary_repo)
+    migrating=False
     if jobpipe_offline_development:
         pinned=next((p['source_sha'] for p in (installed or {}).get('projects',[])
                      if p.get('account')=='_doagain_jp'),None)
-        require_fresh_jobpipe_snapshot(jobpipe,pinned_sha=pinned)
+        latest=require_fresh_jobpipe_snapshot(
+            jobpipe,pinned_sha=None if jobpipe_migration_sha else pinned)
+        if jobpipe_migration_sha is not None:
+            if (installed is None or pinned is None or pinned==latest
+                    or jobpipe_migration_sha!=latest or enrolling_sonary):
+                raise ValueError('jobpipe migration requires a changed installed pin and current verified main')
+            try:
+                git(jobpipe,'merge-base','--is-ancestor',pinned,latest)
+            except subprocess.CalledProcessError as exc:
+                raise ValueError('jobpipe protected snapshot migration is not a fast-forward') from exc
+            migrating=True
     output.mkdir(parents=True,mode=0o700)
     payload=output/'payload';payload.mkdir(mode=0o700)
     package=payload/'package/do_again';package.parent.mkdir()
@@ -249,7 +264,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     for index,(repo,canonical,name,account,ref) in enumerate(scopes):
         if installed:
             previous=next((p for p in installed['projects'] if p['repo']==str(canonical)),None)
-            if previous is not None:
+            if previous is not None and not (migrating and account=='_doagain_jp'):
                 ref=previous['source_sha']
         sha=git(repo,'rev-parse',ref)
         bundle=f'snapshots/{name}.bundle'
@@ -272,6 +287,15 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     if enrolling_sonary:
         config['scope_enrollment']={'kind':'sonary_add_only',
                                     'previous_source_sha':installed['source_sha']}
+    if migrating:
+        old=next(p for p in installed['projects'] if p['account']=='_doagain_jp')
+        updated=next(p for p in projects if p['account']=='_doagain_jp')
+        config['snapshot_migration']={
+            'kind':'jobpipe_fast_forward_v1',
+            'installed_source_sha':installed['source_sha'],
+            'project_key':updated['key'],
+            'from_sha':old['source_sha'],
+            'to_sha':updated['source_sha']}
     sys.path.insert(0,str(source/'src'))
     config['dependency_artifacts']={}
     if dependency_lock is not None:
@@ -407,6 +431,7 @@ if __name__=='__main__':
     grants.add_argument('--canary-grant',type=Path)
     grants.add_argument('--codex-grant',type=Path)
     grants.add_argument('--jobpipe-offline-development',action='store_true',help='Seal a 14-day jobpipe-only offline coding grant; does not resume or start workers')
+    parser.add_argument('--jobpipe-migration-sha',help='Exact remote jobpipe main SHA for opt-in protected fast-forward')
     parser.add_argument('--classify-canary-partial-publication',action='store_true')
     args=parser.parse_args()
     print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
@@ -414,4 +439,5 @@ if __name__=='__main__':
                              codex_grant=args.codex_grant,
                              classify_canary_partial=args.classify_canary_partial_publication,
                               sonary_repo=args.sonary_repo,
-                              jobpipe_offline_development=args.jobpipe_offline_development),indent=2))
+                              jobpipe_offline_development=args.jobpipe_offline_development,
+                              jobpipe_migration_sha=args.jobpipe_migration_sha),indent=2))

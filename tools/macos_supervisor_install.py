@@ -95,12 +95,38 @@ def validate_project_scope(config, previous=None):
         except (ValueError,TypeError,KeyError) as exc:
             raise RuntimeError('root-sealed jobpipe offline grant lifetime is invalid') from exc
     if previous is None:
-        if len(projects)!=2 or config.get('scope_enrollment') is not None:
-            raise RuntimeError('initial protected installation cannot implicitly enroll Sonary')
+        if (len(projects)!=2 or config.get('scope_enrollment') is not None
+                or config.get('snapshot_migration') is not None):
+            raise RuntimeError('initial protected installation cannot implicitly enroll or migrate projects')
         return False
     older=previous.get('projects',[])
     old_accounts={p['account']:p for p in older}
     incoming={p['account']:p for p in projects}
+    migration=config.get('snapshot_migration')
+    if migration is not None:
+        prior=old_accounts.get('_doagain_jp')
+        updated=incoming.get('_doagain_jp')
+        fields={'kind','installed_source_sha','project_key','from_sha','to_sha'}
+        if (not isinstance(migration,dict) or set(migration)!=fields
+                or migration['kind']!='jobpipe_fast_forward_v1'
+                or config.get('production_ready') is not False
+                or previous.get('production_ready') is not False
+                or config.get('development_scope') is None
+                or config.get('scope_enrollment') is not None
+                or not isinstance(prior,dict) or not isinstance(updated,dict)
+                or migration['installed_source_sha']!=previous.get('source_sha')
+                or migration['project_key']!=prior.get('key')
+                or migration['from_sha']!=prior.get('source_sha')
+                or migration['to_sha']!=updated.get('source_sha')
+                or not re.fullmatch('[0-9a-f]{40}',str(migration['from_sha']))
+                or not re.fullmatch('[0-9a-f]{40}',str(migration['to_sha']))
+                or migration['from_sha']==migration['to_sha']
+                or len(older)!=len(projects) or set(incoming)!=set(old_accounts)
+                or any(incoming[a]!=({**old_accounts[a],'source_sha':migration['to_sha']}
+                        if a=='_doagain_jp' else old_accounts[a])
+                       for a in old_accounts)):
+            raise RuntimeError('jobpipe snapshot migration violates protected source scope')
+        return False
     if (len(older) not in (2,3) or any(
             incoming.get(account)!=project for account,project in old_accounts.items())):
         raise RuntimeError('existing protected scope cannot change or be removed')
@@ -262,6 +288,105 @@ def provision_worktree(config, project, current):
         for path in [Path(directory),*(Path(directory)/name for name in files)]:
             os.chown(path,project['uid'],project['gid'],follow_symlinks=False)
     target.chmod(0o750)
+
+
+
+def verify_jobpipe_migration_preflight(config, previous):
+    """Read-only check before a protected snapshot is ever replaced.
+
+    The primary checkout and its dirty files are NOT involved. Root-owned
+    migration is permitted only from the previously sealed detached HEAD,
+    without any tracked or untracked worktree changes.
+    """
+    marker=config.get('snapshot_migration')
+    if marker is None:return None
+    if previous is None:
+        raise RuntimeError('jobpipe migration requires an installed protected snapshot')
+    validate_project_scope(config,previous)
+    prior=next(p for p in previous['projects'] if p['account']=='_doagain_jp')
+    target=Path(prior['worktree'])
+    if target!=EXEC/prior['key']/'worktree' or target.is_symlink() or not target.is_dir():
+        raise RuntimeError('jobpipe protected worktree identity differs')
+    metadata=target/'.git'
+    head=metadata/'HEAD'
+    if (not metadata.is_dir() or metadata.is_symlink() or head.is_symlink()
+            or head.stat().st_nlink!=1
+            or metadata.stat().st_uid!=config['operator_uid']
+            or head.read_text().strip()!=prior['source_sha']):
+        raise RuntimeError('jobpipe snapshot has changed from the recorded detached HEAD')
+    # No user-controlled hooks, system/global configuration, fsmonitor, or
+    # optional Git index locks. Never run against the normal ~/jobpipe checkout.
+    environment={'PATH':'/usr/bin:/bin','HOME':'/var/empty',
+                 'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null',
+                 'GIT_OPTIONAL_LOCKS':'0','GIT_TERMINAL_PROMPT':'0'}
+    result=subprocess.run(['/usr/bin/git','-c','core.fsmonitor=false',
+        '-c','core.hooksPath=/dev/null','-c','safe.directory='+str(target),
+        '-C',str(target),'status','--porcelain=v1','--untracked-files=all'],
+        env=environment,capture_output=True,text=True,timeout=60)
+    if result.returncode or result.stdout.strip():
+        raise RuntimeError('jobpipe protected worktree is modified or cannot be verified; migration refused')
+    stage=target.parent/('worktree-next-'+marker['to_sha'][:12])
+    retained=target.parent/('worktree-retained-'+marker['from_sha'][:12])
+    if any(path.exists() or path.is_symlink() for path in (stage,retained)):
+        raise RuntimeError('jobpipe migration staging or retained snapshot already exists; reconcile first')
+    return {'target':target,'staged':stage,'retained':retained,'previous':prior}
+
+
+def migrate_jobpipe_snapshot(config, current, previous, journal_path, journal):
+    """One-shot, crash-recorded source-only migration under root admission fences.
+
+    The old protected worktree is retained. Every interruption requires
+    explicit reconciliation; no file deletion, rollback, or retry is automatic.
+    """
+    marker=config.get('snapshot_migration')
+    if marker is None:return
+    proof=verify_jobpipe_migration_preflight(config,previous)
+    old=proof['previous']
+    project=next(p for p in config['projects'] if p['account']=='_doagain_jp')
+    target,staged,retained=proof['target'],proof['staged'],proof['retained']
+    if journal.get('snapshot_migration',{}).get('phase') not in (None,'complete'):
+        raise RuntimeError('interrupted jobpipe snapshot migration requires operator reconciliation')
+    record={'phase':'stage_requested','kind':marker['kind'],
+            'from_sha':marker['from_sha'],'to_sha':marker['to_sha'],
+            'worktree':str(target),'staged':str(staged),'retained':str(retained),
+            'source_sha':config['source_sha']}
+    journal['snapshot_migration']=record
+    atomic(journal_path,journal)
+    staged.mkdir(mode=0o700)
+    os.chown(staged,config['operator_uid'],config['operator_gid'])
+    environment={'PATH':'/usr/bin:/bin','HOME':config['operator_home'],
+                 'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null',
+                 'GIT_TERMINAL_PROMPT':'0'}
+    options={'user':config['operator_uid'],'group':config['operator_gid'],
+             'extra_groups':[],'env':environment}
+    git=['/usr/bin/git','-c','core.fsmonitor=false',
+         '-c','core.hooksPath=/dev/null','-c','protocol.file.allow=always',
+         '-c','submodule.recurse=false']
+    bundle=current/project['bundle']
+    run([*git,'clone','--no-hardlinks','--no-checkout',str(bundle),str(staged)],**options)
+    run([*git,'-C',str(staged),'fetch','--no-tags',
+         str(bundle),marker['to_sha']],**options)
+    run([*git,'-C',str(staged),'merge-base','--is-ancestor',
+         marker['from_sha'],marker['to_sha']],**options)
+    run([*git,'-C',str(staged),'checkout','--detach',marker['to_sha']],**options)
+    head=run([*git,'-C',str(staged),'rev-parse','HEAD'],**options).stdout.strip()
+    if head!=marker['to_sha']:
+        raise RuntimeError('staged jobpipe snapshot head does not match sealed fast-forward')
+    for directory,dirs,files in os.walk(staged,followlinks=False):
+        if Path(directory)==staged:dirs[:]=[name for name in dirs if name!='.git']
+        for item in [Path(directory),*(Path(directory)/name for name in files)]:
+            os.chown(item,project['uid'],project['gid'],follow_symlinks=False)
+    staged.chmod(0o750)
+    record['phase']='ready_to_swap';atomic(journal_path,journal)
+    # No automagic restore: a crash after the first rename leaves the
+    # original untouched under retained and a durable incomplete journal.
+    os.rename(target,retained)
+    sync_directory(target.parent)
+    record['phase']='original_retained';atomic(journal_path,journal)
+    os.rename(staged,target)
+    sync_directory(target.parent)
+    record['phase']='complete';atomic(journal_path,journal)
+
 
 
 def verify_worker_quiescence(config):
@@ -469,6 +594,9 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
         raise RuntimeError('browser and Codex grants cannot coexist in an installed runtime')
     previous_config=json.loads(prior_path.read_text()) if prior_path.exists() else None
     enrolling_sonary=validate_project_scope(config,previous_config)
+    # Refuse a dirty or ambiguous protected source before any account/runtime
+    # effect. The same check repeats immediately before the fenced rename.
+    verify_jobpipe_migration_preflight(config,previous_config)
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
     secure_directory(ROOT)
     secure_directory(ROOT/'state',0o700)
@@ -587,6 +715,7 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
                     raise
                 if status['intent'] not in {'maintenance','paused','stopped'}:
                     raise RuntimeError('existing authority admits work; upgrade deferred')
+        migrate_jobpipe_snapshot(config,current,previous_config,journal_path,journal)
         for project in config['projects']:provision_worktree(config,project,current)
         if config.get('live_canary') is not None and config.get('codex_canary') is not None:
             raise RuntimeError('cannot provision overlapping browser and Codex grants')
