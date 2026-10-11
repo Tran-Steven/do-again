@@ -380,3 +380,38 @@ def press_enter(target: Target) -> None:
         },
         timeout=10.0,
     )
+
+
+def click_send(target: Target) -> None:
+    """One trusted browser mouse click, never a JavaScript .click() or Enter fallback.
+
+    Chromium may ignore synthetic DOM clicks in the composer. Selection is
+    read-only; once the first CDP mouse event is attempted, the caller's
+    pre-dispatch journal treats *any* exception as an uncertain submission.
+    """
+    point = evaluate(target, r"""(() => {
+const visible = el => { const r=el.getBoundingClientRect(); const s=getComputedStyle(el);
+  return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden'; };
+const buttons=Array.from(document.querySelectorAll(
+  'button[data-testid="send-button"],button[aria-label="Send"],button[aria-label="Send prompt"]'
+)).filter(visible);
+if(buttons.length!==1 || buttons[0].disabled || buttons[0].getAttribute('aria-disabled')==='true')
+  return null;
+const button=buttons[0],rect=button.getBoundingClientRect();
+const x=rect.left+rect.width/2,y=rect.top+rect.height/2;
+if(!(x>=0 && y>=0 && x<innerWidth && y<innerHeight)) return null;
+const hit=document.elementFromPoint(x,y);
+if(!hit || !button.contains(hit)) return null;
+return {x,y};
+})()""", timeout=10.0)
+    if (not isinstance(point, dict) or set(point) != {'x', 'y'}
+            or any(type(point[k]) not in (int, float) or not 0 <= point[k] < 100000
+                   for k in ('x', 'y'))):
+        raise BrowserError('ChatGPT Send button was unavailable, obscured, or ambiguous')
+    # One physical click consists of mouse down and up at the same verified
+    # coordinate. A lost press/release response is never retried here.
+    common = {'x': point['x'], 'y': point['y'], 'button': 'left', 'clickCount': 1}
+    target_call(target, 'Input.dispatchMouseEvent',
+                {'type': 'mousePressed', **common, 'buttons': 1}, timeout=10.0)
+    target_call(target, 'Input.dispatchMouseEvent',
+                {'type': 'mouseReleased', **common, 'buttons': 0}, timeout=10.0)

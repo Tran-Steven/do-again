@@ -57,6 +57,12 @@ def atomic_json(path: Path, value: Any) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        if os.name=='posix':
+            # Persist the new directory entry before a caller initiates an
+            # external effect. Flushing only the temporary file is insufficient.
+            directory=os.open(path.parent,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+            try:os.fsync(directory)
+            finally:os.close(directory)
     finally:
         try:
             os.unlink(temporary)

@@ -54,6 +54,14 @@ class OperatorGitHubCredentialTests(unittest.TestCase):
             self.assertEqual((self.path / "github-token").stat().st_mode & 0o777, 0o600)
         self.assertFalse((self.path / "github-token.pending").exists())
 
+    def test_sonary_credential_enrollment_is_separately_scoped_and_private(self):
+        self.broker.config['projects']=[{
+            'key':'project','github_repository':'Tran-Steven/Sonary'}]
+        result=self.enroll()
+        self.assertEqual(result,{'registered':True,'repository':'Tran-Steven/Sonary'})
+        self.assertEqual((self.path/'github-token').read_text(),self.token)
+        self.assertNotIn(self.token,repr(result))
+
     def test_maintenance_required_before_file_creation(self):
         self.intent = "active"
         with self.assertRaises(ExecutionBlocked):

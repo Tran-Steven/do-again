@@ -1,0 +1,55 @@
+{
+  "absolute_timeout_seconds": 3600,
+  "allowed_operations": [
+    "status",
+    "run_tests",
+    "repo_script",
+    "scratch_script",
+    "extended_exec",
+    "git_commit",
+    "git_publish",
+    "dependency_install",
+    "git_publication_reconcile",
+    "ci_observe"
+  ],
+  "control_branch": "operator-control",
+  "default_timeout_seconds": 120,
+  "extended_exec_binaries": [
+    "python3",
+    "bash",
+    "zsh",
+    "sh",
+    "git",
+    "make",
+    "true"
+  ],
+  "hard_denied_binaries": [
+    "sudo",
+    "su",
+    "doas",
+    "rm",
+    "dd",
+    "diskutil",
+    "fdisk",
+    "mkfs",
+    "mount",
+    "umount",
+    "docker",
+    "podman"
+  ],
+  "max_future_skew_seconds": 300,
+  "max_inline_artifact_bytes": 450000,
+  "max_output_bytes": 262144,
+  "max_request_ttl_seconds": 3600,
+  "max_scratch_script_bytes": 65536,
+  "poll_seconds": 3,
+  "remote_claims": true,
+  "repo_script_prefixes": [
+    "tools/",
+    "scripts/",
+    "control_plane/"
+  ],
+  "request_lock_stale_seconds": 7200,
+  "schema_version": 1,
+  "worker_policy_schema": 1
+}
