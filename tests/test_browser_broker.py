@@ -13,6 +13,11 @@ from do_again.supervisor.macos_execution import ExecutionBlocked,ExecutionLedger
 
 class BrowserBrokerTests(unittest.TestCase):
     def setUp(self):
+        # The synthetic browser fixture has no ChatGPT thinking-effort UI.
+        # Actual High selector admission is tested in test_chatgpt_high_effort.
+        high=patch("do_again.browser.runtime._ensure_high_reasoning")
+        high.start()
+        self.addCleanup(high.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.active=False;self.status={'intent':'active','epoch':1,'goal_revision':'goal'}
         @contextmanager
