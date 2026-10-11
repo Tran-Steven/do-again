@@ -114,6 +114,27 @@ class CanaryControlBranchTests(unittest.TestCase):
                 self.provision()
             api.assert_called_once()
 
+    def test_three_parent_branch_creation_requires_fresh_native_root_authority(self):
+        self.installed['projects']=[
+            {'account':'_doagain_da','repo':str(self.root/'do-again')},
+            {'account':'_doagain_jp','repo':str(self.root/'jobpipe')},
+            {'account':'_doagain_so','repo':str(self.root/'Sonary')},
+        ]
+        with patch.object(canary_branch, "_api") as api, \\
+             patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
+                   side_effect=ExecutionBlocked("Sonary is active")):
+            with self.assertRaisesRegex(ExecutionBlocked,"Sonary is active"):
+                self.provision()
+            api.assert_not_called()
+        self.assertFalse(self.ledger.exists())
+        with patch.object(canary_branch, "_api") as api, \\
+             patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
+                   return_value={'epoch':2}):
+            with self.assertRaisesRegex(ExecutionBlocked,"native canary parent epoch"):
+                self.provision()
+            api.assert_not_called()
+        self.assertFalse(self.ledger.exists())
+
     def test_private_grant_and_nonce_are_required_without_github_effects(self):
         self.grant.chmod(0o644)
         with patch.object(canary_branch, "_api") as api:

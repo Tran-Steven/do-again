@@ -99,6 +99,14 @@ def _check_operator_authority(installed: dict, grant: dict) -> None:
     if (status.get("intent") != "maintenance"
             or status.get("epoch") != grant["parent_epoch"]):
         raise ExecutionBlocked("canary parent maintenance authority changed")
+    # The branch creation is itself a GitHub effect. For a real sealed
+    # two/three-project installation, prove *all* parents are quiescent from
+    # the protected root broker before issuing its single reserved POST.
+    if len(installed.get("projects", [])) in (2, 3):
+        from .canary_bootstrap import _protected_parent_state
+        native = _protected_parent_state(installed)
+        if native.get("epoch") != grant["parent_epoch"]:
+            raise ExecutionBlocked("native canary parent epoch changed")
 
 
 def provision_control_branch(*, nonce: str, baseline: str, grant: Path,
