@@ -184,19 +184,28 @@ def connect(path, packet=None):
             raise RuntimeError('project status request was rejected during readiness')
         return response['result']
 
+def verify_status(status,project):
+    if not isinstance(status,dict) or not isinstance(status.get('authority'),dict):
+        raise RuntimeError('installed broker returned invalid status')
+    if (status.get('source_sha')!=expected['source_sha']
+            or status.get('production_ready') is not False
+            or status.get('operator_intent') not in ('maintenance','paused','stopped')
+            or status.get('unresolved_executions')!=[]
+            or status.get('inflight_request_ids')!=[]
+            or status['authority'].get('repo_head')!=project['source_sha']):
+        raise RuntimeError('installed project status does not match sealed maintenance authority')
+
 while time.monotonic()<deadline:
     try:
         for project in expected['projects']:
-            status=connect(socket_root/(project['key'][:24]+'.sock'),
-                           {'operation':'status'})
-            if (status.get('source_sha')!=expected['source_sha']
-                    or status.get('production_ready') is not False
-                    or status.get('operator_intent') not in ('maintenance','paused','stopped')
-                    or status.get('unresolved_executions')!=[]
-                    or status.get('inflight_request_ids')!=[]
-                    or status.get('authority',{}).get('repo_head')!=project['source_sha']):
-                raise RuntimeError('installed project status does not match sealed maintenance authority')
-        connect(socket_root/'operator.sock')
+            project_status=connect(socket_root/(project['key'][:24]+'.sock'),
+                                   {'operation':'status'})
+            verify_status(project_status,project)
+            operator_status=connect(socket_root/'operator.sock',
+                                    {'operation':'status','project':project['key']})
+            verify_status(operator_status,project)
+            if operator_status.get('uid')!=project_status.get('uid'):
+                raise RuntimeError('operator and project broker identities differ')
         print('SUPERVISOR_AUTHENTICATED_READY')
         sys.exit(0)
     except OSError as exc:
