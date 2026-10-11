@@ -40,6 +40,33 @@ class RootChatGPTBootstrapGateTests(unittest.TestCase):
             (Path(self.home+"/jobpipe"),{"operation":"status"}),
         ])
 
+
+    def test_three_project_installation_verifies_all_native_statuses(self):
+        self.config["projects"].append({
+            "account":"_doagain_so","repo":self.home+"/Sonary",
+            "github_repository":"Tran-Steven/Sonary"})
+        observed=[]
+        def root(repo,packet):
+            observed.append(repo)
+            return dict(self.native)
+        self.assertEqual(_protected_parent_state(self.config,rpc=root)["epoch"],18)
+        self.assertEqual(observed,[Path(self.home+"/"+name)
+                         for name in ("do-again","jobpipe","Sonary")])
+        with self.assertRaisesRegex(ExecutionBlocked,"project path changed"):
+            changed={**self.config,"projects":[*self.config["projects"]]}
+            changed["projects"][-1]={**changed["projects"][-1],"repo":self.home+"/sonary"}
+            _protected_parent_state(changed,rpc=root)
+        for cause in ({"operator_intent":"active"},{"enforcement_verified":False},
+                      {"unresolved_executions":[{"request_id":"uncertain"}]}):
+            with self.subTest(cause=cause),self.assertRaisesRegex(ExecutionBlocked,"maintenance"):
+                _protected_parent_state(self.config,rpc=lambda repo,packet:
+                    {**self.native,**cause} if repo==Path(self.home+"/Sonary") else self.native)
+        changed={**self.config,"projects":self.config["projects"][:2]}
+        self.assertEqual(len(changed["projects"]),2)  # Older installs remain valid.
+        changed["projects"]=[self.config["projects"][0],self.config["projects"][-1]]
+        with self.assertRaisesRegex(ExecutionBlocked,"every protected project"):
+            _protected_parent_state(changed,rpc=root)
+
     def test_rejects_incomplete_confinement_or_replay(self):
         changes=[
             {"operator_intent":"active"},{"canary_authorized":True},
@@ -56,7 +83,7 @@ class RootChatGPTBootstrapGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionBlocked,"project path changed"):
             _protected_parent_state(self.config,rpc=lambda repo,packet:self.native)
         self.config["projects"].pop()
-        with self.assertRaisesRegex(ExecutionBlocked,"both protected"):
+        with self.assertRaisesRegex(ExecutionBlocked,"every protected project"):
             _protected_parent_state(self.config,rpc=lambda repo,packet:self.native)
 
 

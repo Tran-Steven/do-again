@@ -99,6 +99,32 @@ class LiveCanaryTests(unittest.TestCase):
                 self.registry.set_intent(self.parent.project.repo,intent,goal_revision='original')
                 with self.assertRaises(ExecutionBlocked):effect_authorized(self.broker)
 
+
+    def test_three_parent_canary_rejects_active_or_pending_sonary(self):
+        # A sealed child must not run while Sonary or jobpipe can accept real
+        # work, even though the child only edits its own isolated checkout.
+        for name,account,key in (("jobpipe","_doagain_jp","sibling-jp"),
+                                 ("Sonary","_doagain_so","sibling-so")):
+            sibling={**self.config['projects'][0],
+                     'account':account,'repo':str(self.root/name),'key':key}
+            self.config['projects'].append(sibling)
+            self.registry.set_intent(Path(sibling['repo']),'maintenance',
+                                     goal_revision='sibling-fixture')
+        self.assertTrue(effect_authorized(self.broker))
+        for sibling in self.config['projects'][1:]:
+            self.registry.set_intent(Path(sibling['repo']),'active',
+                                     goal_revision='sibling-fixture')
+            with self.assertRaisesRegex(ExecutionBlocked,'sibling maintenance'):
+                effect_authorized(self.broker)
+            self.registry.set_intent(Path(sibling['repo']),'maintenance',
+                                     goal_revision='sibling-fixture')
+            self.assertTrue(effect_authorized(self.broker))
+            self.ledger.reserve(sibling['key'],'synthetic-unresolved','f'*64)
+            with self.assertRaisesRegex(ExecutionBlocked,'sibling maintenance'):
+                effect_authorized(self.broker)
+            self.ledger.finish(sibling['key'],'synthetic-unresolved',{'state':'succeeded'})
+            self.assertTrue(effect_authorized(self.broker))
+
     def test_deadline_source_goal_and_child_pause_fail_closed(self):
         with patch('do_again.supervisor.live_canary.time.time',return_value=7300):
             with self.assertRaises(ExecutionBlocked):effect_authorized(self.broker)

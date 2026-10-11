@@ -77,6 +77,18 @@ class CanaryAuthority:
                 or status['intent']!='maintenance' or status['epoch']!=self.grant['parent_epoch']
                 or self.parent.ledger.pending(self.parent.project.key)):
             raise ExecutionBlocked('canary parent maintenance authority changed')
+        # The root-installed parent roster is immutable. Keep every sibling
+        # (jobpipe and optional Sonary) quiescent throughout this two-task run.
+        # A synthetic ChatGPT canary may never activate a real project worker.
+        for sibling in self.parent.config.get('projects',[]):
+            if sibling.get('account') == '_doagain_da':
+                continue
+            if sibling.get('account') not in {'_doagain_jp','_doagain_so'}:
+                raise ExecutionBlocked('canary sibling identity is excluded')
+            peer=self.parent.registry.status(Path(sibling['repo']))
+            if (peer.get('intent')!='maintenance'
+                    or self.parent.ledger.pending(sibling['key'])):
+                raise ExecutionBlocked('canary sibling maintenance authority changed')
 
     def check(self):
         self.parent_check()
@@ -261,7 +273,8 @@ def create_broker(config,parent):
     from .macos_server import ProjectBroker
     grant,_,project=scope(config)
     # Scope is derived from immutable installation configuration, not packets.
-    child_config=dict(config,projects=[project,*[p for p in config['projects'] if p['account']=='_doagain_jp']],dependency_artifacts={})
+    child_config=dict(config,projects=[project,*[p for p in config['projects']
+                     if p['account'] in {'_doagain_jp','_doagain_so'}]],dependency_artifacts={})
     child=ProjectBroker(child_config,project)
     child.canary=CanaryAuthority(child,parent,grant)
     parent.live_canary_child=child

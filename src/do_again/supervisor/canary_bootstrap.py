@@ -39,19 +39,23 @@ def _exclusive_json(path: Path, value: dict) -> None:
 def _protected_parent_state(installed: dict, *, rpc=None) -> dict:
     """Verify the actual root-broker authority, never stale legacy SQLite.
 
-    Both protected projects must remain native-verified, quiescent maintenance.
+    All installed protected projects must remain native-verified and quiescent in
+    maintenance, including optional Sonary. A missing third sibling is a denial.
     The root authority's epoch is the only valid sealed browser grant epoch.
     """
     from .macos_client import broker_request
     reader = rpc or broker_request
     home = Path(installed["operator_home"])
     projects = installed.get("projects")
-    if (not isinstance(projects, list) or len(projects) != 2
-            or {p.get("account") for p in projects if isinstance(p,dict)}
-                 != {"_doagain_da", "_doagain_jp"}):
-        raise ExecutionBlocked("ChatGPT canary requires both protected project identities")
+    expected = {"_doagain_da": "do-again", "_doagain_jp": "jobpipe"}
+    if isinstance(projects,list) and len(projects)==3:
+        expected["_doagain_so"] = "Sonary"
+    if (not isinstance(projects, list) or len(projects) not in (2,3)
+            or any(not isinstance(p,dict) for p in projects)
+            or {p.get("account") for p in projects} != set(expected)):
+        raise ExecutionBlocked("ChatGPT canary requires every protected project identity")
     statuses = {}
-    for account, name in (("_doagain_da","do-again"),("_doagain_jp","jobpipe")):
+    for account, name in expected.items():
         project = next(p for p in projects if p.get("account")==account)
         repo = home / name
         if (project.get("repo") != str(repo)

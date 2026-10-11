@@ -89,3 +89,16 @@ credits or banked quota reset **must not be required** for v1.
 **If any mandatory evidence is missing, keep the PR draft and do not tag or
 publish v1.0.0.** A manual Git receipt is progress, not proof of unattended
 ChatGPT messaging or a native two-task release canary.
+
+
+### Optional third protected parent: Sonary
+
+When Sonary is enrolled, a regular-ChatGPT two-task **isolated** development
+canary must verify the Do Again, jobpipe, and Sonary native statuses in
+maintenance before it creates a browser chat grant. Every subsequent canary
+effect also checks that both real sibling projects remain in maintenance with
+no pending execution. A pause, active sibling or uncertain execution closes
+the canary rather than broadening its project scope. Existing two-project
+installations retain the original behavior. This is admission logic only;
+it does not qualify human-challenged headless Chrome or authorize actual
+jobpipe/Sonary development.
