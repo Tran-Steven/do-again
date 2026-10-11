@@ -1,6 +1,7 @@
 """Trusted production entrypoints fail closed before preparation or claiming."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -33,7 +34,6 @@ def require_worker_active(repo: Path, *, status: dict | None = None, rpc=None) -
     entrypoints remain production-only. Root broker still independently enforces
     all commands, publishes, epoch fencing, sandbox networking and job-app bans.
     """
-    import os
     from types import SimpleNamespace
     if sys.platform != 'darwin':
         raise OperatorError('native worker authority is unavailable outside macOS')
