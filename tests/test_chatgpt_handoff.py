@@ -122,6 +122,32 @@ class ChatGPTManualHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(ServiceError,"alias"):
             observe(self.layout,self.rid,runner=self.runner())
 
+    @unittest.skipUnless(os.name == "posix", "requires POSIX directory ownership")
+    def test_local_ledger_rejects_group_writable_directory_and_hardlinks(self):
+        ledger = self.write_agent_ledger()
+        parent = ledger.parent
+        old_mode = parent.stat().st_mode
+        try:
+            parent.chmod(0o777)
+            with self.assertRaisesRegex(ServiceError, "directory ownership or integrity"):
+                observe(self.layout, self.rid, runner=self.runner())
+        finally:
+            parent.chmod(old_mode)
+        other = parent / "other-entry.json"
+        os.link(ledger, other)
+        try:
+            with self.assertRaisesRegex(ServiceError, "ownership or integrity"):
+                observe(self.layout, self.rid, runner=self.runner())
+        finally:
+            other.unlink()
+
+    def test_oversized_local_agent_ledger_cannot_prove_completion(self):
+        ledger = self.write_agent_ledger()
+        with ledger.open("ab") as stream:
+            stream.write(b" " * (1024 * 1024 + 1))
+        with self.assertRaisesRegex(ServiceError, "exceeds size limit"):
+            observe(self.layout, self.rid, runner=self.runner())
+
     def test_never_accept_different_remote_request(self):
         wrong={**self.request,"request_id":"different-request"}
         with self.assertRaisesRegex(ServiceError,"differs from original"):

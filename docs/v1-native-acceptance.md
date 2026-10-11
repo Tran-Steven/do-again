@@ -19,6 +19,9 @@ credits or banked quota reset **must not be required** for v1.
   Local terminal ledger verification additionally requires an owner- and
   permission-checked POSIX filesystem. On platforms without that verification
   the result remains unverified even if the Git receipt and local JSON match.
+  POSIX ledger verification uses descriptor-based file reads, rejects aliases,
+  hardlinks and writable directory ownership boundaries, and bounds local
+  receipt input to 1 MiB.
 - **ChatGPT web automation**: the existing dedicated Chrome profile and
   authenticated conversation can transport requests, receipts, and CI
   continuations without stealing focus. If ChatGPT requires a visible human

@@ -13,6 +13,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -134,37 +135,55 @@ def _git(control: Path, *args: str, runner=None) -> str:
 
 def _local_agent_receipt(layout: RuntimeLayout, request_id: str,
                          fingerprint: str, remote_receipt: dict) -> bool:
-    """Cross-check Git claims with the trusted *local* agent's terminal ledger.
-
-    GitHub writers (including the ChatGPT model) can write receipts. Therefore
-    remote JSON alone must NEVER prove the local agent ran. This is an operator
-    ledger cross-check, not a native-root qualification certificate.
-    """
-    state=layout.state_dir
-    parent=state/"ledger"
-    path=parent/(request_id+".json")
-    if any(item.is_symlink() for item in (state,parent,path)):
+    state = layout.state_dir
+    parent = state / "ledger"
+    path = parent / (request_id + ".json")
+    if any(item.is_symlink() for item in (state, parent, path)):
         raise ServiceError("local agent receipt ledger contains an alias")
     if not path.exists():
         return False
     if not path.is_file():
         raise ServiceError("local agent receipt ledger is not an ordinary file")
-    metadata=path.stat()
-    if (metadata.st_nlink!=1 or (os.name=="posix" and
-            (metadata.st_mode & 0o022 or metadata.st_uid!=os.getuid()))):
-        raise ServiceError("local agent receipt ledger ownership or integrity is unsafe")
+    if os.name == "posix":
+        for directory in (state, parent):
+            try:
+                metadata = directory.stat()
+            except OSError as exc:
+                raise ServiceError("local agent receipt ledger directory is unavailable") from exc
+            if (not stat.S_ISDIR(metadata.st_mode)
+                    or metadata.st_uid != os.getuid()
+                    or metadata.st_mode & 0o022):
+                raise ServiceError("local agent receipt ledger directory ownership or integrity is unsafe")
     try:
-        ledger=json.loads(path.read_text(encoding="utf-8"))
-    except (OSError,ValueError) as exc:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise ServiceError("local agent receipt ledger cannot be opened safely") from exc
+    try:
+        with os.fdopen(descriptor, "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(metadata.st_mode)
+                    or metadata.st_nlink != 1
+                    or (os.name == "posix" and
+                        (metadata.st_uid != os.getuid() or metadata.st_mode & 0o022))):
+                raise ServiceError("local agent receipt ledger ownership or integrity is unsafe")
+            raw = stream.read(1024 * 1024 + 1)
+            if len(raw) > 1024 * 1024:
+                raise ServiceError("local agent receipt ledger exceeds size limit")
+    except OSError as exc:
         raise ServiceError("local agent receipt ledger is unreadable") from exc
-    if (not isinstance(ledger,dict)
-            or ledger.get("state")!="terminal"
-            or ledger.get("request_fingerprint")!=fingerprint
-            or not isinstance(ledger.get("receipt"),dict)
-            or canonical_json(ledger["receipt"])!=canonical_json(remote_receipt)):
+    try:
+        ledger = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ServiceError("local agent receipt ledger is unreadable") from exc
+    if (not isinstance(ledger, dict)
+            or ledger.get("state") != "terminal"
+            or ledger.get("request_fingerprint") != fingerprint
+            or not isinstance(ledger.get("receipt"), dict)
+            or canonical_json(ledger["receipt"]) != canonical_json(remote_receipt)):
         raise ServiceError("remote Git receipt differs from the original local agent ledger")
     return os.name == "posix"
-
 
 def observe(layout: RuntimeLayout, request_id: str, *, runner=None) -> dict[str, Any]:
     """Check the exact original request and receipt on a fresh remote Git head."""
