@@ -106,6 +106,47 @@ else:
                 self.module.verify_worker_quiescence(cfg)
         effects.assert_not_called()
 
+
+    def test_installer_requires_authenticated_socket_readiness_after_bootstrap(self):
+        import inspect
+        config={'python':'/sealed/python3','source_sha':'a'*40,
+                'operator_uid':501,'operator_gid':20,'operator_home':'/operator',
+                'projects':[{'key':'b'*64,'source_sha':'c'*40}]}
+        with patch.object(self.module.subprocess,'run',
+                          return_value=Mock(returncode=0,
+                                            stdout='SUPERVISOR_AUTHENTICATED_READY\\n')) as check:
+            self.module.wait_for_supervisor_readiness(config)
+        check.assert_called_once()
+        args,kwargs=check.call_args
+        self.assertEqual(args[0][:5],
+                         ['/sealed/python3','-I','-S','-B','-c'])
+        self.assertEqual(kwargs['user'],501)
+        self.assertEqual(kwargs['group'],20)
+        self.assertEqual(kwargs['extra_groups'],[])
+        self.assertEqual(kwargs['timeout'],75)
+        self.assertEqual(kwargs['env']['HOME'],'/operator')
+        expected=json.loads(args[0][-1])
+        self.assertEqual(expected['projects'],[{'key':'b'*64,'source_sha':'c'*40}])
+        self.assertEqual(expected['source_sha'],'a'*40)
+        body=inspect.getsource(self.module.install)
+        self.assertLess(body.index('wait_for_supervisor_readiness(config)'),
+                        body.index("journal['source_sha']=config['source_sha']"))
+
+    def test_installer_refuses_unready_service_without_claiming_success(self):
+        config={'python':'/sealed/python3','source_sha':'a'*40,
+                'operator_uid':501,'operator_gid':20,'operator_home':'/operator',
+                'projects':[]}
+        for result in (Mock(returncode=1,stdout='',stderr='socket refused'),
+                       Mock(returncode=0,stdout='garbled success',stderr='')):
+            with self.subTest(result=result.returncode),patch.object(
+                    self.module.subprocess,'run',return_value=result):
+                with self.assertRaisesRegex(RuntimeError,'startup readiness unverified'):
+                    self.module.wait_for_supervisor_readiness(config)
+        script=self.module._READINESS_CLIENT
+        self.assertIn("peer_uid(connection)!=0",script)
+        self.assertIn("'operation':'status'",script)
+        self.assertNotIn("'operation':'execute'",script)
+
     def worker_quiescence_fixture(self):
         from do_again.supervisor.macos_execution import ExecutionBlocked
         key='c'*64

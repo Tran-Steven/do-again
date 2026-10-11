@@ -151,6 +151,85 @@ def run(args, **kwargs):
     return result
 
 
+# This is executed only after launchctl bootstrap, using the normal operator UID.
+# A loaded launchd service is not a ready service: socket files can predate
+# listen(), and launchctl can return before the daemon accepts clients.
+_READINESS_CLIENT = r"""
+import errno,json,socket,sys,time
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from do_again.supervisor.macos_execution import peer_uid
+
+expected=json.loads(sys.argv[2])
+socket_root=Path('/private/var/run/do-again-supervisor')
+deadline=time.monotonic()+60
+last='no listener'
+
+def connect(path, packet=None):
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(3)
+        connection.connect(str(path))
+        if peer_uid(connection)!=0:
+            raise RuntimeError('readiness socket is not served by root')
+        if packet is None:return None
+        connection.sendall(json.dumps(packet,separators=(',',':')).encode()+b'\n')
+        data=bytearray()
+        while b'\n' not in data:
+            chunk=connection.recv(8192)
+            if not chunk or len(data)+len(chunk)>1048576:
+                raise RuntimeError('readiness response missing or oversized')
+            data.extend(chunk)
+        response=json.loads(bytes(data).split(b'\n',1)[0])
+        if not isinstance(response,dict) or response.get('ok') is not True:
+            raise RuntimeError('project status request was rejected during readiness')
+        return response['result']
+
+while time.monotonic()<deadline:
+    try:
+        for project in expected['projects']:
+            status=connect(socket_root/(project['key'][:24]+'.sock'),
+                           {'operation':'status'})
+            if (status.get('source_sha')!=expected['source_sha']
+                    or status.get('production_ready') is not False
+                    or status.get('operator_intent') not in ('maintenance','paused','stopped')
+                    or status.get('unresolved_executions')!=[]
+                    or status.get('inflight_request_ids')!=[]
+                    or status.get('authority',{}).get('repo_head')!=project['source_sha']):
+                raise RuntimeError('installed project status does not match sealed maintenance authority')
+        connect(socket_root/'operator.sock')
+        print('SUPERVISOR_AUTHENTICATED_READY')
+        sys.exit(0)
+    except OSError as exc:
+        if exc.errno not in (errno.ENOENT,errno.ECONNREFUSED,errno.ECONNRESET,
+                             errno.ETIMEDOUT):
+            raise
+        last=type(exc).__name__
+        time.sleep(0.15)
+raise RuntimeError('supervisor socket readiness timed out: '+last)
+"""
+
+
+def wait_for_supervisor_readiness(config):
+    """Prove live authenticated status under the operator UID before reporting success.
+
+    Never send an execution or mutation request; a failed check leaves the
+    original cutover journal open for administrator reconciliation.
+    """
+    expected={'source_sha':config['source_sha'],
+              'projects':[{'key':p['key'],'source_sha':p['source_sha']}
+                          for p in config['projects']]}
+    result=subprocess.run(
+        [config['python'],'-I','-S','-B','-c',_READINESS_CLIENT,
+         str(ROOT/'current/package'),json.dumps(expected,sort_keys=True)],
+        capture_output=True,text=True,timeout=75,
+        user=config['operator_uid'],group=config['operator_gid'],
+        extra_groups=[],env={'PATH':'/usr/bin:/bin','HOME':config['operator_home']})
+    if result.returncode or result.stdout.strip()!='SUPERVISOR_AUTHENTICATED_READY':
+        raise RuntimeError(
+            'supervisor startup readiness unverified; maintenance and cutover '
+            'journal retained (inspect installed helper and sockets)')
+
+
 def atomic(path, data):
     temporary=path.with_name(path.name+'.pending')
     with temporary.open('w') as stream:
@@ -752,6 +831,7 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
         temporary.write_bytes(plistlib.dumps(definition));temporary.chmod(0o644)
         os.chown(temporary,0,0);os.replace(temporary,PLIST)
         run(['/bin/launchctl','bootstrap','system',str(PLIST)])
+        wait_for_supervisor_readiness(config)
         journal['source_sha']=config['source_sha'];journal['status']='installed_maintenance'
         journal['runtime_transition']['phase']='complete'
         atomic(journal_path,journal)
