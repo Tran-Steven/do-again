@@ -194,11 +194,15 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     shutil.copyfile(ca,payload/'runtimes/trust/ca.pem')
     (payload/'snapshots').mkdir()
     projects=[]
-    for index,(repo,canonical,name,account,ref) in enumerate((
-        (source,do_again_repo,'do-again','_doagain_da','HEAD'),
-        (jobpipe,jobpipe,'jobpipe','_doagain_jp','origin/main'))):
+    scopes=[(source,do_again_repo,'do-again','_doagain_da','HEAD'),
+            (jobpipe,jobpipe,'jobpipe','_doagain_jp','origin/main')]
+    if sonary:
+        scopes.append((sonary_repo,sonary_repo,'Sonary','_doagain_so','origin/main'))
+    for index,(repo,canonical,name,account,ref) in enumerate(scopes):
         if installed:
-            ref=next(p['source_sha'] for p in installed['projects'] if p['repo']==str(canonical))
+            previous=next((p for p in installed['projects'] if p['repo']==str(canonical)),None)
+            if previous is not None:
+                ref=previous['source_sha']
         sha=git(repo,'rev-parse',ref)
         bundle=f'snapshots/{name}.bundle'
         snapshot_bundle(repo,sha,payload/bundle)
@@ -217,6 +221,9 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             'recovery_contract':{'authority_schema':1,'effect_schema':1,
                                  'worker_admission':'fenced-v1','mode':'maintenance-only'},
             'projects':projects}
+    if enrolling_sonary:
+        config['scope_enrollment']={'kind':'sonary_add_only',
+                                    'previous_source_sha':installed['source_sha']}
     sys.path.insert(0,str(source/'src'))
     config['dependency_artifacts']={}
     if dependency_lock is not None:
@@ -225,11 +232,11 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                 or lock.stat().st_nlink!=1 or lock.stat().st_mode&0o022):
             raise ValueError('dependency approval lock must be privately controlled by the operator')
         approvals=json.loads(lock.read_text())
-        if not isinstance(approvals,dict) or set(approvals)-{'do-again','jobpipe'}:
+        if not isinstance(approvals,dict) or set(approvals)-{'do-again','jobpipe','Sonary'}:
             raise ValueError('dependency approval scope is not authorized')
         from do_again.supervisor.dependencies import approved_artifact
         for project in projects:
-            name='do-again' if project['account']=='_doagain_da' else 'jobpipe'
+            name={'_doagain_da':'do-again','_doagain_jp':'jobpipe','_doagain_so':'Sonary'}[project['account']]
             entries=approvals.get(name,[])
             if not isinstance(entries,list) or len(entries)>64:
                 raise ValueError('dependency approval lock exceeds project limits')
@@ -238,10 +245,22 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                 approved_artifact(config,project['key'],artifact['id'])
     from do_again.supervisor.authority import AuthorityRegistry
     legacy=AuthorityRegistry(Path(config['legacy_authority_path']))
+    from do_again.supervisor.authority import AuthorityDenied
     for project in projects:
-        status=legacy.status(Path(project['repo']))
-        if status['intent'] != 'maintenance':raise ValueError('installation requires closed project admission')
-        project['goal_revision']=status['goal_revision']
+        try:
+            status=legacy.status(Path(project['repo']))
+        except AuthorityDenied:
+            if project['account']!='_doagain_so':raise
+            status=None
+        if status is not None and status['intent']!='maintenance':
+            raise ValueError('installation requires closed project admission')
+        if status is None:
+            prior=next((p for p in (installed or {}).get('projects',[])
+                        if p['account']=='_doagain_so'),None)
+            project['goal_revision']=(prior['goal_revision'] if prior is not None
+                                      else 'sonary-enrolled-maintenance-v1')
+        else:
+            project['goal_revision']=status['goal_revision']
     selected_grant=canary_grant if canary_grant is not None else codex_grant
     if selected_grant is not None:
         grant_path=Path(selected_grant).resolve(strict=True)
@@ -319,6 +338,7 @@ if __name__=='__main__':
     parser.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--do-again-repo',type=Path,required=True)
     parser.add_argument('--jobpipe-repo',type=Path,required=True)
+    parser.add_argument('--sonary-repo',type=Path,help='Explicitly add or retain Sonary as a third protected scope')
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--dependency-lock',type=Path)
     grants=parser.add_mutually_exclusive_group()
@@ -329,4 +349,5 @@ if __name__=='__main__':
     print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
                              dependency_lock=args.dependency_lock,canary_grant=args.canary_grant,
                              codex_grant=args.codex_grant,
-                             classify_canary_partial=args.classify_canary_partial_publication),indent=2))
+                             classify_canary_partial=args.classify_canary_partial_publication,
+                              sonary_repo=args.sonary_repo),indent=2))
