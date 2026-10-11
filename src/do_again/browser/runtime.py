@@ -841,6 +841,11 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     if not (isinstance(observed, dict)
             and observed.get("focused") is True
             and observed.get("visibility") == "visible"):
+        if state.get("mode") in {"background", "visible"}:
+            raise BrowserPreDispatchBlocked(
+                "unfocused GUI automation tab; refusing window activation; "
+                "no browser submission was attempted"
+            )
         cdp.target_call(target, "Page.bringToFront", {}, timeout=10.0)
         observed = cdp.evaluate(target, probe, timeout=10.0)
     if not (isinstance(observed, dict)

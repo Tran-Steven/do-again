@@ -35,10 +35,29 @@ class ChatSendFocusTests(unittest.TestCase):
         evaluate.assert_called_once()
         call.assert_not_called()
 
-    def test_background_tab_activates_once_before_gesture(self):
-        with patch.object(cdp, "evaluate", side_effect=[
-                {"focused": False, "visibility": "hidden"},
-                {"focused": True, "visibility": "visible"}]) as evaluate, patch.object(
+    def test_unfocused_gui_tab_never_activates_or_dispatches(self):
+        for mode in ("background", "visible"):
+            with self.subTest(mode=mode):
+                commit = Mock()
+                with patch.object(runtime, "load_config", return_value={"preferred_mode": mode}), patch.object(
+                        runtime, "load_state", return_value={"mode": mode}), patch.object(
+                        cdp, "evaluate", return_value={"focused": False, "visibility": "hidden"}) as evaluate, patch.object(
+                        cdp, "target_call") as activate, patch.object(
+                        cdp, "insert_text") as insert, patch.object(
+                        cdp, "click_send") as click:
+                    with self.assertRaisesRegex(BrowserPreDispatchBlocked, "refusing window activation"):
+                        runtime.send_message(self.target, "UNSENT", before_dispatch=commit)
+                evaluate.assert_called_once()
+                activate.assert_not_called()
+                insert.assert_not_called()
+                click.assert_not_called()
+                commit.assert_not_called()
+
+    def test_headless_tab_activates_once_before_gesture(self):
+        with patch.object(runtime, "load_state", return_value={"mode": "headless"}), patch.object(
+                cdp, "evaluate", side_effect=[
+                    {"focused": False, "visibility": "hidden"},
+                    {"focused": True, "visibility": "visible"}]) as evaluate, patch.object(
                 cdp, "target_call") as call:
             runtime._require_send_target_focus(self.target)
         call.assert_called_once_with(

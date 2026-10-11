@@ -263,8 +263,10 @@ Default browser mode is auto:
 
 1. initial authentication may be visible;
 2. the saved profile is tested in modern Chromium headless mode;
-3. if that authenticated session is unreliable headless, Do Again falls back to a real background browser process;
+3. if headless authentication is unreliable, auto mode refuses a GUI fallback unless the operator explicitly enables it;
 4. later operation reuses the verified mode without normal foreground interaction.
+
+An unfocused visible or background automation tab is never brought to the front by an unattended Send. Delivery stops before composer edits, dispatch-journal mutation or click. Background mode is therefore not proof of unattended operation: it may require the operator to focus the dedicated window, while headless mode can activate its target without showing a GUI window.
 
 Useful controls:
 
