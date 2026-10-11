@@ -108,7 +108,13 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False):
+    if canary_grant is not None and codex_grant is not None:
+        raise ValueError('browser and Codex canary grants cannot coexist')
+    if codex_grant is not None and classify_canary_partial:
+        raise ValueError('Codex canary cannot inherit browser partial-publication disposition')
+    if classify_canary_partial and canary_grant is None:
+        raise ValueError('explicit partial disposition requires a fresh sealed canary grant')
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if git(source,'status','--porcelain'):raise ValueError('commit and validate supervisor source before preparation')
@@ -133,6 +139,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                 raise ValueError('existing execution identity changed')
         ids=[next(p['uid'] for p in installed['projects'] if p['repo']==str(repo)) for repo in (do_again_repo,jobpipe)]
     elif ids is None:ids=available_ids()
+    if classify_canary_partial and (installed is None or not installed.get('live_canary')):
+        raise ValueError('partial disposition requires the exact installed canary scope')
     if len(ids)!=2 or len(set(ids))!=2 or any(not 400<=value<500 or value==uid for value in ids):raise ValueError('invalid execution IDs')
     for repo,name in ((source,'do-again'),(jobpipe,'jobpipe')):
         remote=git(repo,'remote','get-url','origin')
@@ -150,6 +158,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         target=package/relative;target.parent.mkdir(parents=True,exist_ok=True)
         target.write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':'+name]))
     (payload/'bootstrap.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_bootstrap.py']))
+    (payload/'worker-bootstrap.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_worker_bootstrap.py']))
     (payload/'install.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/macos_supervisor_install.py']))
     runtime=seal_runtime(payload)
     native_git=seal_git(payload)
@@ -183,6 +192,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             'authority_path':'/Library/Application Support/DoAgainSupervisor/state/supervisor.sqlite',
             'legacy_authority_path':str(Path(identity.pw_dir)/'.do_again/supervisor/authority.sqlite'),
             'production_ready':False,
+            'recovery_contract':{'authority_schema':1,'effect_schema':1,
+                                 'worker_admission':'fenced-v1','mode':'maintenance-only'},
             'projects':projects}
     sys.path.insert(0,str(source/'src'))
     config['dependency_artifacts']={}
@@ -209,6 +220,30 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         status=legacy.status(Path(project['repo']))
         if status['intent'] != 'maintenance':raise ValueError('installation requires closed project admission')
         project['goal_revision']=status['goal_revision']
+    selected_grant=canary_grant if canary_grant is not None else codex_grant
+    if selected_grant is not None:
+        grant_path=Path(selected_grant).resolve(strict=True)
+        if (Path(selected_grant).is_symlink() or grant_path.stat().st_uid!=uid
+                or grant_path.stat().st_nlink!=1 or grant_path.stat().st_mode&0o077):
+            raise ValueError('canary grant must be privately controlled by the operator')
+        if codex_grant is not None:
+            config['codex_canary']=json.loads(grant_path.read_text())
+            from do_again.supervisor.model_native import codex_project
+            _,_,canary=codex_project(config)
+        else:
+            config['live_canary']=json.loads(grant_path.read_text())
+            from do_again.supervisor.live_canary import scope,require_fresh_conversation
+            require_fresh_conversation(installed,config)
+            _,_,canary=scope(config)
+        # Exact public Do Again baseline only, not a model-authored tree.
+        with tempfile.TemporaryDirectory() as tmp:
+            bare=Path(tmp)/'public.git'
+            subprocess.run(['git','init','--bare',str(bare)],check=True,capture_output=True)
+            subprocess.run(['git','-c','core.hooksPath=/dev/null','-c','core.fsmonitor=false',
+                '-c','credential.helper=','-C',str(bare),'fetch','--no-tags',
+                'https://github.com/Tran-Steven/do-again.git',
+                canary['source_sha']+':refs/heads/baseline'],check=True,capture_output=True)
+            git(bare,'bundle','create',str(payload/canary['bundle']),'refs/heads/baseline')
     (payload/'config.json').write_text(json.dumps(config,sort_keys=True,indent=2)+'\n')
     files={}
     for p in sorted(payload.rglob('*')):
@@ -241,7 +276,9 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         'cd '+q(stage),
         'test "$(/usr/bin/shasum -a 256 MANIFEST.sha256 | /usr/bin/cut -d " " -f 1)" = '+q(sums_digest),
         '/usr/bin/shasum -a 256 -c MANIFEST.sha256 >/dev/null',
-        '/usr/bin/python3 -I -S -B '+q(stage+'/install.py')+' --stage '+q(stage),
+        '/usr/bin/python3 -I -S -B '+q(stage+'/install.py')+' --stage '+q(stage)
+        +(' --classify-canary-partial-publication --partial-disposition-source '+q(installed['source_sha'])
+          +' --partial-disposition-nonce '+q(installed['live_canary']['nonce']) if classify_canary_partial else ''),
     ])+'\n'
     (output/'administrator-install.sh').write_text(command)
     (output/'administrator-install.sh').chmod(0o600)
@@ -262,6 +299,12 @@ if __name__=='__main__':
     parser.add_argument('--jobpipe-repo',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--dependency-lock',type=Path)
+    grants=parser.add_mutually_exclusive_group()
+    grants.add_argument('--canary-grant',type=Path)
+    grants.add_argument('--codex-grant',type=Path)
+    parser.add_argument('--classify-canary-partial-publication',action='store_true')
     args=parser.parse_args()
     print(json.dumps(prepare(args.source,args.jobpipe_repo,args.do_again_repo,args.output,
-                             dependency_lock=args.dependency_lock),indent=2))
+                             dependency_lock=args.dependency_lock,canary_grant=args.canary_grant,
+                             codex_grant=args.codex_grant,
+                             classify_canary_partial=args.classify_canary_partial_publication),indent=2))

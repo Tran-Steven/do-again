@@ -615,5 +615,13 @@ class CliOnboardingTests(unittest.TestCase):
         self.assertIn("browser", text)
 
 
+    def test_regular_chatgpt_without_verb_shows_usage_not_attribute_error(self) -> None:
+        err=io.StringIO()
+        with patch("sys.argv",["do-again","chatgpt"]),redirect_stderr(err):
+            with self.assertRaises(SystemExit) as exit_info:
+                main()
+        self.assertEqual(exit_info.exception.code,2)
+        self.assertIn("required",err.getvalue().lower())
+
 if __name__ == "__main__":
     unittest.main()

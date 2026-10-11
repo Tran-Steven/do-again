@@ -35,6 +35,9 @@ def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
     sentinel = root / 'protected-sentinel'
     sentinel.write_text('SYNTHETIC_UNCHANGED')
     sentinel.chmod(0o600)
+    same_uid_sentinel=root/'same-uid-outside-scope'
+    same_uid_sentinel.write_text('SAME_UID_SYNTHETIC_UNCHANGED');same_uid_sentinel.chmod(0o600)
+    os.chown(same_uid_sentinel,project.uid,project.gid)
     other = next(item for item in config['projects'] if item['uid'] != project.uid)
     other_sentinel = root / 'other-project-sentinel'
     other_sentinel.write_text('OTHER_SYNTHETIC_UNCHANGED');other_sentinel.chmod(0o600)
@@ -48,7 +51,7 @@ def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
         if launchctl('bootstrap', domain, str(fixture)).returncode:
             raise ExecutionBlocked('cannot install synthetic operator-domain proof fixture')
     try:
-        targets = {'other_sentinel':str(other_sentinel), 'sentinel': str(sentinel), 'service': target,
+        targets = {'same_uid_sentinel':str(same_uid_sentinel),'other_sentinel':str(other_sentinel), 'sentinel': str(sentinel), 'service': target,
                    'socket': str(SOCKET_ROOT / f'{project.key[:24]}.sock'),
                    'runner':str(Path(__file__).with_name('execution_runner.py')), 'operator_pid': os.getpid(), 'uid': project.uid, 'gid': project.gid,
                    'package':str(Path(__file__).resolve().parents[2]),
@@ -61,7 +64,11 @@ import sys
 sys.path.insert(0,T['package'])
 from do_again.supervisor.wheels import validate_wheel
 from do_again.supervisor.git_export import export_commit
-result['immutable_module_import']=callable(validate_wheel) and callable(export_commit)
+from do_again.supervisor.control_history import publish_control
+from do_again.supervisor.browser_broker import browser_tick
+from do_again.supervisor.worker_service import register_worker
+from do_again.core.control_transport import BrokerControlHistory
+result['immutable_module_import']=all(callable(value) for value in (validate_wheel,export_commit,publish_control,browser_tick,register_worker,BrokerControlHistory))
 def denied(name, action):
     try: action()
     except OSError as e: result[name]=e.errno in (errno.EPERM,errno.EACCES)
@@ -83,6 +90,7 @@ result['identity']=os.getuid()==T['uid'] and os.geteuid()==T['uid'] and os.getgi
 Path(T['allowed']).write_text('allowed')
 result['allowed_write']=Path(T['allowed']).read_text()=='allowed'
 denied('other_project_write_denied',lambda:Path(T['other_sentinel']).write_text('ESCAPE'))
+denied('same_uid_outside_scope_denied',lambda:Path(T['same_uid_sentinel']).write_text('ESCAPE'))
 denied('read_denied',lambda:Path(T['sentinel']).read_bytes())
 denied('write_denied',lambda:Path(T['sentinel']).write_text('ESCAPE'))
 denied('hardlink_denied',lambda:os.link(T['sentinel'],str(Path(T['scratch'])/'hardlink-proof')))
@@ -120,7 +128,7 @@ print(json.dumps(result),flush=True)
         disabled = launchctl('print-disabled', domain)
         if f'"{label}" => disabled' in disabled.stdout:
             raise BoundaryProbeBlocked('synthetic operator service was disabled',evidence)
-        if other_sentinel.read_text() != 'OTHER_SYNTHETIC_UNCHANGED' or sentinel.read_text() != 'SYNTHETIC_UNCHANGED' or not result or not all(value is True for value in result.values()):
+        if same_uid_sentinel.read_text() != 'SAME_UID_SYNTHETIC_UNCHANGED' or other_sentinel.read_text() != 'OTHER_SYNTHETIC_UNCHANGED' or sentinel.read_text() != 'SYNTHETIC_UNCHANGED' or not result or not all(value is True for value in result.values()):
             raise BoundaryProbeBlocked('native execution boundary proof rejected an escape or lost allowed work',evidence)
         from .macos_execution import MacOSProcesses
         if MacOSProcesses().owned(project.uid):

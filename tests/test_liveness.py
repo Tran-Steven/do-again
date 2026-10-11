@@ -12,6 +12,20 @@ from do_again.service import liveness
 
 
 class LivenessDecisionTests(unittest.TestCase):
+    def test_control_import_mtime_does_not_reorder_goals_or_refresh_receipts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control=Path(directory)
+            requests=control/'automation/do_again/requests';requests.mkdir(parents=True)
+            receipts=control/'automation/do_again/receipts';receipts.mkdir()
+            for name,issued in [('old','2026-10-08T10:00:00Z'),('new','2026-10-08T11:00:00Z')]:
+                (requests/(name+'.json')).write_text(json.dumps({'request_id':name,'issued_at_utc':issued,
+                    'continuation':{'goal_state':'waiting_for_ci'}}))
+            os.utime(requests/'old.json',(2000000000,2000000000))
+            self.assertEqual(liveness._latest_goal(control)['request_id'],'new')
+            (receipts/'old.json').write_text(json.dumps({'finished_at_utc':'2026-10-08T10:00:00Z'}))
+            os.utime(receipts/'old.json',(2000000000,2000000000))
+            self.assertLess(liveness._activity(control)[1],2000000000)
+
     def test_idle_receipt_triggers_bounded_recovery_then_stall(self):
         base = {"receipt_id": "r1", "progress_at": 100.0, "attempts": 0}
         result, action = liveness._decision(
@@ -41,15 +55,17 @@ class LivenessDecisionTests(unittest.TestCase):
         self.assertEqual(value["state"], "stalled_generating")
         self.assertEqual(action, "report_busy")
 
-    def test_progress_resets_retry_budget(self):
+    def test_new_receipt_does_not_reset_useful_progress_or_retry_budget(self):
         old = {"receipt_id": "r1", "progress_at": 100, "attempts": 2, "last_resume_at": 180}
         value, action = liveness._decision(
             old, receipt_id="r2", receipt_time=220, pending=False,
             busy=False, now=240, idle_seconds=60, recovery_seconds=60,
         )
-        self.assertEqual(action, "wait")
-        self.assertEqual(value["attempts"], 0)
-        self.assertEqual(value["state"], "idle_grace")
+        self.assertEqual(action, "report")
+        self.assertEqual(value["attempts"], 2)
+        self.assertEqual(value["progress_at"], 100)
+        self.assertEqual(value["last_execution_at"], 220)
+        self.assertEqual(value["state"], "stalled_idle_handoff")
 
     def test_pending_or_generating_never_prompts(self):
         old = {"receipt_id": "r1", "progress_at": 100, "attempts": 1}
@@ -89,7 +105,7 @@ class LivenessIntegrationTests(unittest.TestCase):
             patch.object(liveness.browser, "_assistant_snapshot", return_value={"busy": False}),
             patch.object(liveness.browser, "_context_limit_warning", return_value=""),
             patch.object(liveness.browser, "_page_contains", return_value=False),
-            patch.object(liveness.browser, "send_message"),
+            patch.object(liveness, "_queue_continuation"),
         ]
 
     def _mock_browser(self):
@@ -142,21 +158,22 @@ class LivenessIntegrationTests(unittest.TestCase):
         mocks=self._mock_browser()
         send=mocks[-1]
         self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
-        self.assertIn("DO_AGAIN_LIVENESS_CONTINUE token=",send.call_args.args[1])
+        self.assertIn("DO_AGAIN_LIVENESS_CONTINUE token=",send.call_args.kwargs["marker"])
         mocks[5].return_value=True
         self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_handoff_observed")
         self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_handoff_observed")
         send.assert_called_once()
         self.assertEqual(json.loads((self.state/"liveness.json").read_text())["idle_resume_phase"],"observed")
 
-    def test_new_receipt_clears_legacy_idle_marker(self):
+    def test_new_receipt_preserves_idle_delivery_evidence(self):
         mocks=self._mock_browser()
         liveness.check_liveness(self.repo,self.control,self.state)
         (self.receipts/"r2.json").write_text('{"request_id":"r2"}')
-        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"idle_grace")
+        self.assertEqual(liveness.check_liveness(self.repo,self.control,self.state),"recovering")
         row=json.loads((self.state/"liveness.json").read_text())
-        self.assertEqual(row["attempts"],0)
-        self.assertNotIn("idle_resume_marker",row)
+        self.assertEqual(row["attempts"],1)
+        self.assertIn("idle_resume_marker",row)
+        self.assertEqual(row["last_receipt_id"], "r2")
         mocks[-1].assert_called_once()
 
     def test_preupgrade_unverified_resume_fails_closed(self):
@@ -181,14 +198,15 @@ class LivenessIntegrationTests(unittest.TestCase):
         (requests / "r2.json").write_text("{}")
         self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "working")
 
-    def test_new_receipt_resets_stall(self):
+    def test_new_receipt_does_not_reset_stall(self):
         mocks = self._mock_browser()
         liveness.check_liveness(self.repo, self.control, self.state)
         receipt = self.receipts / "r2.json"
         receipt.write_text('{"request_id": "r2"}')
-        self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "idle_grace")
+        self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "recovering")
         state = json.loads((self.state / "liveness.json").read_text())
-        self.assertEqual(state["attempts"], 0)
+        self.assertEqual(state["attempts"], 1)
+        self.assertEqual(state["last_receipt_id"], "r2")
         mocks[-1].assert_called_once()
 
     def test_stale_unfinished_request_is_classified_as_stall(self):
@@ -316,7 +334,7 @@ class CiGoalLifecycleTests(unittest.TestCase):
             patch.object(liveness.browser, "ensure_browser_running", return_value={"port":9223}),
             patch.object(liveness.browser, "project_record", return_value={"chat_url":"https://chatgpt.com/c/x"}),
             patch.object(liveness.browser, "_find_chatgpt_target", return_value={"id":"target"}),
-            patch.object(liveness.browser, "send_message"),
+            patch.object(liveness, "_queue_continuation"),
         ]
         mocks=[p.start() for p in patches]
         for p in patches: self.addCleanup(p.stop)

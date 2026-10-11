@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from do_again.browser.errors import BrowserError
+from do_again.browser.errors import BrowserError, BrowserSubmissionUncertain
 from do_again.service.daemon import (
     _browser_outbox_dir,
     _drain_browser_outbox,
@@ -17,6 +17,43 @@ from do_again.service.daemon import (
 
 
 class BrowserOutboxTests(unittest.TestCase):
+    def test_dispatch_records_successor_binding_and_survives_restart_without_replay(self):
+        from do_again.service import daemon
+        from do_again.browser import runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            state=Path(tmp)/'state';repo=Path(tmp)/'repo';repo.mkdir()
+            receipt=_queue_receipt(state,{'request_id':'rollover-proof','state':'succeeded'})
+            old={'chat_url':'https://chatgpt.com/c/old','binding_generation':'old'}
+            new={'chat_url':'https://chatgpt.com/c/new','binding_generation':'new'}
+            def send(repo,receipts,*,before_dispatch):
+                before_dispatch({'chat_url':new['chat_url'],'binding_identity':runtime.binding_identity(new),
+                                 'payload_sha256':'a'*64,'purpose':'receipt_notification','state':'dispatch_started'})
+                raise BrowserSubmissionUncertain('injected timeout after gesture')
+            with patch.object(daemon,'activate_project'),patch.object(daemon,'ensure_browser_running'),\
+                 patch.object(runtime,'project_record',return_value=old),patch.object(daemon,'notify_receipts',side_effect=send) as submit:
+                with self.assertRaises(BrowserSubmissionUncertain):_drain_browser_outbox_locked(repo,state)
+                evidence=json.loads(daemon._uncertain_delivery_path(state).read_text())
+                self.assertEqual(evidence['chat_url'],new['chat_url']);self.assertEqual(evidence['state'],'dispatch_started')
+                self.assertEqual(evidence['payload_sha256'],'a'*64)
+                with patch.object(runtime,'project_record',return_value=new),patch.object(runtime,'_find_chatgpt_target',return_value=None):
+                    with self.assertRaises(BrowserSubmissionUncertain):_drain_browser_outbox_locked(repo,state)
+                self.assertEqual(submit.call_count,1);self.assertTrue(receipt.exists())
+
+    def test_same_url_rebinding_defeats_uncertain_reconciliation(self):
+        from do_again.service import daemon
+        from do_again.browser import runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            state=Path(tmp);repo=state/'repo';repo.mkdir()
+            _queue_receipt(state,{'request_id':'generation-proof','state':'succeeded'})
+            old={'chat_url':'https://chatgpt.com/c/same','binding_generation':'old'}
+            evidence={'request_ids':['generation-proof'],'chat_url':old['chat_url'],
+                      'batch_marker':'marker','binding_identity':runtime.binding_identity(old)}
+            with patch.object(runtime,'project_record',return_value={**old,'binding_generation':'new'}),\
+                 patch.object(daemon,'ensure_browser_running') as session:
+                with self.assertRaisesRegex(BrowserSubmissionUncertain,'generation changed'):
+                    daemon._reconcile_uncertain_delivery(repo,state,evidence)
+                session.assert_not_called()
+
     def test_queue_receipt_is_durable_and_idempotent_by_request_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp)
@@ -24,9 +61,10 @@ class BrowserOutboxTests(unittest.TestCase):
             second = {"request_id": "req-1", "state": "failed"}
             path = _queue_receipt(state, first)
             self.assertTrue(path.is_file())
-            _queue_receipt(state, second)
+            self.assertEqual(_queue_receipt(state,first),path)
+            with self.assertRaises(BrowserSubmissionUncertain):_queue_receipt(state, second)
             saved = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(saved["state"], "failed")
+            self.assertEqual(saved["state"], "succeeded")
             self.assertEqual(len(_pending_outbox(state)), 1)
 
     def test_failed_delivery_stays_queued_for_retry(self) -> None:
@@ -60,7 +98,10 @@ class BrowserOutboxTests(unittest.TestCase):
 
             with (
                 patch("do_again.service.daemon.activate_project"),
-                patch("do_again.service.daemon.ensure_browser_running"),
+                patch("do_again.service.daemon.ensure_browser_running", return_value={"port": 9224}),
+                patch("do_again.browser.runtime._find_chatgpt_target", return_value=object()),
+                patch("do_again.browser.runtime._page_contains", return_value=True),
+                patch("do_again.browser.runtime.receipt_acknowledgment", return_value={"visible": True, "acknowledged": True}),
                 patch(
                     "do_again.service.daemon.notify_receipts",
                     side_effect=BrowserError("ChatGPT is still generating; retry delivery later"),
@@ -88,7 +129,10 @@ class BrowserOutboxTests(unittest.TestCase):
 
             with (
                 patch("do_again.service.daemon.activate_project"),
-                patch("do_again.service.daemon.ensure_browser_running"),
+                patch("do_again.service.daemon.ensure_browser_running", return_value={"port": 9224}),
+                patch("do_again.browser.runtime._find_chatgpt_target", return_value=object()),
+                patch("do_again.browser.runtime._page_contains", return_value=True),
+                patch("do_again.browser.runtime.receipt_acknowledgment", return_value={"visible": True, "acknowledged": True}),
                 patch(
                     "do_again.service.daemon.notify_receipts",
                     return_value={"response": "already_delivered"},
@@ -133,8 +177,11 @@ class BrowserOutboxTests(unittest.TestCase):
                 {"request_id": "req-ok", "state": "succeeded"},
             )
             with (
-                patch("do_again.service.daemon.ensure_browser_running"),
+                patch("do_again.service.daemon.ensure_browser_running", return_value={"port":9224}),
                 patch("do_again.service.daemon.activate_project"),
+                patch("do_again.browser.runtime._find_chatgpt_target", return_value=object()),
+                patch("do_again.browser.runtime._page_contains", return_value=True),
+                patch("do_again.browser.runtime.receipt_acknowledgment", return_value={"visible":True,"acknowledged":True}),
                 patch(
                     "do_again.service.daemon.notify_receipts",
                     return_value={"response": "already_delivered"},

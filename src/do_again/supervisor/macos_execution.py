@@ -108,6 +108,8 @@ def load_configuration(path: Path) -> dict[str, Any]:
     if operator.pw_gid != config['operator_gid'] or operator.pw_dir != config['operator_home']:
         raise ExecutionBlocked('operator identity changed')
     for item in projects:
+        from .github import validate_control_branch
+        validate_control_branch(item.get('control_branch', 'operator-control'))
         project = project_from_dict(item)
         project.validate(config['operator_uid'])
         account = pwd.getpwuid(project.uid)
@@ -202,8 +204,9 @@ def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path
 
 
 class ExecutionLedger:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, on_reserve=None):
         self.path = path
+        self.on_reserve = on_reserve
         with closing(sqlite3.connect(path)) as db, db:
             db.execute('PRAGMA synchronous=FULL')
             db.execute('CREATE TABLE IF NOT EXISTS execution (project TEXT, request TEXT, fingerprint TEXT, '
@@ -216,6 +219,19 @@ class ExecutionLedger:
             row = db.execute('SELECT payload FROM capability_intent WHERE project=? AND request=?',
                              (project,request)).fetchone()
         return None if row is None else json.loads(row[0])
+
+    def evidence(self, project: str) -> dict[str, Any]:
+        """Redacted, transaction-consistent proof that effects survived cutover."""
+        digest=hashlib.sha256();counts={}
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            db.execute('BEGIN')
+            for table,fields in (('execution','request,fingerprint,state,result'),
+                                 ('capability_intent','request,payload')):
+                count=0;digest.update(canonical_json({'table':table,'project':project}))
+                for row in db.execute('SELECT '+fields+' FROM '+table+' WHERE project=? ORDER BY request',(project,)):
+                    digest.update(canonical_json(list(row)));digest.update(b'\n');count+=1
+                counts[table]=count
+        return {'schema_version':1,'sha256':digest.hexdigest(),'counts':counts}
 
     def pending(self, project: str) -> list[dict[str, str]]:
         with closing(sqlite3.connect(self.path)) as db:
@@ -235,6 +251,30 @@ class ExecutionLedger:
             raise ExecutionBlocked('ambiguous started execution cannot replay')
         return json.loads(row[2])
 
+    def observe_request(self, project: str, request: str, original_fingerprint: str) -> dict:
+        """Read original terminal evidence without reserving or finishing effects."""
+        if not isinstance(original_fingerprint,str) or not re.fullmatch('[0-9a-f]{64}',original_fingerprint):
+            raise ExecutionBlocked('invalid original request fingerprint')
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            row=db.execute('SELECT e.state,e.result,i.payload FROM execution e '
+                'LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request '
+                'WHERE e.project=? AND e.request=?',(project,request)).fetchone()
+        if row is None:return {'state':'not_started','replay':False}
+        intent=json.loads(row[2]) if row[2] else {}
+        if intent.get('request_fingerprint')!=original_fingerprint:
+            raise ExecutionBlocked('original request identity is absent or conflicting')
+        if row[0]!='terminal':return {'state':'post_dispatch_uncertain','replay':False}
+        result=json.loads(row[1])
+        if (not isinstance(result,dict) or type(result.get('returncode')) is not int
+                or type(result.get('timed_out',False)) is not bool
+                or intent.get('operation') not in {'execute','git_commit','git_publish','dependency_install'}
+                or result.get('source_sha')!=intent.get('source_sha')
+                or not isinstance(intent.get('source_sha'),str)
+                or not re.fullmatch('[0-9a-f]{40}',intent['source_sha'])):
+            raise ExecutionBlocked('terminal execution source evidence differs')
+        return {'state':'terminal','replay':False,'request_fingerprint':original_fingerprint,
+                'source_sha':intent['source_sha'],'result':result}
+
     def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')
@@ -251,6 +291,10 @@ class ExecutionLedger:
             db.execute('INSERT INTO execution VALUES(?,?,?,?,NULL)', (project, request, fingerprint, 'started'))
             if intent is not None:
                 db.execute('INSERT INTO capability_intent VALUES(?,?,?)',(project,request,json.dumps(intent)))
+            if self.on_reserve is not None:
+                # Publish trusted in-flight ownership before the transaction
+                # makes this started row visible to concurrent status readers.
+                self.on_reserve(project, request)
         return None
 
     def finish(self, project: str, request: str, result: dict[str, Any]) -> None:
