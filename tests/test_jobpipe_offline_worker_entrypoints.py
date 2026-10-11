@@ -74,7 +74,7 @@ class OfflineWorkerEntrypointTests(unittest.TestCase):
     @contextmanager
     def sealed(self):
         with patch("do_again.supervisor.admission.sys.platform", "darwin"), \
-             patch("do_again.supervisor.admission.os.getuid", return_value=501), \
+             patch("do_again.supervisor.admission.os.getuid", return_value=501, create=True), \
              patch("do_again.supervisor.immutable_worker.read_worker_configuration",
                    side_effect=lambda: copy.deepcopy(self.config)):
             yield
