@@ -23,8 +23,15 @@ class BrokerExecutor:
         if operation not in self.policy.get('allowed_operations', []):
             raise OperatorError(f'operation is not allowed: {operation}')
         before = rpc(self.repo, {'operation': 'status'})
-        if before.get('operator_intent') != 'active' or (before.get('production_ready') is not True and before.get('canary_authorized') is not True):
-            raise OperatorError('operator authority or production migration blocks execution')
+        if before.get('operator_intent') != 'active':
+            raise OperatorError('operator intent blocks execution')
+        if (before.get('production_ready') is not True
+                and before.get('canary_authorized') is not True):
+            # Offline authority cannot be inferred from an untrusted status flag.
+            # Revalidate the installed root-owned grant, exact jobpipe identity,
+            # expiration and quiescent siblings; root broker checks independently.
+            from ..supervisor.admission import require_worker_active
+            require_worker_active(self.repo, status=before, rpc=rpc)
         if before.get('enforcement_verified') is not True:
             raise OperatorError('native enforcement is not verified')
         actual = before.get('authority', {})
