@@ -35,6 +35,29 @@ def require_fresh_sonary_snapshot(repo: Path) -> str:
     return local
 
 
+def require_fresh_jobpipe_snapshot(repo: Path, *, pinned_sha: str | None = None) -> str:
+    """Fail before bundling if jobpipe's protected source is stale.
+
+    A maintenance-only package upgrade intentionally keeps project worktrees
+    pinned. It does NOT migrate the trusted worker snapshot or rewrite journals.
+    Never present such a bundle as an activated jobpipe development release.
+    """
+    local=git(repo,'rev-parse','refs/remotes/origin/main')
+    remote=git(repo,'ls-remote','origin','refs/heads/main')
+    matched=re.fullmatch(r'([0-9a-f]{40})\trefs/heads/main',remote)
+    if (not re.fullmatch('[0-9a-f]{40}',local) or matched is None
+            or local!=matched.group(1)):
+        raise ValueError('jobpipe origin/main is stale or unavailable; fetch main and retry preflight')
+    if pinned_sha is not None and (not re.fullmatch('[0-9a-f]{40}',pinned_sha)
+                                    or pinned_sha!=local):
+        raise ValueError('jobpipe protected snapshot is stale: pinned '+str(pinned_sha)+
+                         ', origin/main '+local+
+                         '; maintenance-only upgrade cannot migrate it. '
+                         'Reconcile the protected snapshot before activation; '
+                         'do not overwrite the worktree or resume the worker')
+    return local
+
+
 def available_ids(count=2):
     occupied=set()
     for category,attribute in (('Users','UniqueID'),('Groups','PrimaryGroupID')):
@@ -189,6 +212,10 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             raise ValueError('source repository identity does not match approved projects')
     if enrolling_sonary:
         require_fresh_sonary_snapshot(sonary_repo)
+    if jobpipe_offline_development:
+        pinned=next((p['source_sha'] for p in (installed or {}).get('projects',[])
+                     if p.get('account')=='_doagain_jp'),None)
+        require_fresh_jobpipe_snapshot(jobpipe,pinned_sha=pinned)
     output.mkdir(parents=True,mode=0o700)
     payload=output/'payload';payload.mkdir(mode=0o700)
     package=payload/'package/do_again';package.parent.mkdir()

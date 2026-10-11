@@ -261,6 +261,38 @@ else:
 
 
 
+    def test_jobpipe_offline_preflight_fails_before_stale_snapshot_install(self):
+        spec=importlib.util.spec_from_file_location(
+            'jobpipe_preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        repo=self.root/'jobpipe'
+        pinned='a'*40
+        latest='b'*40
+        def fake_git(*args):
+            if args[1]=='rev-parse':
+                self.assertEqual(args[2],'refs/remotes/origin/main')
+                return latest
+            if args[1]=='ls-remote':
+                self.assertEqual(args[2:],
+                                 ('origin','refs/heads/main'))
+                return latest+'\trefs/heads/main'
+            raise AssertionError('unexpected git operation')
+        with patch.object(module,'git',side_effect=fake_git) as command:
+            with self.assertRaisesRegex(ValueError,'protected snapshot is stale'):
+                module.require_fresh_jobpipe_snapshot(repo,pinned_sha=pinned)
+            self.assertEqual([x.args[1] for x in command.call_args_list],
+                             ['rev-parse','ls-remote'])
+        with patch.object(module,'git',side_effect=[latest,latest+'\trefs/heads/main']):
+            self.assertEqual(module.require_fresh_jobpipe_snapshot(repo,pinned_sha=latest),latest)
+        for remote in ('',pinned+'\trefs/heads/main',latest+'\trefs/heads/other',
+                       latest+'\trefs/heads/main\n'+latest):
+            with patch.object(module,'git',side_effect=[latest,remote]):
+                with self.subTest(remote=remote),self.assertRaisesRegex(ValueError,'stale or unavailable'):
+                    module.require_fresh_jobpipe_snapshot(repo,pinned_sha=latest)
+        with patch.object(module,'git',side_effect=[latest,latest+'\trefs/heads/main']):
+            self.assertEqual(module.require_fresh_jobpipe_snapshot(repo),latest)
+
+
     def test_sonary_snapshot_freshness_rejects_stale_or_ambiguous_remote(self):
         spec=importlib.util.spec_from_file_location(
             'preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
