@@ -26,7 +26,7 @@ def require_fresh_sonary_snapshot(repo: Path) -> str:
     """
     local=git(repo,'rev-parse','refs/remotes/origin/main')
     remote=git(repo,'ls-remote','origin','refs/heads/main')
-    match=re.fullmatch(r'([0-9a-f]{40})\\trefs/heads/main',remote)
+    match=re.fullmatch(r'([0-9a-f]{40})\trefs/heads/main',remote)
     if not re.fullmatch(r'[0-9a-f]{40}',local) or match is None:
         raise ValueError('Sonary remote main identity is unavailable; refusing enrollment')
     if local!=match.group(1):

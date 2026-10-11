@@ -269,7 +269,7 @@ else:
         local='a'*40;other='b'*40
         def run(*args):
             if args[1]=='rev-parse':return local
-            if args[1]=='ls-remote':return other+'\\trefs/heads/main'
+            if args[1]=='ls-remote':return other+'\trefs/heads/main'
             raise AssertionError('unexpected Git operation')
         with patch.object(module,'git',side_effect=run) as command:
             with self.assertRaisesRegex(ValueError,'stale'):
@@ -277,9 +277,9 @@ else:
             self.assertEqual([c.args[1] for c in command.call_args_list],
                              ['rev-parse','ls-remote'])
         with patch.object(module,'git',side_effect=[
-                local,local+'\\trefs/heads/main']):
+                local,local+'\trefs/heads/main']):
             self.assertEqual(module.require_fresh_sonary_snapshot(repo),local)
-        for bad in ('',other,other+'\\trefs/heads/other',local+'\\trefs/heads/main\\n'+local):
+        for bad in ('',other,other+'\trefs/heads/other',local+'\trefs/heads/main\n'+local):
             with patch.object(module,'git',side_effect=[local,bad]):
                 with self.subTest(remote=bad),self.assertRaises(ValueError):
                     module.require_fresh_sonary_snapshot(repo)
