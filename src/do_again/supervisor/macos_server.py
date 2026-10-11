@@ -428,7 +428,9 @@ def serve_operator(config: dict, brokers: dict) -> None:
                     packet=receive_packet(connection)
                     broker=brokers.get(packet['project'])
                     if broker is None:raise ExecutionBlocked('project is excluded or unregistered')
-                    if set(packet)=={'operation','project','intent'} and packet['operation']=='set_intent':
+                    if set(packet)=={'operation','project'} and packet['operation']=='status':
+                        result=broker.dispatch({'operation':'status'},config['operator_uid'])
+                    elif set(packet)=={'operation','project','intent'} and packet['operation']=='set_intent':
                         result=broker.operator_intent(packet['intent'])
                     elif set(packet)=={'operation','project','token'} and packet['operation']=='set_github_token':
                         result=broker.operator_github_token(packet['token'])
