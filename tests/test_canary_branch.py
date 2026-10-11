@@ -120,16 +120,16 @@ class CanaryControlBranchTests(unittest.TestCase):
             {'account':'_doagain_jp','repo':str(self.root/'jobpipe')},
             {'account':'_doagain_so','repo':str(self.root/'Sonary')},
         ]
-        with patch.object(canary_branch, "_api") as api, \\
-             patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
-                   side_effect=ExecutionBlocked("Sonary is active")):
+        with (patch.object(canary_branch, "_api") as api,
+              patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
+                    side_effect=ExecutionBlocked("Sonary is active"))):
             with self.assertRaisesRegex(ExecutionBlocked,"Sonary is active"):
                 self.provision()
             api.assert_not_called()
         self.assertFalse(self.ledger.exists())
-        with patch.object(canary_branch, "_api") as api, \\
-             patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
-                   return_value={'epoch':2}):
+        with (patch.object(canary_branch, "_api") as api,
+              patch('do_again.supervisor.canary_bootstrap._protected_parent_state',
+                    return_value={'epoch':2})):
             with self.assertRaisesRegex(ExecutionBlocked,"native canary parent epoch"):
                 self.provision()
             api.assert_not_called()
