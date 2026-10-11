@@ -123,8 +123,11 @@ class LocalSessionRecapTests(unittest.TestCase):
         (self.repo/"app.txt").write_text("a")
         git("add", "app.txt")
         git("commit", "-m", "Fix audio playback")
-        report = build_summary(self.layout, since=self.now-timedelta(days=2),
-                               now=self.now+timedelta(days=2))
+        # Anchor the fixture window to its actual commit time. A fixed 2026
+        # timestamp eventually excludes fresh CI commits and flakes the suite.
+        committed_at = datetime.fromisoformat(git("log", "-1", "--format=%cI").stdout.strip())
+        report = build_summary(self.layout, since=committed_at-timedelta(days=1),
+                               now=committed_at+timedelta(days=1))
         self.assertIn("Fix audio playback", report["recent_project_commits"])
         self.assertIn("may include non-Do Again changes", render_summary(report))
 

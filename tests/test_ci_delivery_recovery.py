@@ -61,7 +61,7 @@ class CiUncertainDeliveryTests(unittest.TestCase):
         stack.enter_context(patch.object(liveness.browser, "project_record", return_value={"chat_url": "https://chatgpt.com/c/owned-project"}))
         stack.enter_context(patch.object(liveness.browser, "_find_chatgpt_target", return_value={"id": "target"}))
         contains = stack.enter_context(patch.object(liveness.browser, "_page_contains", return_value=False))
-        send = stack.enter_context(patch.object(liveness.browser, "send_message"))
+        send = stack.enter_context(patch.object(liveness, "_queue_continuation"))
         return send, contains
 
     def snapshot(self):
@@ -92,7 +92,7 @@ class CiUncertainDeliveryTests(unittest.TestCase):
         with patch.object(liveness.time, "time", return_value=1000.0):
             self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "recovering")
             row = self.snapshot()
-            self.assertEqual(row["ci_delivery_phase"], "submitted_unverified")
+            self.assertEqual(row["ci_delivery_phase"], "queued")
         with patch.object(liveness.time, "time", return_value=1020.0):
             self.assertEqual(liveness.check_liveness(self.repo, self.control, self.state), "recovering")
         with patch.object(liveness.time, "time", return_value=1061.0):

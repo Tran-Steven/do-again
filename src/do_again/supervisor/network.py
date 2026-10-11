@@ -29,7 +29,8 @@ def https_bytes(url: str, *, host: str, limit: int, method: str = 'GET',
     deadline = time.monotonic() + 30
     connection = http.client.HTTPSConnection(host, timeout=10, context=trusted_context())
     try:
-        connection.request(method, parsed.path, body=body, headers=headers or {})
+        target = parsed.path + ('?' + parsed.query if parsed.query else '')
+        connection.request(method, target, body=body, headers=headers or {})
         response = connection.getresponse()
         # Never follow a redirect, including one on the original approved host.
         if 300 <= response.status < 400:

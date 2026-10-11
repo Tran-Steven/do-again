@@ -202,3 +202,404 @@ reconciliation of the original repository/ref/head/PR content; it never submits
 another effect. Fixture files and the draft PR are retained for audit. A changed
 live authority invalidates the result. This is capability evidence, not worker
 integration, end-to-end acceptance, or release authorization.
+
+### Sealed operator worker
+
+The maintenance installer now seals `worker-bootstrap.py`, the worker module,
+and its typed policy into the manifest. The bootstrap uses the installed Python
+with `-I -S -B`; worker configuration is read as the operator from root-owned
+public configuration, without invoking the root-only broker configuration loader.
+Admission binds operator UID/GID, installed interpreter/module, source SHA,
+canonical project/workspace, isolated control paths, policy, native proof,
+accepted goal and positive authority epoch. Startup rechecks the same authority.
+The daemon receives a session admission callback for control Git, polling and
+browser monitoring. Authority loss ends polling rather than restarting it.
+
+Control-history JSON synchronization, claim/receipt publication and read-only
+uncertain publication reconciliation use the trusted broker's fixed repository
+and `operator-control` ref. No host Git process handles this history in the sealed
+worker. Every remote mutation rechecks epoch and intent under the pause fence;
+non-force ref updates require original-parent and exact-content read-back.
+
+Browser delivery and CI continuation run in a fixed installed operator helper.
+The broker holds the pause fence from durable intent through helper completion.
+A lost helper outcome remains uncertain and cannot replay. Exact CI repository,
+run and current engineering head are checked before continuation. Browser leases
+use the registered service worker's kernel birth identity. Mirrored files retain
+original goal/receipt chronology instead of treating import time as progress.
+
+`stage-worker` provisions a separate compatibility mirror without replacing the
+legacy control worktree, and stages a root-owned service for the next explicit
+resume epoch. `start-worker --epoch N` binds source, epoch and plist hash before
+one start trigger. Automatic restart is disabled. Registration verifies the
+service PID and kernel identity; a lost start response can recover through that
+observation without another trigger. `withdraw-worker` closes admission before
+withdrawal and proves absence while retaining effect journals. Runtime rollback
+is qualified for the maintenance-only round trip described below. Live production
+service recovery remains unmeasured; withdrawal never permits restoring old effect state.
+
+`qualify-worker` first runs three fixed native-confined synthetic tasks through
+the installed Agent and broker. It then runs three additional tasks with the
+controller under the actual operator identity, using an authenticated root-owned
+Unix socket. Each new request is queued only after the preceding receipt,
+measuring unattended request intake and a bounded handoff. Restart verifies no
+reexecution. The root-only binding fixes project, source, policy and socket paths;
+the fixture endpoint accepts only its exact execution packets. The production
+configuration remains closed and cannot enable this qualification entrypoint.
+The approved live control head/tree are inspected read-only through the trusted
+GitHub capability; execution control history uses an in-memory Git-data fixture, including a lost response,
+read-only reconciliation and pause rejection. This does not start a production
+service or send browser messages. Results explicitly distinguish native execution
+from simulated history and unmeasured service/browser/live acceptance.
+
+The helper remains `production_ready=false`. Source regression tests do not
+qualify installed operation. Production promotion, complete browser acknowledgment
+and useful-progress scheduling, full production-worker lifecycle qualification and
+the selected 24-hour plus 72-hour live acceptance remain release gates.
+
+`qualify-service` starts and withdraws one fixed inert launchd canary under the
+operator identity while holding the real maintenance fence. It independently
+verifies the launchd PID, kernel identity, post-withdrawal service absence and
+termination of the original worker identity. A service label disappearing while
+its original process remains live blocks qualification. A reused PID is only
+observed; it is never signaled. The canary
+has no broker, repository, browser or network operations; it never opens
+production admission. Interrupted qualification preserves its original intent
+and cannot automatically start again. This qualifies native service mechanics,
+not production worker startup, runtime rollback or unattended development.
+
+The administrator installer supports `--recover-source <full-commit>` for a
+previous immutable package. Both packages must declare the same maintenance-only
+recovery contract, authority/effect schema and fenced worker admission. Project
+scope, identities, goal revision and dependency capabilities must match. A
+missing, ambiguous, incompatible or pre-contract target blocks recovery. Fully
+verified retained copies with identical manifest bytes are one equivalent choice;
+different manifests for the same commit remain ambiguous. The chosen path is
+recorded before cutover. An already-installed source is rejected without effects.
+Recovery
+uses the current authority and effect database; it never copies a historical
+database over newer effects. Pending effects, live execution and loaded worker
+services block the same locked cutover used for installation, including when the
+supervisor itself is offline. The retained runtime and transition phase are
+recorded before package renames. Journal directory entries and each package
+rename are flushed before advancing the transition. A deterministic interrupted
+rename test proves that the old runtime, new stage and newer effects survive
+without falsely recording successful selection. Interrupted selection stays in maintenance and
+requires explicit administrator reconciliation rather than automatic replay.
+Source regressions do not establish native installed rollback qualification.
+Operator status includes transaction-consistent, project-scoped effect counts
+and a digest. This permits before/after recovery comparison without exposing
+receipt contents, capability payloads or credentials.
+
+Native maintenance qualification completed at source
+`54796ba8d8c3cc475e65d04d35d9919fdee8601a`, with 473 local tests and all 17
+exact-head CI checks. Both installed identities passed 21 native checks and six
+synthetic tasks each, including operator-identity IPC and restart without replay.
+Actual rollback to `842e11d0d7edc4c63b5ca78bc0a3628c5da6d73a` and restoration
+preserved both projects' effect counts and digests, maintenance epoch 1, worktree
+authority and zero unresolved executions. Production remained disabled.
+
+Receipt dispatch now commits the actual post-rollover conversation, binding
+generation and payload digest immediately before its one Enter gesture. New
+explicit chat bindings get a fresh generation, including same-URL rebinding;
+changed generations block uncertain reconciliation. POSIX JSON journal writes
+flush the parent directory entry as well as file contents. Commit failure remains
+uncertain and prevents the gesture. These source regressions do not establish
+live browser delivery or assistant acknowledgment; those gates remain open.
+Conversation target lookup compares the entire conversation ID, including when
+the page has a query string. A shared ID prefix cannot authorize a different chat.
+
+
+Receipt visibility and acknowledgment are separate observations. New receipt messages
+carry a fresh acknowledgment token committed with the actual binding and payload before
+Enter. Read-only reconciliation requires the batch marker and token in one original user
+turn, followed by a completed assistant turn containing the exact acknowledgment line.
+Visibility alone retains the outbox and escalates after five minutes. Historical uncertain
+messages without that causal token require manual reconciliation; no replacement probe
+or receipt is sent. Terminal delivery evidence is durably retained before outbox cleanup,
+so restart can finish interrupted cleanup without another browser effect. Acknowledgment
+proves receipt consumption only, not useful engineering work.
+
+The legacy watchdog records receipt completion as execution activity. New receipt IDs
+cannot reset useful-progress time, continuation uncertainty, or the retry budget. The
+acceptance-verified task scheduler remains a release prerequisite.
+
+Installed maintenance source `2cd480fcd6e354636f0e2b1ce94792676a4282bc` passed
+21 native checks and six synthetic tasks for each project, including three tasks through
+the actual operator identity and authenticated Root socket, restart without replay, and
+inert launchd process withdrawal. Both projects remained in maintenance at epoch 1 with
+production disabled and no unresolved executions. These results do not qualify live
+browser acknowledgment or autonomous development acceptance.
+
+
+CI wakeups and idle continuations reserve a deterministic causal event in the common
+browser outbox. Each reservation binds its original conversation and generation;
+changed bindings, changed payloads, or missing queued evidence block replay. Receipt
+batches and continuations dispatch separately through the same durable pre-Enter hook
+and causal acknowledgment protocol. Completed reservations cannot recreate an outbox
+item. Liveness decisions use their own lock, avoiding recursive delivery-lock acquisition.
+
+The sealed browser helper persists a terminal receipt before returning its result to the
+broker. Root verifies the original request, source, epoch, protected ancestry, ordinary
+file ownership and result before completing its execution journal. `reconcile-browser`
+accepts only an original request ID and reads that receipt without accessing Chrome or
+performing another effect. Missing, aliased, writable or conflicting evidence remains
+uncertain. Immutable worker admission repeats this read-only reconciliation for lost
+browser responses; other execution uncertainty continues to deny admission.
+
+Installed maintenance source `e909a4879a04bb9fb45a41f2e33fbcdd54c30605` passed
+21 native checks and six synthetic tasks per project, authenticated operator execution,
+restart without replay and real inert launchd withdrawal. Browser delivery remains fixture
+evidence only. Production-worker lifecycle, acceptance-verified task scheduling and live
+acceptance are still release gates; both projects remain in maintenance.
+
+
+A started journal row is not automatically a crash. Root tracks a newly reserved request
+only while its authenticated handler remains on the live dispatch stack, publishing that
+ownership before the started transaction commits. Ongoing worker admission permits
+that admitted operation to drain and defers browser dispatch; startup still requires a
+quiescent journal. Handler exit, exception or broker restart removes the in-memory proof.
+Replaying a historical started row cannot recreate it. Pause, source/epoch changes and
+unverified boundaries continue to deny admission regardless of live-handler evidence.
+
+### Separate live-canary control history
+
+Control Git capabilities can bind to one sealed branch: `operator-control` by
+default, or `do-again/canary-<24 lowercase hex digits>/control` for a disposable
+canary. The branch comes from immutable supervisor project configuration, never
+from an execution request. A canary capability cannot read or update the legacy
+control ref, another canary ref, or main; force updates and ref creation remain
+denied. Control caches and uncertain publication intents retain their exact
+branch binding. Changing that binding blocks reconciliation rather than accepting
+evidence from a different branch. Legacy intents retain the original
+`operator-control` binding.
+
+This capability does not grant canary execution authority or open production.
+The installed maintenance fixture still disables browser delivery and uses fixed
+requests. A real live canary additionally requires a sealed disposable target,
+a dedicated conversation binding, and separate bounded authority before any
+worker or browser effect. Fixture task handoffs and manually published PRs are
+not live autonomous acceptance evidence.
+
+### Read-only repair after a lost execution response
+
+New native execution, commit, publication, and dependency reservations retain
+the original request fingerprint and installed source identity in the existing
+supervisor effect journal. `execution_observe` accepts only that original
+request identity through the authenticated project socket. It reads a single
+transactional execution/intent snapshot; it cannot reserve, finish, replay, or
+select another project. A terminal result with matching source and original
+fingerprint can repair an Agent receipt after a crash before receipt creation.
+Failed executions remain failed. Started effects remain uncertain. Missing
+records never authorize replay; legacy records without provenance fail closed.
+
+The sealed executor's restart repair calls this observation operation rather
+than execution. Once the repaired receipt is durable, another restart republishes
+the stored receipt without invoking the executor. Unavailable or conflicting
+broker evidence preserves the started local journal. This is source regression
+evidence, not a new installed qualification or live autonomous cycle.
+
+### Existing-workflow CI observation
+
+The live canary can reuse `Tran-Steven/do-again`'s existing
+`.github/workflows/ci.yml`: pull requests against main run the full suite,
+including discovered synthetic tests. No workflow file change or OAuth workflow scope
+is required. The publication capability rejects workflow additions, edits,
+and deletions before contacting GitHub; separate publication authority would
+be needed to change those files. Canary publication must eventually be restricted to the two
+synthetic fixture files; that admission boundary is still under implementation.
+The unused private target remains empty and is preserved.
+
+`ci_observe` accepts only `args.original_request_id`, identifying an original
+broker-created publication. The authenticated broker derives repository, head,
+branch, and draft PR from protected terminal evidence. It verifies the current
+engineering head, installed source, open draft PR, existing workflow path,
+pull-request event, repository identity, exact run, and run attempt. Discovery
+is bounded to 100 runs for that exact head and branch; incomplete inventories
+and concurrent reruns fail closed. Missing runs are waiting, failed CI remains
+failed, and changed heads invalidate old success. It never dispatches workflows
+or GitHub writes. Restart can repeat this read-only observation without replaying
+publication or adding execution reservations. A resulting Agent receipt retains
+the observation separately from engineering progress and browser acknowledgment.
+
+The installed runtime remains unchanged and production stays disabled. These
+regressions do not establish a live canary, authorize jobpipe execution, or
+start acceptance windows.
+
+
+## Restricted live autonomous canary
+
+Production admission remains disabled. An optional immutable `live_canary` grant
+permits one dedicated sealed worker to run two synthetic tasks against a fresh
+engineering worktree and one exact ChatGPT conversation. The grant identifies
+a 24-hex nonce, exact public Do Again baseline, parent maintenance epoch,
+conversation URL and binding identity. Prepare with `--canary-grant`; installing
+this new protected runtime still requires separate administrator authorization.
+Do not retrofit the grant into a running installation.
+
+The derived child scope shares Do Again's existing nonlogin execution identity
+but has its own native worktree, journal, control branch and admission fence.
+It does not activate either original project. Parent pause or epoch change
+revokes child admission under the parent fence. Authorization expires after two
+hours, cannot be reactivated, and allows only fixed edit/test/commit/publication/CI
+request IDs for tasks 1 and 2. Publication contains exactly two nonce-named
+regular synthetic files; workflow changes and unrelated files are rejected.
+Dependencies, arbitrary broker capabilities and production authority are absent.
+The existing repository CI executes on the worker-created draft PR.
+
+Stage the child service, qualify only its new native scope, activate the grant,
+and start the immutable worker. The worker delivers the objective through the
+normal durable browser outbox and processes normal control requests using the
+authenticated broker. Task 2 is withheld until task 1's exact publication head
+has successful CI and its original receipt has visible user-message evidence
+and exact assistant acknowledgment in the sealed conversation binding.
+Completion withdraws child admission; original Do Again and jobpipe remain in
+maintenance. Fixture tests do not establish live acceptance.
+
+`restart-canary` permits one guarded launchd restart after all outstanding effects
+have reconciled. It checks sealed source, epoch, plist, process birth identity
+and worker registration, and records the restart before its single gesture.
+Lost responses cannot cause a second restart. Startup reconciles durable broker
+intents read-only; terminal receipt notifications recover without reexecuting
+the request. Reconciled notification reservations cannot enqueue another send.
+Browser submissions use one explicit Send gesture because the current composer
+can interpret Enter as a newline. Missing confirmation remains uncertain; there
+is no fallback click, replay, implicit conversation rollover or binding change.
+
+Before reporting success, retain real broker execution IDs, protected receipts,
+worker-created draft PRs, exact-head CI, original conversation delivery and
+acknowledgment evidence, task-2 admission evidence and restart/pause observations.
+No canary result enables production or starts a 24-hour jobpipe run.
+
+The root supervisor reads canary binding evidence only from the configured
+operator's exact browser project-record path, with ownership and alias checks.
+Root HOME and DO_AGAIN_HOME cannot select a different authority record.
+A live attempt refused before dispatch is withdrawn with its journals intact;
+a consumed one-shot grant is replaced by a fresh isolated grant rather than
+reactivated or replayed.
+
+Each synthetic task permits one additional `edit-repair` / `test-repair` pair
+after its original protected test execution reaches a terminal failure. Missing,
+started, uncertain, successful, or other-runtime evidence cannot admit a repair.
+Repair testing requires a successful confined repair edit, and commit admission
+then requires the repaired test to pass. A second failed test stops that task;
+there is no second repair identity or automatic replay of the first attempt.
+Source-generation instructions require actual line breaks and compilation before
+writing to catch JSON/Python escaping errors at the request-generation boundary.
+
+Canary admission observes inactive uncertain effects before each loop, not only
+at startup. It invokes the existing read-only reconciliation handlers once and
+then rereads authoritative status. A live dispatch is allowed to drain without
+reconciliation; paused admission cannot trigger it. Missing or conflicting
+evidence remains unresolved and prevents further effects. This closes the live
+control-publication lost-response stall without resubmitting browser messages,
+GitHub objects, claims, or coding requests.
+
+Publication binds an existing draft PR before advancing its branch, then reads
+that exact PR after the update. A stale or temporarily missing list entry cannot
+authorize creating a second PR. An unresolved exact-head readback stays uncertain.
+
+An explicitly authorized maintenance installer can classify the second canary
+publication as `blocked_partial_publication` only when the worker is withdrawn,
+the original successful first publication is retained, the new branch and PR head
+match the second commit with the exact first parent, and two readbacks prove the
+same original draft still has the first publication's unchanged metadata. This
+administrator-only flag is absent from ordinary broker APIs and default updates.
+It records the original intents and observed evidence, retains all journals, and
+completes the one pending row as a failed partial outcome. It never updates GitHub,
+replays an operation, counts engineering success, or enables production. Foreign,
+changing, missing, completed, or non-draft evidence refuses classification.
+
+Task-two admission also requires a durable acknowledgment of the exact successful
+CI continuation, tied to its run, conversation, generation, and current source.
+The earlier publication receipt acknowledgment alone cannot release a request.
+Final CI is delivered through the same reserved protocol, and canary completion
+waits for that final acknowledgment before closing admission.
+
+
+### Automatic headless canary conversation bootstrap
+
+Never ask the operator to manually create or initialize a ChatGPT tab for the
+live canary. Once the installed protected helper is in maintenance and a fresh
+public baseline is selected, the operator-side automation can execute this
+one-shot command as the unprivileged macOS operator:
+
+```sh
+python3 tools/bootstrap_live_canary.py \
+  --baseline <EXACT_PUBLIC_MAIN_SHA> \
+  --grant-file "$HOME/.do_again/canary-grants/next.json"
+```
+
+It allocates a fresh 24-character identity, opens a **new** ChatGPT tab inside
+Do Again's dedicated browser profile (true headless where authenticated;
+background fallback otherwise), sends one small non-development initialization
+message, waits for its **exact reply**, and privately seals the resulting
+`nonce`, `chat_url`, `binding_identity`, baseline and parent epoch. It prints
+the derived control branch and grant path for the existing branch/protected
+installer process. It does **not** start a worker, enable production, publish
+a GitHub PR, or authorize an application submission.
+
+This bootstrap writes a durable exclusive ticket **before** any browser effect
+and a durable `dispatch_started` marker before the **single Send gesture**.
+If the browser hangs, a send is uncertain, the assistant fails to return the
+exact marker, or a process crashes, the nonce is **consumed**. The automation
+must not replay the message or reuse that target: preserve the ticket and
+inspect it read-only, then use a newly authorized identity after resolution.
+A previous live canary's ChatGPT conversation is never an acceptable successor,
+even with a different nonce. Login/Cloudflare challenges or macOS administrator
+prompts still require human action; ordinary tab creation does not.
+
+The bootstrap then provisions exactly one isolated GitHub control ref at
+`refs/heads/do-again/canary-<nonce>/control` using the approved public baseline.
+It uses the operator's existing GitHub CLI authentication (no workflow scope)
+and journals the branch-create attempt before GitHub effects. A GET must prove
+the ref is absent with an actual HTTP 404 before the single POST. The POST
+cannot be repeated after a lost response; a follow-up can only GET and verify
+the exact original ref/SHA. A failure after successfully creating the chat
+never authorizes sending that bootstrap message again.
+
+For an uncertain POST or branch readback, use the same exact grant and
+baseline with `--resume-control-ref`. It is strictly GET-only and refuses to
+act unless a reserved branch journal exists. It cannot create a new ref.
+If the ChatGPT initialization completed but the process exited **before any
+branch reservation**, use `--finish-control-ref` with the original grant and
+baseline; it can start the first branch creation only after an exact 404
+preflight and a fresh maintenance-epoch check. Both modes skip ChatGPT
+entirely. Do not rerun the original ChatGPT bootstrap for a consumed nonce.
+GitHub branch writes and recovery additionally require the original parent
+authority epoch and operator maintenance status; switching to production or
+pausing the parent revokes the branch-creation path.
+
+The generated grant is intended as input to
+`tools/prepare_macos_supervisor.py --canary-grant`. Only a separate, explicit
+administrator approval can install it. Run post-install native confinement
+probes before activating its isolated worker; evidence from a previous installed
+source does not suffice.
+
+
+### Optional Sonary third-project enrollment (source candidate only)
+
+Initial Sonary enrollment also requires the local `origin/main` to equal the
+read-only GitHub `refs/heads/main` identity. If it is stale, preparation
+fails before creating a bundle; refresh only the remote-tracking ref with
+`git -C ~/Sonary fetch origin main`, then prepare a **new** output path.
+No Sonary checkout, owner project data, or PR branch is changed by preparation.
+
+The original maintenance supervisor has two protected project identities
+(Do Again UID 401 and jobpipe UID 402 on the operator's Mac). Sonary's
+legacy `do-again list` entry is **not** a protected enrollment. Source support
+for a third identity is opt-in: the bundle preparer accepts
+`--sonary-repo /Users/<operator>/Sonary` only for a previously installed
+maintenance supervisor and checks the exact Sonary GitHub remote, operator-home
+path, and separately allocated UID/GID. The installer must verify an original
+maintenance source marker, identical existing parent scopes, and a single
+add-only Sonary scope before making any effects. No project is automatically
+enrolled during a normal two-parent upgrade, and later upgrades must explicitly
+retain Sonary. A rollback may not silently remove an enrolled third scope.
+
+Preparing code **does not** activate the project. After reviewing an exact
+candidate and full CI, an administrator-approved package installation is still
+required, followed by Sonary's independent UID isolation probe and synthetic
+worker qualification. `production_ready=false` and Sonary's maintenance intent
+stay in force. This does not prove browser delivery, existing ChatGPT chat
+takeover, real audio recovery, or permission to deploy or resume Sonary.

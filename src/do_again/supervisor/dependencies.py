@@ -64,7 +64,9 @@ def install_via_broker(broker, packet: dict) -> dict:
                 return recovered
             if MacOSProcesses().owned(broker.project.uid):
                 raise ExecutionBlocked('dedicated identity has unresolved processes')
-            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint)
+            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint,
+                intent={'operation':packet['operation'],'source_sha':broker.config['source_sha'],
+                        'request_fingerprint':packet.get('request_fingerprint')})
         root = EXECUTION_ROOT / broker.project.key / 'requests' / packet['request_id']
         scratch, cache = root / 'scratch', root / 'cache'
         for path in (scratch, cache):

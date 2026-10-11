@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import os
 import shutil
 import subprocess
@@ -40,7 +41,9 @@ class FakeRepository:
         if endpoint=='git/trees':return {'sha':self.export['tree']}
         if endpoint=='git/commits':return {'sha':self.export['head']}
         if endpoint.startswith('git/refs'):
-            self.head=payload['sha'];return {'object':{'sha':self.head}}
+            self.head=payload['sha']
+            if self.pr is not None:self.pr['head']['sha']=self.head
+            return {'object':{'sha':self.head}}
         if method=='PATCH' and endpoint.startswith('pulls/'):
             self.pr.update(payload);return self.pr
         if endpoint=='pulls':
@@ -93,9 +96,18 @@ class PublicationTests(unittest.TestCase):
         self.api.head='f'*40
         with self.assertRaises(ExecutionBlocked):self.publish()
         self.assertEqual(self.api.effects,[])
+
         self.api.head=None;self.branch='main'
         with self.assertRaises(ExecutionBlocked):self.publish()
         self.assertEqual(self.api.effects,[])
+
+    def test_workflow_changes_rejected_before_any_github_operation(self):
+        for path in ('.github/workflows/ci.yml','.GitHub/Workflows/other.yml',
+                     '.github/workflows','../.github/workflows/ci.yml'):
+            with self.subTest(path=path):
+                self.export['entries'][0]['path']=path
+                with patch.object(self.api,'request',side_effect=AssertionError('network must not run')):
+                    with self.assertRaises(ExecutionBlocked):self.publish()
 
     def test_pause_before_reference_mutation_does_not_publish_branch_or_pr(self):
         calls=0
@@ -113,6 +125,43 @@ class PublicationTests(unittest.TestCase):
         self.api.head=self.base;self.publish()
         changes=[p for m,e,p in self.api.effects if m=='PATCH']
         self.assertEqual(changes,[{'sha':self.head,'force':False}])
+
+    def existing_parent_pr(self):
+        self.api.head=self.base
+        self.api.pr={'number':7,'state':'open','title':'Original task','body':'Original evidence',
+                     'html_url':'https://github.com/'+self.api.repository+'/pull/7',
+                     'head':{'sha':self.base,'ref':self.branch,'repo':{'full_name':self.api.repository}},
+                     'base':{'ref':'main','repo':{'full_name':self.api.repository}}}
+        return copy.deepcopy(self.api.pr)
+
+    def test_stale_pr_list_after_branch_update_never_creates_second_pr(self):
+        old=self.existing_parent_pr();request=self.api.request
+        def stale(method,endpoint,payload=None):
+            if method=='GET' and endpoint.startswith('pulls?'):return [copy.deepcopy(old)]
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=stale):result=self.publish()
+        self.assertEqual(result['pull_request'],7)
+        self.assertEqual(self.api.pr['head']['sha'],self.head)
+        self.assertEqual(self.api.pr['body'],'Acceptance evidence')
+        self.assertFalse(any(endpoint=='pulls' for method,endpoint,payload in self.api.effects))
+
+    def test_missing_list_or_stale_exact_pr_remains_uncertain_without_second_creation(self):
+        for stale_detail in (False,True):
+            with self.subTest(stale_detail=stale_detail):
+                self.api.effects=[];old=self.existing_parent_pr();request=FakeRepository.request.__get__(self.api)
+                queries=0
+                def stale(method,endpoint,payload=None):
+                    nonlocal queries
+                    if method=='GET' and endpoint.startswith('pulls?'):
+                        queries+=1
+                        return [copy.deepcopy(old)] if queries==1 else []
+                    if stale_detail and method=='GET' and endpoint=='pulls/7':return copy.deepcopy(old)
+                    return request(method,endpoint,payload)
+                with patch.object(self.api,'request',side_effect=stale):
+                    if stale_detail:
+                        with self.assertRaisesRegex(ExecutionBlocked,'no second creation'):self.publish()
+                    else:self.assertEqual(self.publish()['pull_request'],7)
+                self.assertFalse(any(endpoint=='pulls' for method,endpoint,payload in self.api.effects))
 
     def test_lost_pr_response_is_uncertain_and_readback_proves_existing_effect(self):
         self.api.lose_pr_response=True
@@ -135,6 +184,7 @@ class GitHubScopeTests(unittest.TestCase):
         with patch('do_again.supervisor.github.https_bytes',return_value=(401,b'synthetic credential failure')) as fetch:
             with self.assertRaises(ExecutionBlocked) as error:api.request('GET','git/ref/heads/main')
             self.assertNotIn('synthetic credential',str(error.exception))
+            self.assertIn('GET git/ref/heads/main (HTTP 401)',str(error.exception))
             self.assertTrue(fetch.call_args.args[0].startswith('https://api.github.com/repos/Tran-Steven/do-again/'))
 
     def test_arbitrary_admin_endpoints_and_main_updates_cannot_contact_network(self):
@@ -209,6 +259,14 @@ class PublicationBrokerTests(unittest.TestCase):
         self.assertEqual(self.api.effects,effects)
         self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
 
+    def test_workflow_denial_finishes_pre_dispatch_without_uncertain_reservation(self):
+        self.export['entries'][0]['path']='.github/workflows/ci.yml'
+        result=self.module.publish_via_broker(self.broker,self.packet)
+        self.assertEqual(result['state'],'failed_pre_publication')
+        self.assertEqual(result['returncode'],1)
+        self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+        self.assertEqual(self.api.effects,[])
+
     def test_missing_pr_or_changed_payload_stays_uncertain_without_effect(self):
         self.api.lose_pr_response=True
         with self.assertRaises(OSError):self.module.publish_via_broker(self.broker,self.packet)
@@ -226,6 +284,71 @@ class PublicationBrokerTests(unittest.TestCase):
         self.state['intent']='paused'
         with self.assertRaises(ExecutionBlocked):self.module.publish_via_broker(self.broker,self.packet)
         self.assertEqual(self.api.effects,[]);self.assertEqual(self.exports,0)
+
+
+@unittest.skipUnless(shutil.which('git'),'real Git fixture required')
+class CanaryPartialDispositionTests(unittest.TestCase):
+    command=PublicationTests.command
+    setUp=PublicationBrokerTests.setUp
+
+    def partial(self):
+        prefix='canary-'+'c'*24
+        self.broker.config['source_sha']='d'*40
+        self.packet['request_id']=prefix+'-1-publish'
+        self.module.publish_via_broker(self.broker,self.packet)
+        self.api.pr['draft']=True
+        (self.root/'selected').write_bytes(b'second change\n')
+        self.command('add','selected');self.command('commit','-qm','second bounded change')
+        self.head=self.command('rev-parse','HEAD').strip()
+        self.export=export_commit(self.git,self.root/'.git',self.head);self.api.export=self.export
+        self.packet={**self.packet,'request_id':prefix+'-2-publish','expected_head':self.head,
+                     'title':'Second task','body':'Second evidence'}
+        request=self.api.request
+        def interrupted(method,endpoint,payload=None):
+            if method=='PATCH' and endpoint.startswith('pulls/'):
+                raise OSError('metadata update not dispatched')
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=interrupted):
+            with self.assertRaises(OSError):self.module.publish_via_broker(self.broker,self.packet)
+        self.state['intent']='maintenance';self.broker.config['production_ready']=False
+        self.broker.canary=SimpleNamespace(rid=lambda task,stage:prefix+'-'+str(task)+'-'+stage)
+        def readback(method,endpoint,payload=None):
+            if method=='GET' and endpoint=='git/commits/'+self.head:
+                return {'sha':self.head,'parents':[{'sha':self.export['parent']}]}
+            return request(method,endpoint,payload)
+        self.readback=readback
+
+    def test_explicit_partial_disposition_retains_intents_and_never_changes_github(self):
+        self.partial();effects=list(self.api.effects)
+        original=self.broker.ledger.intent(self.broker.project.key,self.packet['request_id'])
+        with patch.object(self.api,'request',side_effect=self.readback):
+            result=self.module.classify_canary_partial_publication(self.broker)
+        self.assertEqual(result['state'],'blocked_partial_publication')
+        self.assertEqual(result['returncode'],1);self.assertFalse(result['engineering_complete'])
+        self.assertEqual(self.api.effects,effects);self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+        self.assertEqual(self.broker.ledger.intent(self.broker.project.key,self.packet['request_id']),original)
+        self.assertTrue((self.broker.state/'canary-partial-publication-disposition.json').exists())
+
+    def test_foreign_metadata_completed_payload_or_non_draft_cannot_be_classified(self):
+        self.partial();original=copy.deepcopy(self.api.pr);effects=list(self.api.effects)
+        for changes in ({'body':'foreign edit'},{'title':'Second task','body':'Second evidence'},
+                        {'draft':False},{'number':8}):
+            self.api.pr=copy.deepcopy(original);self.api.pr.update(changes)
+            with self.subTest(changes=changes),patch.object(self.api,'request',side_effect=self.readback):
+                with self.assertRaises(ExecutionBlocked):self.module.classify_canary_partial_publication(self.broker)
+            self.assertEqual(len(self.broker.ledger.pending(self.broker.project.key)),1)
+            self.assertEqual(self.api.effects,effects)
+
+    def test_active_production_or_changed_runtime_never_classifies_partial_effect(self):
+        self.partial();effects=list(self.api.effects)
+        for field,value in [('intent','active'),('production_ready',True),('source_sha','other source')]:
+            target=self.state if field=='intent' else self.broker.config
+            old=target[field];target[field]=value
+            with self.subTest(field=field),self.assertRaises(ExecutionBlocked):
+                self.module.classify_canary_partial_publication(self.broker)
+            target[field]=old
+            self.assertEqual(len(self.broker.ledger.pending(self.broker.project.key)),1)
+            self.assertEqual(self.api.effects,effects)
 
 
 @unittest.skipUnless(os.name=='posix','native POSIX credential modes required')
