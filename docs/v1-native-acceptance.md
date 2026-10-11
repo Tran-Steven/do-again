@@ -102,3 +102,19 @@ the canary rather than broadening its project scope. Existing two-project
 installations retain the original behavior. This is admission logic only;
 it does not qualify human-challenged headless Chrome or authorize actual
 jobpipe/Sonary development.
+
+
+### Explicit background GUI browser canary (conditional, not headless proof)
+
+The operator can opt into `tools/bootstrap_live_canary.py --allow-background`
+for an authenticated **background** Chrome session if true headless Chrome
+requires human verification. The one-shot sealed grant then contains
+`browser_mode: background`; legacy headless grants omit that field.
+The grant rejects an unrecognized mode or unexpected fields.
+
+The browser's genuine document focus and visibility checks remain mandatory:
+no forced window activation, blind Send, manual challenge bypass, second click,
+or retry after uncertain dispatch. A background tab that cannot prove focus
+is a blocked transport, not passing live canary evidence.
+Background authentication alone does not satisfy the two-task release gate
+or authorize production or changes to Sonary/jobpipe.

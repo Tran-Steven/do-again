@@ -150,6 +150,19 @@ class CanaryControlBranchTests(unittest.TestCase):
             authority.assert_called_once()
             api.assert_not_called()
 
+    def test_branch_requires_exact_sealed_background_transport(self):
+        original=json.loads(self.grant.read_text())
+        self.grant.write_text(json.dumps({**original,'browser_mode':'visible'}))
+        with patch.object(canary_branch,'_api') as api:
+            with self.assertRaisesRegex(ExecutionBlocked,'authority differs'):
+                self.provision()
+            api.assert_not_called()
+        self.grant.write_text(json.dumps({**original,'browser_mode':'background'}))
+        with patch.object(canary_branch,'_api',side_effect=[
+                (404, {}), (201, self.remote()), (200, self.remote())]) as api:
+            self.assertEqual(self.provision()['branch'],self.branch)
+            self.assertEqual(api.call_count,3)
+
     def test_private_grant_and_nonce_are_required_without_github_effects(self):
         self.grant.chmod(0o644)
         with patch.object(canary_branch, "_api") as api:

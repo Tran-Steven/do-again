@@ -83,6 +83,18 @@ class LiveCanaryTests(unittest.TestCase):
     def request(self,task,stage,operation,**kwargs):
         return {'request_id':self.authority.rid(task,stage),'operation':operation,**kwargs}
 
+    def test_background_transport_is_explicitly_sealed(self):
+        config=copy.deepcopy(self.config)
+        config['live_canary']['browser_mode']='background'
+        self.assertEqual(scope(config)[0]['browser_mode'],'background')
+        for value in ('headless','visible','auto',None,True):
+            with self.subTest(value=value):
+                config['live_canary']['browser_mode']=value
+                with self.assertRaisesRegex(ExecutionBlocked,'sealed canary grant'):
+                    scope(config)
+        del config['live_canary']['browser_mode']
+        self.assertNotIn('browser_mode',scope(config)[0])
+
     def test_no_general_production_authority_or_scope_expansion(self):
         self.assertTrue(effect_authorized(self.broker));self.assertFalse(self.config['production_ready'])
         self.assertFalse(effect_authorized(SimpleNamespace(config=self.config)))

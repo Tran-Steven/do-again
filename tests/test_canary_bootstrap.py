@@ -42,7 +42,7 @@ class CanaryBootstrapTests(unittest.TestCase):
             CHATGPT_URL="https://chatgpt.com/",
             browser_paths=Mock(return_value=SimpleNamespace(
                 projects=self.home / "browser" / "projects")),
-            ensure_browser_running=Mock(return_value={"port": 9224, "mode": "headless", "session_ready": True}),
+            ensure_browser_running=Mock(return_value={"port": 9224, "mode": "headless", "authenticated": True, "session_ready": True}),
             wait_for_authenticated=Mock(return_value=(self.target, {})),
             send_message=Mock(),
             register_project=Mock(return_value=self.record),
@@ -76,11 +76,11 @@ class CanaryBootstrapTests(unittest.TestCase):
                            (self.nonce + ".json")).read_text())
 
     def test_rejects_background_or_unverified_session_before_any_chat_target(self):
-        for session in ({"port": 9224, "mode": "background", "session_ready": True},
-                        {"port": 9224, "mode": "headless", "session_ready": False}):
+        for session in ({"port": 9224, "mode": "background", "authenticated": True, "session_ready": True},
+                        {"port": 9224, "mode": "headless", "authenticated": True, "session_ready": False}):
             with self.subTest(session=session):
                 self.browser.ensure_browser_running.return_value = session
-                with self.assertRaisesRegex(ExecutionBlocked, "authenticated true-headless"):
+                with self.assertRaisesRegex(ExecutionBlocked, "explicitly selected browser mode"):
                     self.run_bootstrap()
                 self.create.assert_not_called()
                 self.browser.send_message.assert_not_called()
@@ -89,7 +89,7 @@ class CanaryBootstrapTests(unittest.TestCase):
                 self.assertEqual(self.ticket()["state"], "reserved")
                 (self.home / ".do_again" / "canary-bootstrap" / (self.nonce + ".json")).unlink()
         self.browser.ensure_browser_running.return_value = {
-            "port": 9224, "mode": "headless", "session_ready": True}
+            "port": 9224, "mode": "headless", "authenticated": True, "session_ready": True}
 
     def test_headless_chat_bootstraps_and_seals_private_exact_grant(self):
         self.browser.send_message.side_effect = self.succeed
@@ -113,6 +113,44 @@ class CanaryBootstrapTests(unittest.TestCase):
             self.run_bootstrap()
         self.browser.send_message.assert_called_once()
         self.closed.assert_not_called()
+
+    def test_explicit_background_bootstrap_seals_transport_and_remains_one_shot(self):
+        self.browser.ensure_browser_running.return_value = {
+            "port": 9224, "mode": "background", "authenticated": True,
+            "session_ready": True}
+        self.browser.send_message.side_effect = self.succeed
+        result = bootstrap_live_canary(self.config, baseline=self.baseline,
+            nonce=self.nonce, output=self.output, browser=self.browser,
+            allow_background=True)
+        self.assertEqual(result["browser_mode"], "background")
+        grant = json.loads(self.output.read_text())
+        self.assertEqual(grant["browser_mode"], "background")
+        self.assertFalse(result["production_ready"])
+        self.browser.send_message.assert_called_once()
+        with self.assertRaises(ExecutionBlocked):
+            bootstrap_live_canary(self.config, baseline=self.baseline,
+                nonce=self.nonce, output=self.output, browser=self.browser,
+                allow_background=True)
+        self.browser.send_message.assert_called_once()
+
+    def test_background_focus_block_preserves_no_dispatch_and_consumes_nonce(self):
+        from do_again.browser.errors import BrowserPreDispatchBlocked
+        self.browser.ensure_browser_running.return_value = {
+            "port": 9224, "mode": "background", "authenticated": True,
+            "session_ready": True}
+        self.browser.send_message.side_effect = BrowserPreDispatchBlocked(
+            "unfocused GUI automation tab; no browser submission attempted")
+        with self.assertRaises(BrowserPreDispatchBlocked):
+            bootstrap_live_canary(self.config, baseline=self.baseline,
+                nonce=self.nonce, output=self.output, browser=self.browser,
+                allow_background=True)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(self.ticket()["state"], "target_created")
+        self.closed.assert_called_once_with(9224, "new-tab")
+        with self.assertRaises(ExecutionBlocked):
+            bootstrap_live_canary(self.config, baseline=self.baseline,
+                nonce=self.nonce, output=self.output, browser=self.browser,
+                allow_background=True)
 
     def test_uncertain_send_leaves_reserved_identity_and_no_retry(self):
         def fail(target, prompt, *, before_dispatch, **kwargs):
