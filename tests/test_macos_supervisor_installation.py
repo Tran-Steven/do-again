@@ -114,7 +114,7 @@ else:
                 'projects':[{'key':'b'*64,'source_sha':'c'*40}]}
         with patch.object(self.module.subprocess,'run',
                           return_value=Mock(returncode=0,
-                                            stdout='SUPERVISOR_AUTHENTICATED_READY\\n')) as check:
+                                            stdout='SUPERVISOR_AUTHENTICATED_READY\n')) as check:
             self.module.wait_for_supervisor_readiness(config)
         check.assert_called_once()
         args,kwargs=check.call_args
