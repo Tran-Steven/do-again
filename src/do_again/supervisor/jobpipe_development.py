@@ -97,3 +97,26 @@ def require_broker_jobpipe_development(broker, *, now=None):
                 or broker.ledger.pending(sibling["key"])):
             raise ExecutionBlocked("jobpipe development requires all sibling projects in drained maintenance")
     return True
+
+def synthetic_qualification_config(config, **overrides):
+    """Construct only the in-memory, root-gated synthetic probe broker scope.
+
+    The actual sealed config must remain maintenance-only with its offline grant.
+    Synthetic brokers simulate active execution on isolated fixture worktrees;
+    inheriting that grant while setting production_ready=True would create an
+    invalid mixed authority. The caller must bind this returned config exclusively
+    to an inaccessible synthetic broker under the real maintenance admission fence.
+    """
+    if config.get("production_ready") is not False:
+        raise ExecutionBlocked("synthetic qualification requires maintenance configuration")
+    if config.get("development_scope") is not None:
+        from types import SimpleNamespace
+        project = next((p for p in config.get("projects", [])
+                        if isinstance(p, dict) and p.get("account") == "_doagain_jp"), None)
+        if project is None:
+            raise ExecutionBlocked("synthetic qualification lacks jobpipe scope")
+        require_jobpipe_grant(config, SimpleNamespace(
+            account=project["account"], repo=Path(project["repo"]), key=project["key"]))
+    if "production_ready" in overrides or "development_scope" in overrides:
+        raise ExecutionBlocked("synthetic qualification authority fields cannot be overridden")
+    return dict(config, production_ready=True, development_scope=None, **overrides)

@@ -95,8 +95,9 @@ def qualify_capabilities(broker) -> dict:
         # Private, fixed synthetic authority; every effect holds the real
         # maintenance fence. This is never socket-selectable by a script.
         status = {'intent':'active','epoch':1,'goal_revision':'synthetic-capability-' + nonce}
-        config = dict(broker.config, production_ready=True,
-                      dependency_artifacts={broker.project.key:[ARTIFACT]})
+        from .jobpipe_development import synthetic_qualification_config
+        config = synthetic_qualification_config(
+            broker.config, dependency_artifacts={broker.project.key:[ARTIFACT]})
         private = SimpleNamespace(project=replace(broker.project,worktree=fixture), config=config,
                     registry=SimpleNamespace(status=lambda repo:dict(status)), ledger=broker.ledger,
                     state=broker.state, lock=threading.Lock(), admission=guard,

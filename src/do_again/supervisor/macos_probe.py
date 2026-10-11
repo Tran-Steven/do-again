@@ -225,6 +225,7 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     from dataclasses import replace
     from types import SimpleNamespace
     from .git_broker import commit_via_broker
+    from .jobpipe_development import synthetic_qualification_config
     from .macos_execution import ExecutionLedger, MacOSProcesses
     from .macos_server import worktree_authority
     expected_root = EXECUTION_ROOT / project.key / 'probes' / nonce
@@ -240,7 +241,7 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     # All spawn and promotion decisions still hold the real maintenance fence.
     fixture_broker = SimpleNamespace(
         project=replace(project, worktree=fixture),
-        config=dict(config, production_ready=True),
+        config=synthetic_qualification_config(config),
         registry=SimpleNamespace(status=lambda repo:dict(status)),
         ledger=ledger, lock=threading.Lock(), admission=start_guard, _verified=lambda:True)
     packet = {'operation':'git_commit','request_id':'native-broker-' + nonce,

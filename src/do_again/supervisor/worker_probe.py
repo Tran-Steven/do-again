@@ -68,7 +68,10 @@ def qualify_worker(broker):
         # maintenance fence. No socket operation can select these overrides.
         private=object.__new__(ProjectBroker)
         private.project=replace(broker.project,worktree=work)
-        private.config=dict(broker.config,production_ready=True)
+        # Only the root-created fixture may simulate active authority.
+        # Never carry the real jobpipe development grant into that fixture.
+        from .jobpipe_development import synthetic_qualification_config
+        private.config=synthetic_qualification_config(broker.config)
         private.registry=SimpleNamespace(status=lambda repo:dict(status))
         private.state=private_root;private.ledger=broker.ledger
         private.lock=threading.Lock();private.admission=guard;private._verified=broker._verified

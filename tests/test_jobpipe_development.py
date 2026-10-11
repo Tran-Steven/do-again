@@ -121,6 +121,32 @@ class OfflineJobpipeDevelopmentTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):require_broker_jobpipe_development(broker,now=self.now)
 
 
+    def test_synthetic_qualification_keeps_live_scope_sealed(self):
+        from do_again.supervisor.jobpipe_development import synthetic_qualification_config
+        from do_again.supervisor.live_canary import effect_authorized
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        self.config["development_scope"]["issued_at_utc"]=(now-timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.config["development_scope"]["expires_at_utc"]=(now+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        original=copy.deepcopy(self.config)
+        fixture=synthetic_qualification_config(
+            self.config, dependency_artifacts={self.key:[]})
+        self.assertEqual(self.config,original)
+        self.assertIs(self.config["production_ready"],False)
+        self.assertIsNotNone(self.config["development_scope"])
+        self.assertIs(fixture["production_ready"],True)
+        self.assertIsNone(fixture["development_scope"])
+        self.assertEqual(fixture["dependency_artifacts"],{self.key:[]})
+        self.assertTrue(effect_authorized(SimpleNamespace(config=fixture)))
+        for field,value in (("production_ready",True),
+                            ("development_scope",{})):
+            bad=copy.deepcopy(self.config)
+            bad[field]=value
+            with self.subTest(field=field),self.assertRaises(ExecutionBlocked):
+                synthetic_qualification_config(bad)
+        for forbidden in ("production_ready","development_scope"):
+            with self.subTest(forbidden=forbidden),self.assertRaises(ExecutionBlocked):
+                synthetic_qualification_config(self.config,**{forbidden:True})
+
     def test_effect_authorization_and_resume_are_jobpipe_only(self):
         from contextlib import nullcontext
         from do_again.supervisor.live_canary import effect_authorized
