@@ -260,6 +260,30 @@ else:
         self.assertEqual((Path(ticket['retained_path'])/'version').read_text(),'old')
 
 
+
+    def test_sonary_snapshot_freshness_rejects_stale_or_ambiguous_remote(self):
+        spec=importlib.util.spec_from_file_location(
+            'preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        repo=self.root/'Sonary'
+        local='a'*40;other='b'*40
+        def run(*args):
+            if args[1]=='rev-parse':return local
+            if args[1]=='ls-remote':return other+'\\trefs/heads/main'
+            raise AssertionError('unexpected Git operation')
+        with patch.object(module,'git',side_effect=run) as command:
+            with self.assertRaisesRegex(ValueError,'stale'):
+                module.require_fresh_sonary_snapshot(repo)
+            self.assertEqual([c.args[1] for c in command.call_args_list],
+                             ['rev-parse','ls-remote'])
+        with patch.object(module,'git',side_effect=[
+                local,local+'\\trefs/heads/main']):
+            self.assertEqual(module.require_fresh_sonary_snapshot(repo),local)
+        for bad in ('',other,other+'\\trefs/heads/other',local+'\\trefs/heads/main\\n'+local):
+            with patch.object(module,'git',side_effect=[local,bad]):
+                with self.subTest(remote=bad),self.assertRaises(ValueError):
+                    module.require_fresh_sonary_snapshot(repo)
+
     def test_sonary_enrollment_is_explicit_add_only_and_preserves_parent_snapshots(self):
         from do_again.supervisor.authority import project_identity
         from do_again.supervisor.macos_execution import EXECUTION_ROOT

@@ -579,6 +579,12 @@ source does not suffice.
 
 ### Optional Sonary third-project enrollment (source candidate only)
 
+Initial Sonary enrollment also requires the local `origin/main` to equal the
+read-only GitHub `refs/heads/main` identity. If it is stale, preparation
+fails before creating a bundle; refresh only the remote-tracking ref with
+`git -C ~/Sonary fetch origin main`, then prepare a **new** output path.
+No Sonary checkout, owner project data, or PR branch is changed by preparation.
+
 The original maintenance supervisor has two protected project identities
 (Do Again UID 401 and jobpipe UID 402 on the operator's Mac). Sonary's
 legacy `do-again list` entry is **not** a protected enrollment. Source support

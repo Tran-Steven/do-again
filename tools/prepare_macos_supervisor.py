@@ -18,6 +18,22 @@ def git(repo, *args):
     return subprocess.check_output(['git','-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-C',str(repo),*args],text=True).strip()
 
 
+def require_fresh_sonary_snapshot(repo: Path) -> str:
+    """Reject a stale remote-tracking ref before constructing a private bundle.
+
+    This check is read-only. It never fetches, checks out, or modifies the
+    operator's Sonary worktree, existing PR branches, or stored changes.
+    """
+    local=git(repo,'rev-parse','refs/remotes/origin/main')
+    remote=git(repo,'ls-remote','origin','refs/heads/main')
+    match=re.fullmatch(r'([0-9a-f]{40})\\trefs/heads/main',remote)
+    if not re.fullmatch(r'[0-9a-f]{40}',local) or match is None:
+        raise ValueError('Sonary remote main identity is unavailable; refusing enrollment')
+    if local!=match.group(1):
+        raise ValueError('Sonary origin/main is stale; fetch origin main before preparing enrollment')
+    return local
+
+
 def available_ids(count=2):
     occupied=set()
     for category,attribute in (('Users','UniqueID'),('Groups','PrimaryGroupID')):
@@ -168,6 +184,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         if remote not in (f'https://github.com/Tran-Steven/{name}.git',
                           f'git@github.com:Tran-Steven/{name}.git'):
             raise ValueError('source repository identity does not match approved projects')
+    if enrolling_sonary:
+        require_fresh_sonary_snapshot(sonary_repo)
     output.mkdir(parents=True,mode=0o700)
     payload=output/'payload';payload.mkdir(mode=0o700)
     package=payload/'package/do_again';package.parent.mkdir()
