@@ -1,6 +1,6 @@
 """Pure offline jobpipe admission checks; never install, start, or submit."""
 import copy
-import hashlib
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,9 +16,11 @@ from do_again.supervisor.macos_execution import ExecutionBlocked
 class OfflineJobpipeDevelopmentTests(unittest.TestCase):
     def setUp(self):
         self.now = datetime(2026, 10, 11, 16, 0, tzinfo=timezone.utc)
-        self.home = "/Users/test-operator"
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        self.home = str(Path(temp.name).resolve())
         self.repo = Path(self.home) / "jobpipe"
-        self.key = hashlib.sha256(str(self.repo).encode()).hexdigest()
+        from do_again.supervisor.authority import project_identity
+        self.key = project_identity(self.repo)
         self.goal = "jobpipe-development-20261011"
         self.jobpipe = {"account": "_doagain_jp", "repo": str(self.repo), "key": self.key}
         self.parent = {"account": "_doagain_da", "repo": self.home+"/do-again", "key": "a"*64}
@@ -155,7 +157,9 @@ class OfflineJobpipeDevelopmentTests(unittest.TestCase):
         from do_again.supervisor.immutable_worker import validate_worker_context, WORKER_OPERATIONS
         from do_again.supervisor.macos_execution import EXECUTION_ROOT
         cfg=copy.deepcopy(self.config)
-        cfg.update(schema_version=1,operator_uid=501,python="/sealed/current/runtimes/python/bin/python3")
+        base=Path(self.home)/"sealed"
+        cfg.update(schema_version=1,operator_uid=501,
+                   python=str(base/"current/runtimes/python/bin/python3"))
         cfg["projects"][0].update(uid=401,gid=401)
         cfg["projects"][1].update(uid=402,gid=402)
         cfg["projects"][2].update(uid=403,gid=403)
@@ -163,7 +167,6 @@ class OfflineJobpipeDevelopmentTests(unittest.TestCase):
         now=datetime.now(timezone.utc).replace(microsecond=0)
         cfg["development_scope"]["issued_at_utc"]=(now-timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         cfg["development_scope"]["expires_at_utc"]=(now+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        base=Path("/sealed")
         status={
             "source_sha":cfg["source_sha"],"operator_intent":"active",
             "production_ready":False,"enforcement_verified":True,
