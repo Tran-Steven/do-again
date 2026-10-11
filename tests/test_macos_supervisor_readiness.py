@@ -75,7 +75,7 @@ class SupervisorReadinessTests(unittest.TestCase):
                 result = dict(owner.status)
                 if self.path.endswith("operator.sock") and override:
                     result.update(override)
-                return json.dumps({"ok": True, "result": result}).encode() + b"\\n"
+                return json.dumps({"ok": True, "result": result}).encode() + b"\n"
 
         from do_again.supervisor import macos_execution
         script = self.installer._READINESS_CLIENT
@@ -145,7 +145,7 @@ class SupervisorReadinessTests(unittest.TestCase):
                 if self.used:
                     return b""
                 self.used = True
-                return json.dumps({"operation": "status", "project": "key"}).encode() + b"\\n"
+                return json.dumps({"operation": "status", "project": "key"}).encode() + b"\n"
 
             def sendall(self, raw):
                 self.sent = json.loads(raw)
