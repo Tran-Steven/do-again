@@ -170,6 +170,16 @@ class ControlHistoryTests(unittest.TestCase):
             GitHubRepository('Tran-Steven/do-again','x'*32,control_branch=branch)
 
 
+    def test_control_api_cannot_mutate_main_or_force_any_branch(self):
+        api=GitHubRepository('Tran-Steven/do-again','x'*32,control=True)
+        for endpoint,payload in [('git/refs/heads/main',{'sha':'a'*40,'force':False}),
+                                 ('git/refs/heads/operator-control',{'sha':'a'*40,'force':True})]:
+            with self.assertRaises(ExecutionBlocked):api.request('PATCH',endpoint,payload)
+        with self.assertRaises(ExecutionBlocked):api.request('POST','git/refs',{})
+        with self.assertRaises(ExecutionBlocked):api.request('GET','git/ref/heads/main')
+
+
+class SonaryRepositoryBindingTests(unittest.TestCase):
     def test_sonary_control_scope_is_exact_and_excludes_cross_project_credentials(self):
         from do_again.supervisor.control_history import api_for
         token='s'*32
@@ -196,14 +206,6 @@ class ControlHistoryTests(unittest.TestCase):
         for foreign in ('Tran-Steven/other','Tran-Steven/sonary','Other/Sonary'):
             with self.assertRaisesRegex(ExecutionBlocked,'excluded'):
                 GitHubRepository(foreign,token)
-
-    def test_control_api_cannot_mutate_main_or_force_any_branch(self):
-        api=GitHubRepository('Tran-Steven/do-again','x'*32,control=True)
-        for endpoint,payload in [('git/refs/heads/main',{'sha':'a'*40,'force':False}),
-                                 ('git/refs/heads/operator-control',{'sha':'a'*40,'force':True})]:
-            with self.assertRaises(ExecutionBlocked):api.request('PATCH',endpoint,payload)
-        with self.assertRaises(ExecutionBlocked):api.request('POST','git/refs',{})
-        with self.assertRaises(ExecutionBlocked):api.request('GET','git/ref/heads/main')
 
 
 if __name__=='__main__':unittest.main()
