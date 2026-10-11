@@ -25,6 +25,64 @@ RECOVERY_CONTRACT={'authority_schema':1,'effect_schema':1,
                    'worker_admission':'fenced-v1','mode':'maintenance-only'}
 
 
+def validate_project_scope(config, previous=None):
+    """Verify an exact, maintenance-only two-parent roster or Sonary add-only upgrade.
+
+    Pure preflight: reject scope replacement/removal before accounts, journals,
+    snapshots, or launchd are mutated. A new scope requires explicit operator
+    preparation against the exact previous sealed source.
+    """
+    projects=config.get('projects')
+    if not isinstance(projects,list) or len(projects) not in (2,3):
+        raise RuntimeError('invalid protected project scope cardinality')
+    home=config.get('operator_home')
+    if not isinstance(home,str) or not Path(home).is_absolute():
+        raise RuntimeError('invalid operator home for project scope')
+    expected={'_doagain_da':('do-again','Tran-Steven/do-again'),
+              '_doagain_jp':('jobpipe','Tran-Steven/jobpipe'),
+              '_doagain_so':('Sonary','Tran-Steven/Sonary')}
+    accounts=[p.get('account') for p in projects if isinstance(p,dict)]
+    if (len(accounts)!=len(projects) or len(set(accounts))!=len(accounts)
+            or not {'_doagain_da','_doagain_jp'}.issubset(accounts)
+            or set(accounts)-set(expected)
+            or (len(projects)==3 and '_doagain_so' not in accounts)):
+        raise RuntimeError('unknown or duplicate protected project scope')
+    if len({p.get('uid') for p in projects})!=len(projects):
+        raise RuntimeError('protected execution identity is shared')
+    for p in projects:
+        name,repository=expected[p['account']]
+        exact=Path(home)/name
+        if (p.get('repo')!=str(exact) or exact.is_symlink()
+                or p.get('key')!=hashlib.sha256(os.fsencode(exact)).hexdigest()
+                or p.get('github_repository')!=repository
+                or p.get('worktree')!=str(EXEC/p['key']/'worktree')
+                or type(p.get('uid')) is not int or not 400<=p['uid']<500
+                or p.get('gid')!=p['uid']):
+            raise RuntimeError('protected project repository or identity scope changed')
+    if previous is None:
+        if len(projects)!=2 or config.get('scope_enrollment') is not None:
+            raise RuntimeError('initial protected installation cannot implicitly enroll Sonary')
+        return False
+    older=previous.get('projects',[])
+    old_accounts={p['account']:p for p in older}
+    incoming={p['account']:p for p in projects}
+    if (len(older) not in (2,3) or any(
+            incoming.get(account)!=project for account,project in old_accounts.items())):
+        raise RuntimeError('existing protected scope cannot change or be removed')
+    added=set(incoming)-set(old_accounts)
+    if added:
+        if (added!={'_doagain_so'} or len(older)!=2
+                or config.get('scope_enrollment')!={'kind':'sonary_add_only',
+                         'previous_source_sha':previous.get('source_sha')}
+                or previous.get('production_ready') is not False
+                or config.get('production_ready') is not False):
+            raise RuntimeError('Sonary scope requires explicit add-only maintenance enrollment')
+        return True
+    if added or config.get('scope_enrollment') is not None:
+        raise RuntimeError('unexpected or replayed protected scope enrollment')
+    return False
+
+
 def run(args, **kwargs):
     result=subprocess.run(args, capture_output=True, text=True, timeout=120, **kwargs)
     if result.returncode:
@@ -264,10 +322,9 @@ def preview_cutover(config, registry, live):
             import fcntl
             old=json.loads((ROOT/'current/config.json').read_text())
             verify_stage(ROOT/'current')
-            fields=('repo','key','uid','gid','account','worktree','source_sha')
-            scoped=lambda c:sorted(tuple(p[k] for k in fields) for p in c['projects'])
-            if old.get('production_ready') is not False or config.get('production_ready') is not False or scoped(old)!=scoped(config):
-                raise RuntimeError('production or changed-scope helper upgrade requires guarded rollout')
+            if old.get('production_ready') is not False or config.get('production_ready') is not False:
+                raise RuntimeError('production helper upgrade requires guarded rollout')
+            validate_project_scope(config,old)
             for project in sorted(config['projects'],key=lambda p:p['key']):
                 path=ROOT/'state'/project['key']/'admission.lock'
                 if path.is_symlink() or path.parent.is_symlink():raise RuntimeError('aliased admission fence')
@@ -368,8 +425,8 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
             raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation')
     if config.get('live_canary') is not None and config.get('codex_canary') is not None:
         raise RuntimeError('browser and Codex grants cannot coexist in an installed runtime')
-    if len(config['projects'])!=2 or len({p['uid'] for p in config['projects']})!=2:
-        raise RuntimeError('two independently scoped execution identities required')
+    previous_config=json.loads(prior_path.read_text()) if prior_path.exists() else None
+    enrolling_sonary=validate_project_scope(config,previous_config)
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
     secure_directory(ROOT)
     secure_directory(ROOT/'state',0o700)
@@ -393,7 +450,7 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
     if current.exists() and not existing_installation:
         raise RuntimeError('existing package has unknown installation provenance')
     sys.path.insert(0,str(stage/'package'))
-    from do_again.supervisor.authority import AuthorityRegistry
+    from do_again.supervisor.authority import AuthorityRegistry, AuthorityDenied
     registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
     if classify_canary_partial:
         if recovery or not existing_installation or not current.exists():
@@ -419,17 +476,35 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
         raise RuntimeError('previous installation lost its effect journal; reconciliation required')
     if registry.path.exists():
         for project in config['projects']:
-            if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+            try:
+                prior=registry.status(Path(project['repo']))
+            except AuthorityDenied:
+                if enrolling_sonary and project['account']=='_doagain_so':
+                    continue
+                raise
+            if prior['intent'] not in {'maintenance','paused','stopped'}:
                 raise RuntimeError('existing authority admits work; upgrade deferred')
     legacy=AuthorityRegistry(authority,owner_uid=config['operator_uid'])
     for project in config['projects']:
         from do_again.supervisor.macos_execution import project_from_dict
         scoped=project_from_dict(project);scoped.validate(config['operator_uid'])
-        if scoped.key != project['key'] or project['account'] not in {'_doagain_da','_doagain_jp'}:
+        if scoped.key != project['key'] or project['account'] not in {'_doagain_da','_doagain_jp','_doagain_so'}:
             raise RuntimeError('invalid project scope')
-        status=legacy.status(Path(project['repo']))
-        if status['intent']!='maintenance' or status['goal_revision']!=project['goal_revision']:
+        try:
+            status=legacy.status(Path(project['repo']))
+        except AuthorityDenied:
+            if project['account']!='_doagain_so':
+                raise
+            status=None
+        if status is not None and (status['intent']!='maintenance'
+                                    or status['goal_revision']!=project['goal_revision']):
             raise RuntimeError('operator admission changed after preparation')
+        if status is None and project['account']=='_doagain_so':
+            older=next((p for p in (previous_config or {}).get('projects',[])
+                        if p['account']=='_doagain_so'),None)
+            expected=older['goal_revision'] if older is not None else 'sonary-enrolled-maintenance-v1'
+            if project['goal_revision']!=expected:
+                raise RuntimeError('new Sonary scope has no approved maintenance goal')
     if config.get('production_ready') is not False:
         raise RuntimeError('initial installation must remain in maintenance')
     if PLIST.exists() and not existing_installation:
@@ -445,7 +520,15 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
                 registry.set_intent(Path(project['repo']),'maintenance',goal_revision=project['goal_revision'])
         else:
             for project in config['projects']:
-                if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+                try:
+                    status=registry.status(Path(project['repo']))
+                except AuthorityDenied:
+                    if enrolling_sonary and project['account']=='_doagain_so':
+                        registry.set_intent(Path(project['repo']),'maintenance',
+                                            goal_revision=project['goal_revision'])
+                        continue
+                    raise
+                if status['intent'] not in {'maintenance','paused','stopped'}:
                     raise RuntimeError('existing authority admits work; upgrade deferred')
         for project in config['projects']:provision_worktree(config,project,current)
         if config.get('live_canary') is not None and config.get('codex_canary') is not None:
