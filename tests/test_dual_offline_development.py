@@ -5,7 +5,6 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from do_again.supervisor.dual_development import require_dual_offline_grant
 from do_again.supervisor.macos_execution import ExecutionBlocked
@@ -103,10 +102,9 @@ class DualOfflineGrantTests(unittest.TestCase):
 
     def test_lease_expiry_goal_revisions_and_pending_effects(self):
         scope=self.config["development_scope"]
-        with patch("do_again.supervisor.dual_development.datetime") as fake:
-            fake.now.return_value=self.now+timedelta(days=10)
-            with self.assertRaises(ExecutionBlocked):
-                require_dual_offline_grant(self.config,self.jp,self.statuses,now=self.now+timedelta(days=10))
+        with self.assertRaises(ExecutionBlocked):
+            require_dual_offline_grant(
+                self.config,self.jp,self.statuses,now=self.now+timedelta(days=10))
         self.statuses["_doagain_da"]["goal_revision"]="changed"
         with self.assertRaises(ExecutionBlocked):self.check()
         self.statuses["_doagain_da"]["goal_revision"]="review-v1"
