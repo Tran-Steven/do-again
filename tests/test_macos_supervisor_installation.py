@@ -655,7 +655,8 @@ else:
         hosted=self.root/'hosted.json'
         proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
         hosted.write_text(json.dumps({'source_sha':'old','network_endpoints':[],'dns_resolvers':[]}))
-        with self.assertRaises(Exception):
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        with self.assertRaisesRegex(ExecutionBlocked,'controller requires separate offline execution and sealed goal'):
             module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
         self.assertFalse((self.root/'payload').exists())
 
