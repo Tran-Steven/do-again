@@ -10,7 +10,7 @@ from .macos_execution import ExecutionBlocked
 def validate_controller_configuration(config, *, now=None, epoch=None):
     scope = config.get('controller_scope')
     if scope is None:
-        if any(config.get(k) is not None for k in ('controller_goal','controller_profile','hosted_planning_scope')):
+        if any(config.get(k) is not None for k in ('controller_goal','controller_profile','hosted_planning_scope','browser_planning_scope')):
             raise ExecutionBlocked('controller capabilities without a controller scope')
         return None
     now = now or datetime.now(timezone.utc)
@@ -49,6 +49,8 @@ def validate_controller_configuration(config, *, now=None, epoch=None):
         raise ExecutionBlocked('test case profile contains command syntax')
     tasks=profile['offline_tasks']
     if scope['planner']=='sealed-offline':
+        if config.get('browser_planning_scope') is not None:
+            raise ExecutionBlocked('offline planner cannot inherit browser authority')
         if config.get('hosted_planning_scope') is not None:
             raise ExecutionBlocked('offline planner cannot inherit hosted authority')
         if not isinstance(tasks,list) or len(tasks)!=3:
@@ -61,9 +63,20 @@ def validate_controller_configuration(config, *, now=None, epoch=None):
                     or any(not isinstance(task[k],str) or not 1<=len(task[k])<=limit
                            for k,limit in [('gap',1000),('acceptance',1000),('script',16000)])):
                 raise ExecutionBlocked('offline task outside sealed qualification profile')
-    else:
+    elif scope['planner']=='codex-cli':
+        if config.get('browser_planning_scope') is not None:
+            raise ExecutionBlocked('Codex planner cannot inherit browser authority')
         if tasks != []:
             raise ExecutionBlocked('hosted planner cannot inherit offline scripts')
         from .controller_codex_helper import validate_hosted_scope
         validate_hosted_scope(config,config.get('hosted_planning_scope'),now)
+    elif scope['planner']=='chatgpt-browser-cdp':
+        if tasks != [] or config.get('hosted_planning_scope') is not None:
+            raise ExecutionBlocked('browser planner cannot inherit offline scripts or Codex authority')
+        from ..service.browser_planner import validate_browser_planner_grant
+        validate_browser_planner_grant(
+            config.get('browser_planning_scope'), source_sha=config['source_sha'],
+            goal_sha256=digest(goal), epoch=scope['epoch'], now=now)
+    else:
+        raise ExecutionBlocked('unknown controller planner provider')
     return scope
