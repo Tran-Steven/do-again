@@ -18,7 +18,7 @@ from ..model_transport import _response_schema_valid, _validate_response
 from .macos_execution import ExecutionBlocked, INSTALL_ROOT, EXECUTION_ROOT, private_root_file
 
 
-def helper_profile(binary,work,auth=None,endpoints=(),runtime=None):
+def helper_profile(binary,work,auth=None,endpoints=(),runtime=None,resolvers=()):
     def quoted(p):return json.dumps(str(p))
     rules=['(version 1)','(deny default)','(allow process-fork)',
         '(allow process-exec (literal '+quoted(binary)+'))','(allow sysctl-read)',
@@ -29,6 +29,15 @@ def helper_profile(binary,work,auth=None,endpoints=(),runtime=None):
         rules.extend(['(allow process-exec (literal '+quoted(runtime)+'))',
             '(allow file-read* (subpath '+quoted(Path(runtime).parent.parent)+') (subpath '+quoted(INSTALL_ROOT/'current/package')+'))'])
     if auth is not None:rules.append('(allow file-read-data (literal '+quoted(auth)+'))')
+    if resolvers:
+        rules.extend(['(allow mach-lookup (global-name "com.apple.mDNSResponder"))',
+            '(allow file-read-data (literal "/private/etc/resolv.conf") (literal "/private/etc/hosts"))'])
+    for resolver in resolvers:
+        address=ipaddress.ip_address(resolver)
+        if address.version!=4 or address.is_unspecified or address.is_multicast:
+            raise ExecutionBlocked('DNS resolver must be an explicitly approved IPv4 address')
+        for protocol in ('udp','tcp'):
+            rules.append('(allow network-outbound (remote '+protocol+' '+json.dumps(str(address)+':53')+'))')
     for endpoint in endpoints:
         address=ipaddress.ip_address(endpoint)
         if address.version!=4 or address.is_private or address.is_loopback or address.is_reserved:
@@ -109,8 +118,8 @@ class SealedCodexHelper:
             'exec','--sandbox','read-only','--skip-git-repo-check','--ephemeral',
             '--model',grant['model'],'--output-schema',str(schema_file),'--output-last-message',str(answer),'-']
         runtime=self.config['python']
-        shim=helper_shim()
-        spec=['/usr/bin/sandbox-exec','-p',helper_profile(self.binary,work,auth,grant['network_endpoints'],runtime),
+        shim=helper_shim(hosted=True)
+        spec=['/usr/bin/sandbox-exec','-p',helper_profile(self.binary,work,auth,grant['network_endpoints'],runtime,grant['dns_resolvers']),
             runtime,'-I','-S','-B','-c',shim,*argv]
         with self.admission():
             result=bounded_process(spec,work=work,environment={'HOME':str(home),'CODEX_HOME':str(home),
@@ -134,7 +143,7 @@ def validate_hosted_scope(config,grant,now):
         'source_sha','goal_sha256','epoch','issued_at_utc','expires_at_utc',
         'max_calls_per_cycle','max_total_calls','max_call_seconds','max_total_seconds',
         'max_prompt_bytes','max_answer_bytes','worker_network_access','browser_messages',
-        'application_submissions','network_endpoints','payload_sha256'}
+        'application_submissions','network_endpoints','dns_resolvers','payload_sha256'}
     if (not isinstance(grant,dict) or set(grant)!=required or grant['source_sha']!=config['source_sha']
             or grant['goal_sha256']!=scope['goal_sha256'] or grant['epoch']!=scope['epoch']
             or grant['provider']!='openai' or grant['transport']!='codex-cli' or grant['model']!='gpt-6.1-sol'
@@ -144,24 +153,25 @@ def validate_hosted_scope(config,grant,now):
                 'max_calls_per_cycle':1,'max_total_calls':3,'max_call_seconds':120,
                 'max_total_seconds':360,'max_prompt_bytes':32768,'max_answer_bytes':65536}.items())
             or any(grant[k] is not False for k in ('worker_network_access','browser_messages','application_submissions'))
-            or not isinstance(grant['network_endpoints'],list) or not 1<=len(grant['network_endpoints'])<=16):
+            or not isinstance(grant['network_endpoints'],list) or not 1<=len(grant['network_endpoints'])<=16
+            or not isinstance(grant['dns_resolvers'],list) or not 1<=len(grant['dns_resolvers'])<=4):
         raise ExecutionBlocked('hosted scope identity/capabilities differ')
     issued=parse_utc(grant['issued_at_utc']);expires=parse_utc(grant['expires_at_utc'])
     if not issued<=now<expires or not 0<(expires-issued).total_seconds()<=7200:
         raise ExecutionBlocked('hosted grant expired or overlong')
     descriptor={'payload_sha256':grant['payload_sha256'],'helper':'confined-codex-v1',
-                'source_sha':config['source_sha'],'network_endpoints':grant['network_endpoints']}
+                'source_sha':config['source_sha'],'network_endpoints':grant['network_endpoints'],'dns_resolvers':grant['dns_resolvers']}
     if digest(descriptor)!=grant['backend_sha256']:raise ExecutionBlocked('sealed helper descriptor differs')
-    helper_profile('/sealed/codex','/sealed/work', endpoints=grant['network_endpoints'])
+    helper_profile('/sealed/codex','/sealed/work', endpoints=grant['network_endpoints'],resolvers=grant['dns_resolvers'])
     return grant
 
 
 
-def helper_shim():
+def helper_shim(hosted=False):
     return ('import sys,os,resource;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
             'from do_again.supervisor.execution_runner import kernel_groups,revoke_bootstrap_capabilities;'
             'assert os.getuid()==501 and os.geteuid()==501 and not (kernel_groups()-{os.getgid()});'
-            'revoke_bootstrap_capabilities();'
+            +('' if hosted else 'revoke_bootstrap_capabilities();')+
             'resource.setrlimit(resource.RLIMIT_CORE,(0,0));'
             'resource.setrlimit(resource.RLIMIT_FSIZE,(65536,65536));'
             'resource.setrlimit(resource.RLIMIT_CPU,(120,120));'
@@ -188,7 +198,7 @@ def qualify_codex_helper(config,state):
         work=Path(directory);os.chown(work,grant['execution_uid'],grant['execution_gid'])
         runtime=config['python']
         argv=['/usr/bin/sandbox-exec','-p',helper_profile(binary,work,runtime=runtime),
-            runtime,'-I','-S','-B','-c',helper_shim(),str(binary),'exec','--help']
+            runtime,'-I','-S','-B','-c',helper_shim(hosted=True),str(binary),'exec','--help']
         result=bounded_process(argv,work=work,environment={'HOME':str(work),'CODEX_HOME':str(work),'PATH':'/usr/bin:/bin'},
             uid=grant['execution_uid'],gid=grant['execution_gid'],timeout=15)
         if result['returncode']!=0 or any(option not in result['stdout'] for option in

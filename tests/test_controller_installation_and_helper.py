@@ -77,6 +77,26 @@ class GrantTests(unittest.TestCase):
             (wheels/(artifact['id']+'.whl')).write_bytes(b'tampered')
             with self.assertRaises(ExecutionBlocked):prepare_test_wheels(root/'other',config,wheels)
 
+    def test_exact_hosted_scope_validation_is_pure_and_rejects_network_tampering(self):
+        self.apply();self.scope['planner']='codex-cli';self.profile['offline_tasks']=[]
+        grant={'provider':'openai','transport':'codex-cli','model':'gpt-6.1-sol',
+            'execution_uid':501,'execution_gid':20,'source_sha':'a'*40,'goal_sha256':self.scope['goal_sha256'],
+            'epoch':12,'issued_at_utc':self.scope['issued_at_utc'],'expires_at_utc':self.scope['expires_at_utc'],
+            'max_calls_per_cycle':1,'max_total_calls':3,'max_call_seconds':120,'max_total_seconds':360,
+            'max_prompt_bytes':32768,'max_answer_bytes':65536,'worker_network_access':False,
+            'browser_messages':False,'application_submissions':False,'network_endpoints':['8.8.8.8'],
+            'dns_resolvers':['1.1.1.1'],'payload_sha256':'b'*64}
+        # Public addresses are inert scope fixtures, never contacted.
+        grant['backend_sha256']=digest({'payload_sha256':grant['payload_sha256'],'helper':'confined-codex-v1',
+            'source_sha':'a'*40,'network_endpoints':grant['network_endpoints'],'dns_resolvers':grant['dns_resolvers']})
+        with patch('subprocess.Popen') as process:
+            self.assertEqual(validate_hosted_scope(self.config,grant,self.now),grant)
+        process.assert_not_called()
+        for key,value in [('network_endpoints',['127.0.0.1']),('dns_resolvers',[]),('backend_sha256','c'*64),
+                           ('worker_network_access',True),('epoch',13)]:
+            with self.subTest(key=key),self.assertRaises(ExecutionBlocked):
+                validate_hosted_scope(self.config,dict(grant,**{key:value}),self.now)
+
     def test_factory_helper_absent_grant_has_no_process_effect(self):
         with patch('subprocess.Popen') as process,self.assertRaises(ExecutionBlocked):
             SealedCodexHelper({'hosted_planning_scope':None},Path('/unused'),lambda:None)
