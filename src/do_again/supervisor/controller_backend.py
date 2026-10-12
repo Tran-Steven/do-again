@@ -38,10 +38,20 @@ class ControllerBackend:
             helper=SealedCodexHelper(broker.config,broker.state,self.admission)
             journal=PlanningCallJournal(broker.state/'planning-calls.json')
             return CodexPlanner(helper.authorize,journal.reserve,helper.transport,self.build_request)
+        def browser_planner():
+            from .controller_browser_helper import SealedBrowserPlannerHelper
+            from ..service.browser_planner import BrowserPlanner
+            helper=SealedBrowserPlannerHelper(broker.config,broker.state,self.admission)
+            journal=PlanningCallJournal(broker.state/'browser-planning-calls.json')
+            return BrowserPlanner(
+                helper.authorize,journal.reserve,helper.transport,self.build_request,
+                source_sha=broker.config['source_sha'],
+                goal_sha256=scope['goal_sha256'],epoch=scope['epoch'])
         self.planner=select_controller_planner(
             scope['planner'],
             offline_factory=lambda:DeterministicPlanner(self.offline_select),
-            codex_factory=codex_planner)
+            codex_factory=codex_planner,
+            browser_factory=browser_planner)
 
     @contextmanager
     def admission(self):

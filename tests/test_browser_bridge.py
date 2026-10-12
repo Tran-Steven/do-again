@@ -65,6 +65,28 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(fake.timeout, 120.0)
         self.assertEqual(len(fake.sent), 1)
 
+    def test_zero_model_call_probe_requires_exact_session(self):
+        identity = {
+            'operation':'probe-result', 'nonce':'a'*32,
+            'conversation_id':'01234567-89ab-4cde-8012-0123456789ab',
+            'profile_sha256':'f'*64,
+        }
+        fake = BufferedSocket(json.dumps(identity).encode()+bytes([10]))
+        metadata = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o600, st_uid=501,
+                                   st_nlink=1)
+        bridge = BrokerBrowserBridge('/tmp/browser-planner-test.sock')
+        with patch('pathlib.Path.lstat', return_value=metadata), \
+             patch('do_again.service.browser_bridge.sys.platform', 'darwin'), \
+             patch('do_again.service.browser_bridge.secrets.token_hex',
+                   return_value='a'*32), \
+             patch('do_again.service.browser_bridge.socket.socket', return_value=fake):
+            result = bridge.probe_authorized(
+                conversation_id=identity['conversation_id'],
+                profile_sha256=identity['profile_sha256'])
+        self.assertEqual(result['peer_uid'], 501)
+        self.assertEqual(json.loads(fake.sent[0]),
+                         {'operation':'probe','nonce':'a'*32})
+
     def test_wrong_operator_owner_blocks_before_connection(self):
         metadata = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o600,
                                    st_uid=0, st_nlink=1)
