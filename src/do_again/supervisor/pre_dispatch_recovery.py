@@ -98,15 +98,32 @@ def reconcile_verified_pre_dispatch(broker, request_id):
               "outbox_preserved": True}
     audit = Path(broker.config["authority_path"]).parent / (
         "pre_dispatch_recovery_" + request_id + ".json")
+    expected_audit = {"schema_version": 1, "request_id": request_id,
+                      "source_sha": ORIGINAL_SOURCE, "epoch": ORIGINAL_EPOCH,
+                      "preparing_sha256": proof["sha256"], "outbox_count": proof["count"],
+                      "result": result}
+    # Crash recovery is retryable only when the preexisting protected audit
+    # exactly matches the same original journal. Never replace or amend it.
     if audit.exists() or audit.is_symlink():
-        raise ExecutionBlocked("original browser root recovery audit already exists")
-    atomic_json(audit, {"schema_version": 1, "request_id": request_id,
-                        "source_sha": ORIGINAL_SOURCE, "epoch": ORIGINAL_EPOCH,
-                        "preparing_sha256": proof["sha256"], "outbox_count": proof["count"],
-                        "result": result})
-    if proof["current"].exists():
-        proof["current"].rename(proof["archive"])
-        descriptor = os.open(str(proof["archive"].parent), os.O_RDONLY)
+        data = _protected_file(audit, os.geteuid())
+        try:
+            previous = json.loads(data)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise ExecutionBlocked("original browser recovery audit is invalid") from exc
+        if type(previous) is not dict or previous != expected_audit:
+            raise ExecutionBlocked("original browser recovery audit differs; operator review required")
+    else:
+        atomic_json(audit, expected_audit)
+    # Reverify the original evidence after creating/reading the root audit.
+    # A crash between audit creation, archival and ledger finish may retry,
+    # but an altered journal or outbox cannot be used to complete recovery.
+    rechecked = verify_pre_dispatch(broker.config, project, request_id, original, status)
+    if (rechecked["sha256"] != proof["sha256"]
+            or rechecked["count"] != proof["count"]):
+        raise ExecutionBlocked("original browser pre-dispatch evidence changed")
+    if rechecked["current"].exists():
+        rechecked["current"].rename(rechecked["archive"])
+        descriptor = os.open(str(rechecked["archive"].parent), os.O_RDONLY)
         try:
             os.fsync(descriptor)
         finally:
