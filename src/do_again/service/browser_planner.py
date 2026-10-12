@@ -82,3 +82,45 @@ class BrowserPlanner(AuthorizedTransportPlanner):
         return validate_browser_planner_grant(
             grant, source_sha=self.source_sha, goal_sha256=self.goal_sha256,
             epoch=self.epoch, now=now)
+
+
+class BrowserResponseTransport:
+    """No-CDP adapter for an injected, separately authorized single-send driver.
+
+    The driver must enforce the bound CDP profile/session and no-retry rules.
+    This layer accepts only an exact call-bound, JSON-only assistant response.
+    """
+
+    def __init__(self, send_once):
+        self.send_once = send_once
+
+    def __call__(self, prompt, schema, *, call, grant):
+        import json
+        if (not isinstance(call, dict) or not isinstance(call.get('call_id'), str)
+                or not re.fullmatch(r'planner-[a-f0-9]{20}-[123]', call['call_id'])):
+            raise ExecutionBlocked('browser transport requires a durably reserved call identity')
+        if not isinstance(prompt, str) or len(prompt.encode()) > grant['max_prompt_bytes']:
+            raise ExecutionBlocked('browser planning prompt exceeds authorized length')
+        envelope = {
+            'call_id': call['call_id'], 'task': 'Return one JSON object and nothing else',
+            'response_schema': schema, 'planning_input': json.loads(prompt),
+        }
+        message = json.dumps(envelope, sort_keys=True, separators=(',', ':'))
+        if len(message.encode()) > grant['max_prompt_bytes'] + 2048:
+            raise ExecutionBlocked('browser envelope exceeds bounded transmission budget')
+        # The broker must have reserved the call before this single dispatch.
+        received = self.send_once(message, conversation_id=grant['conversation_id'],
+                                  call_id=call['call_id'])
+        if (not isinstance(received, dict) or set(received) != {'conversation_id', 'response'}
+                or received['conversation_id'] != grant['conversation_id']
+                or not isinstance(received['response'], str)
+                or len(received['response'].encode()) > grant['max_answer_bytes']):
+            raise ExecutionBlocked('browser planning reply does not match bound session')
+        try:
+            answer = json.loads(received['response'])
+        except (ValueError, TypeError) as exc:
+            raise ExecutionBlocked('browser planning reply must be a single JSON object') from exc
+        if (not isinstance(answer, dict) or set(answer) != {'call_id', 'result'}
+                or answer['call_id'] != call['call_id']):
+            raise ExecutionBlocked('browser planning reply does not match reserved call')
+        return answer['result']
