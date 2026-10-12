@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 ORIGINAL_ID = "browser-48b9fd1c09734faf98f77944a64581f2"
 ORIGINAL_SOURCE = "279350b2a3a280904b72068f96785343945f97b9"
@@ -77,12 +78,34 @@ def _root_config() -> dict:
 
 
 def _import_helper(path: Path):
-    name = "do_again.supervisor.pre_dispatch_recovery"
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("sealed recovery helper could not be loaded")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Prevent a user-writable checkout from changing between source validation
+    # and root import: copy the exact Git-tracked object to a root-private
+    # temporary file, then import only that immutable-by-operator snapshot.
+    relative = "src/do_again/supervisor/pre_dispatch_recovery.py"
+    source = path.read_bytes()
+    expected = _git("rev-parse", "HEAD:" + relative)
+    actual = hashlib.sha1(
+        b"blob " + str(len(source)).encode() + b"\0" + source).hexdigest()
+    if actual != expected:
+        raise RuntimeError("recovery helper changed since committed source validation")
+    state_root = INSTALLED.parent / "state"
+    if state_root.is_symlink() or not state_root.is_dir() or state_root.stat().st_uid != 0:
+        raise RuntimeError("private root recovery staging area unavailable")
+    with tempfile.TemporaryDirectory(prefix="original-browser-recovery-", dir=state_root) as temp:
+        staged = Path(temp) / "pre_dispatch_recovery.py"
+        descriptor = os.open(
+            staged, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+            0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(source)
+            stream.flush()
+            os.fsync(stream.fileno())
+        name = "do_again.supervisor.pre_dispatch_recovery"
+        spec = importlib.util.spec_from_file_location(name, staged)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("sealed recovery helper could not be loaded")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
     if module.ORIGINAL_REQUEST != ORIGINAL_ID or module.ORIGINAL_SOURCE != ORIGINAL_SOURCE:
         raise RuntimeError("recovery helper identity changed")
     return module
