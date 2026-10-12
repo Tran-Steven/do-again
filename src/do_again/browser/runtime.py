@@ -1067,6 +1067,15 @@ def _require_send_target_focus(target: cdp.Target) -> None:
         )
 
 
+def _exclusive_message_send(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with _file_lock(browser_paths().root / "chatgpt-send.lock", timeout=600.0):
+            return function(*args, **kwargs)
+    return wrapped
+
+
+@_exclusive_message_send
 @_approved_background_send
 def send_message(
     target: cdp.Target,
@@ -1116,7 +1125,7 @@ return 'ready';
         # Send is still disabled. Readiness is read-only and must be established
         # BEFORE the durable pre-gesture dispatch point; never make a speculative
         # click, or use Enter as a fallback.
-        prefix = str(text).strip()[:48]
+        expected = str(text).strip()
         readiness = r"""(() => {
 const visible = el => {const r=el.getBoundingClientRect(),s=getComputedStyle(el);
   return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';};
@@ -1126,10 +1135,10 @@ const inputs=[...document.querySelectorAll(
 const buttons=[...document.querySelectorAll(
   'button[data-testid="send-button"],button[aria-label="Send"],button[aria-label="Send prompt"]'
 )].filter(visible);
-if(buttons.length!==1 || buttons[0].disabled ||
+if(inputs.length!==1 || buttons.length!==1 || buttons[0].disabled ||
    buttons[0].getAttribute('aria-disabled')==='true')return false;
-return inputs.some(el=>String(el.value||el.innerText||el.textContent||'').includes(PREFIX));
-})()""".replace('PREFIX', json.dumps(prefix))
+return String(inputs[0].value||inputs[0].innerText||inputs[0].textContent||'').trim()===EXPECTED;
+})()""".replace('EXPECTED', json.dumps(expected))
         deadline = time.monotonic()+10.0
         while cdp.evaluate(target, readiness, timeout=10.0) is not True:
             if time.monotonic()>=deadline:
