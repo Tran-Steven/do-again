@@ -45,10 +45,12 @@ class BrowserPreflightTests(unittest.TestCase):
 
     def test_browser_scope_cannot_be_borrowed_by_codex(self):
         self.write_controller('codex-cli')
+        hosted = self.root / 'hosted.json'
+        hosted.write_text('{}')
+        hosted.chmod(0o600)
         with self.assertRaisesRegex(ValueError, 'cannot inherit a browser'):
             self.module.require_planner_grants_before_staging(
-                self.controller, self.root / 'hosted.json',
-                self.root / 'codex', self.browser)
+                self.controller, hosted, self.root / 'codex', self.browser)
 
     def test_non_private_browser_grant_refused(self):
         self.browser.chmod(0o644)
