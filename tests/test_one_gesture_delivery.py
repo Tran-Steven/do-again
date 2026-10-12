@@ -149,9 +149,12 @@ class OneGestureDeliveryTests(unittest.TestCase):
                     before_dispatch=lambda: self.fail("unclean draft committed"),
                 )
         gesture.assert_not_called()
-        self.assertIn(').trim()==="DO_AGAIN_ONLY"', evaluate.call_args_list[1].args[1])
-        self.assertNotIn(".includes(PREFIX)", evaluate.call_args_list[1].args[1])
-        self.assertIn("DO_AGAIN_ONLY", evaluate.call_args_list[1].args[1])
+        readiness = evaluate.call_args_list[1].args[1]
+        self.assertIn('expected="DO_AGAIN_ONLY"', readiness)
+        self.assertIn('if(raw===expected)return true;', readiness)
+        self.assertIn('flattened===expected.split(lineBreak).join(\'\');', readiness)
+        self.assertNotIn(".includes(PREFIX)", readiness)
+        self.assertIn("DO_AGAIN_ONLY", readiness)
 
     def test_missing_acceptance_never_clicks_or_sends_again(self):
         evaluate, _, enter = self.mocks()
