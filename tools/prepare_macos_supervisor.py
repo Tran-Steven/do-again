@@ -172,6 +172,18 @@ def require_planner_grants_before_staging(controller_grant, hosted_planner_grant
         raise ValueError('unrecognized controller planner; no stage prepared')
 
 
+def validate_planner_authorization_preflight(source_sha, uid, gid, controller_grant, hosted_planner_grant):
+    """Validate the entire proposed controller/hosted scope before copying a runtime."""
+    if controller_grant is None:
+        return
+    from do_again.supervisor.controller_installation import apply_controller_grant
+    proposal=json.loads(Path(controller_grant).read_text())
+    hosted=json.loads(Path(hosted_planner_grant).read_text()) if hosted_planner_grant is not None else None
+    candidate={'source_sha':source_sha,'operator_uid':uid,'operator_gid':gid,
+               'development_scope':{'kind':'jobpipe-offline-v1'},'production_ready':False}
+    apply_controller_grant(candidate,proposal,hosted)
+
+
 def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None):
     if controller_grant is None and (hosted_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
         raise ValueError('hosted capabilities require a separate controller package')
@@ -198,6 +210,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     source_sha=git(source,'rev-parse','HEAD')
     uid=os.getuid();gid=os.getgid();identity=pwd.getpwuid(uid)
     if uid==0:raise ValueError('prepare the bundle as the operator, not root')
+    validate_planner_authorization_preflight(source_sha,uid,gid,controller_grant,hosted_planner_grant)
     installed=None
     installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')
     if sonary_repo is not None and sonary_repo != Path(identity.pw_dir)/'Sonary':
