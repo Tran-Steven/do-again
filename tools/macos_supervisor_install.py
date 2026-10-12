@@ -661,9 +661,24 @@ def recovery_candidate(source_sha):
     if (config.get('source_sha')!=source_sha or config.get('production_ready') is not False
             or config.get('recovery_contract')!=RECOVERY_CONTRACT):
         raise RuntimeError('target runtime lacks the compatible maintenance recovery contract')
-    fixed=('authority_path','operator_uid','operator_gid','operator_home','dependency_artifacts','projects')
+    fixed=('authority_path','operator_uid','operator_gid','operator_home','projects')
     if any(config.get(key)!=active.get(key) for key in fixed):
         raise RuntimeError('recovery cannot change project scope, credentials or capabilities')
+    previous_dependencies=config.get('dependency_artifacts',{})
+    active_dependencies=active.get('dependency_artifacts',{})
+    if not isinstance(previous_dependencies,dict) or not isinstance(active_dependencies,dict):
+        raise RuntimeError('recovery dependency capabilities are invalid')
+    for project, artifacts in previous_dependencies.items():
+        current=active_dependencies.get(project,[])
+        if not isinstance(artifacts,list) or not isinstance(current,list):
+            raise RuntimeError('recovery dependency capabilities are invalid')
+        if not all(isinstance(item,dict) and isinstance(item.get('id'),str) for item in artifacts+current):
+            raise RuntimeError('recovery dependency capabilities are invalid')
+        if len({item['id'] for item in artifacts})!=len(artifacts) or len({item['id'] for item in current})!=len(current):
+            raise RuntimeError('recovery dependency capabilities are ambiguous')
+        approved={item['id']:item for item in current}
+        if any(approved.get(item['id'])!=item for item in artifacts):
+            raise RuntimeError('recovery cannot expand dependency capabilities')
     database=Path(active['authority_path'])
     with closing(sqlite3.connect(database.as_uri()+'?mode=ro',uri=True)) as db:
         if db.execute('PRAGMA user_version').fetchone()[0]!=RECOVERY_CONTRACT['authority_schema']:

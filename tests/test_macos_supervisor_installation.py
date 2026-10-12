@@ -311,6 +311,51 @@ else:
             ledger.reserve('fixture','uncertain','fingerprint')
             with self.assertRaisesRegex(RuntimeError,'unresolved'):self.module.recovery_candidate('b'*40)
 
+
+    def test_recovery_allows_only_exact_dependency_permission_reduction(self):
+        current,candidate,database,ledger=self.recovery_fixture()
+        artifact={
+            'id':'pytest-9-1-1',
+            'name':'pytest',
+            'version':'9.1.1',
+            'url':'https://files.pythonhosted.org/packages/example/pytest.whl',
+            'sha256':'a'*64,
+        }
+        active=json.loads((current/'config.json').read_text())
+        older=json.loads((candidate/'config.json').read_text())
+        active['dependency_artifacts']={'jobpipe':[artifact]}
+        (current/'config.json').write_text(json.dumps(active))
+
+        with patch.object(self.module,'ROOT',self.root),patch.object(
+            self.module,'verify_stage',
+            side_effect=lambda path: {
+                'source_sha':json.loads((path/'config.json').read_text())['source_sha']
+            }
+        ):
+            self.assertEqual(self.module.recovery_candidate('b'*40),candidate)
+
+            older['dependency_artifacts']={'jobpipe':[artifact]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            self.assertEqual(self.module.recovery_candidate('b'*40),candidate)
+
+            changed={**artifact,'sha256':'b'*64}
+            older['dependency_artifacts']={'jobpipe':[changed]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            with self.assertRaisesRegex(RuntimeError,'capabilities'):
+                self.module.recovery_candidate('b'*40)
+
+            older['dependency_artifacts']={'jobpipe':[artifact,{**artifact,'id':'extra'}]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            with self.assertRaisesRegex(RuntimeError,'capabilities'):
+                self.module.recovery_candidate('b'*40)
+
+            active['dependency_artifacts']={}
+            (current/'config.json').write_text(json.dumps(active))
+            older['dependency_artifacts']={'jobpipe':[artifact]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            with self.assertRaisesRegex(RuntimeError,'capabilities'):
+                self.module.recovery_candidate('b'*40)
+
     def test_cutover_crash_preserves_ticket_runtime_and_newer_effects(self):
         current=self.root/'current';stage=self.root/'stage'
         current.mkdir();stage.mkdir()
@@ -593,8 +638,12 @@ else:
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         # CI setup-python commonly uses a non-framework distribution. The
         # production builder rejects it; relocation runs on supported frameworks.
-        if not (Path(sys.base_prefix)/'Resources/Python.app/Contents/MacOS/Python').is_file():
-            self.skipTest('framework Python is required for installation preparation')
+        base = Path(sys.base_prefix).resolve()
+        if not (
+            (base/'Resources/Python.app/Contents/MacOS/Python').is_file()
+            and (base/'Python').is_file()
+        ):
+            self.skipTest('compatible framework Python is required for runtime relocation')
         module.seal_runtime(self.root)
         runtime=self.root/'runtimes/python'
         self.assertFalse(list(runtime.rglob('site-packages')))
