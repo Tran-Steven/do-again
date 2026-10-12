@@ -20,8 +20,9 @@ class BackgroundChatSendTests(unittest.TestCase):
     def test_background_hidden_chat_can_send_one_gesture_without_window_activation(self):
         effects = []
         observations = [
-            {"focused": True, "visibility": "hidden",
-             "url": "https://chatgpt.com/c/background-test"},
+            {"focused": False, "visibility": "hidden",
+             "url": "https://chatgpt.com/c/background-test",
+             "ready": "complete", "editor_visible": True},
             "ready", True, True,
         ]
 
@@ -61,13 +62,22 @@ class BackgroundChatSendTests(unittest.TestCase):
         self.assertTrue(effects[0][1]["enabled"])
         self.assertFalse(effects[-1][1]["enabled"])
 
-    def test_virtual_focus_does_not_trust_other_domains_or_missing_focus(self):
+    def test_virtual_focus_rejects_other_origins_or_unready_composer(self):
         for invalid in (
             {"focused": False, "visibility": "hidden",
-             "url": "https://chatgpt.com/c/background-test"},
-            {"focused": True, "visibility": "hidden",
-             "url": "https://example.com/c/background-test"},
-            {"focused": True, "visibility": "hidden"},
+             "url": "https://chatgpt.com/c/background-test",
+             "ready": "loading", "editor_visible": True},
+            {"focused": False, "visibility": "hidden",
+             "url": "https://chatgpt.com/c/background-test",
+             "ready": "complete", "editor_visible": False},
+            {"focused": False, "visibility": "hidden",
+             "url": "https://example.com/c/background-test",
+             "ready": "complete", "editor_visible": True},
+            {"focused": "false", "visibility": "hidden",
+             "url": "https://chatgpt.com/c/background-test",
+             "ready": "complete", "editor_visible": True},
+            {"focused": False, "visibility": "hidden",
+             "ready": "complete", "editor_visible": True},
         ):
             with self.subTest(invalid=invalid), \
                  patch.object(runtime, "load_config", return_value=self.config), \
@@ -91,8 +101,9 @@ class BackgroundChatSendTests(unittest.TestCase):
     def test_after_single_click_failure_remains_uncertain_and_restores_focus(self):
         calls = []
         responses = [
-            {"focused": True, "visibility": "hidden",
-             "url": "https://chatgpt.com/c/background-test"},
+            {"focused": False, "visibility": "hidden",
+             "url": "https://chatgpt.com/c/background-test",
+             "ready": "complete", "editor_visible": True},
             "ready", True,
         ]
         with patch.object(runtime, "load_config", return_value=self.config), \
