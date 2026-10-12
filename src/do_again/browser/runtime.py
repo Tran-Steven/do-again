@@ -931,6 +931,21 @@ def _ensure_high_reasoning(target: cdp.Target) -> None:
         })()""",timeout=10.0)
         if persisted is True:
             break
+        # ChatGPT may nest the Thinking effort menu inside the outer model
+        # picker. One Escape closes the slider submenu but leaves the outer
+        # picker expanded. Dismiss *only if* the exact picker still says open.
+        # No model item is clicked and no Send gesture is possible here.
+        still_open=cdp.evaluate(target, r"""(() => {
+            const rows=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                .filter(el=>el.getBoundingClientRect().width>0);
+            return rows.length===1
+                ? rows[0].getAttribute('aria-expanded')==='true' : null;
+        })()""",timeout=10.0)
+        if still_open is True:
+            for kind in ('keyDown','keyUp'):
+                cdp.target_call(target,'Input.dispatchKeyEvent',{
+                    'type':kind,'key':'Escape','code':'Escape',
+                    'windowsVirtualKeyCode':27,'nativeVirtualKeyCode':27},timeout=10.0)
         time.sleep(0.15)
     else:
         raise BrowserPreDispatchBlocked(
