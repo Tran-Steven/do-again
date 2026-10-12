@@ -148,7 +148,7 @@ class BrowserRuntimeTests(unittest.TestCase):
             self.assertEqual(probes[1], (1, 600.0))
             self.assertEqual(launches, ["visible", "background"])
             self.assertTrue(result["session_ready"])
-            self.assertEqual(stop.call_count, 2)
+            self.assertEqual(stop.call_count, 3)
 
     def test_login_does_not_swallow_other_browser_transport_failures(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
