@@ -979,19 +979,60 @@ def _ensure_high_reasoning_focused(target: cdp.Target) -> None:
             "ChatGPT did not persist High after closing the model picker; no prompt submitted")
 
 
+_background_send_session = threading.local()
+
+
+def _approved_background_send(function):
+    @wraps(function)
+    def wrapped(target, *args, background_focus=False, **kwargs):
+        if not background_focus:
+            return function(target, *args, **kwargs)
+        config = load_config()
+        state = load_state()
+        if not (config.get("preferred_mode") == "auto"
+                and config.get("allow_visible_fallback") is not True
+                and state.get("mode") == "background"):
+            return function(target, *args, **kwargs)
+        if getattr(_background_send_session, "target_id", None) is not None:
+            raise BrowserPreDispatchBlocked("background send focus is already reserved")
+        try:
+            cdp.target_call(target, "Emulation.setFocusEmulationEnabled",
+                            {"enabled": True}, timeout=10.0)
+            _background_send_session.target_id = target.id
+            return function(target, *args, **kwargs)
+        finally:
+            _background_send_session.target_id = None
+            cdp.target_call(target, "Emulation.setFocusEmulationEnabled",
+                            {"enabled": False}, timeout=10.0)
+    return wrapped
+
+
 def _require_send_target_focus(target: cdp.Target) -> None:
     """Require document focus without activating desktop GUI windows."""
     config = load_config()
     state = load_state()
+    virtual = getattr(_background_send_session, "target_id", None) == target.id
     if (config.get("preferred_mode") == "auto"
             and config.get("allow_visible_fallback") is not True
-            and state.get("mode") == "background"):
+            and state.get("mode") == "background" and not virtual):
         raise BrowserPreDispatchBlocked("unattended auto mode refuses GUI tab focus; no browser submission was attempted")
     probe = r"""(() => ({
         focused: document.hasFocus(),
-        visibility: document.visibilityState
+        visibility: document.visibilityState,
+        url: location.href
     }))()"""
     observed = cdp.evaluate(target, probe, timeout=10.0)
+    if virtual:
+        if not (state.get("mode") == "background"
+                and config.get("preferred_mode") == "auto"
+                and config.get("allow_visible_fallback") is not True
+                and isinstance(observed, dict)
+                and observed.get("focused") is True
+                and observed.get("visibility") in {"visible", "hidden"}
+                and isinstance(observed.get("url"), str)
+                and observed["url"].startswith("https://chatgpt.com/")):
+            raise BrowserPreDispatchBlocked("background ChatGPT virtual focus could not be verified; no prompt submitted")
+        return
     if not (isinstance(observed, dict)
             and observed.get("focused") is True
             and observed.get("visibility") == "visible"):
@@ -1011,6 +1052,7 @@ def _require_send_target_focus(target: cdp.Target) -> None:
         )
 
 
+@_approved_background_send
 def send_message(
     target: cdp.Target,
     text: str,
@@ -1973,7 +2015,7 @@ def _rollover_project_chat(
     try:
         target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
         _ensure_high_reasoning(target)
-        result = send_message(target, prompt, timeout=180.0)
+        result = send_message(target, prompt, timeout=180.0, background_focus=True)
         new_url = str(result.get("chat_url") or "")
         transaction["successor_chat_url"] = new_url or None
         transaction["state"] = "successor_created"
@@ -2141,7 +2183,7 @@ def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, A
     try:
         target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
         _ensure_high_reasoning(target)
-        result = send_message(target, prompt, timeout=180.0)
+        result = send_message(target, prompt, timeout=180.0, background_focus=True)
         if "DO_AGAIN_PROJECT_READY" not in result.get("response", ""):
             raise BrowserError("ChatGPT bootstrap did not return the expected readiness marker")
         if "/c/" not in str(result.get("chat_url") or ""):
@@ -2346,6 +2388,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
             message,
             timeout=180.0,
             wait_for_response=False,
+            background_focus=True,
             **dispatch_options,
         )
     except BrowserSubmissionUncertain:
@@ -2370,6 +2413,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
             message,
             timeout=180.0,
             wait_for_response=False,
+            background_focus=True,
             **dispatch_options,
         )
 
