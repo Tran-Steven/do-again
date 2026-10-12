@@ -59,12 +59,12 @@ class ReceiptAcknowledgmentTests(unittest.TestCase):
         # Regression: current ChatGPT can expose assistant nodes while the
         # old body/heading text probe reports no user turn. A token-bearing
         # role/ordering observation is independently sufficient.
-        with patch.object(browser, 'project_record', return_value=self.record), \\
-             patch.object(daemon, 'ensure_browser_running', return_value={'port': 9224}), \\
-             patch.object(browser, '_find_chatgpt_target', return_value=object()), \\
-             patch.object(browser, '_page_contains', return_value=False) as legacy, \\
+        with patch.object(browser, 'project_record', return_value=self.record), \
+             patch.object(daemon, 'ensure_browser_running', return_value={'port': 9224}), \
+             patch.object(browser, '_find_chatgpt_target', return_value=object()), \
+             patch.object(browser, '_page_contains', return_value=False) as legacy, \
              patch.object(browser, 'receipt_acknowledgment',
-                          return_value={'visible': True, 'acknowledged': True}) as ack, \\
+                          return_value={'visible': True, 'acknowledged': True}) as ack, \
              patch.object(browser, 'send_message') as send:
             result = daemon._reconcile_uncertain_delivery(self.repo, self.state,
                 daemon._read_uncertain_delivery(self.state))
@@ -78,12 +78,12 @@ class ReceiptAcknowledgmentTests(unittest.TestCase):
         self.assertTrue(evidence['assistant_acknowledged'])
 
     def test_text_probe_alone_never_reconciles_without_bound_token_proof(self):
-        with patch.object(browser, 'project_record', return_value=self.record), \\
-             patch.object(daemon, 'ensure_browser_running', return_value={'port': 9224}), \\
-             patch.object(browser, '_find_chatgpt_target', return_value=object()), \\
-             patch.object(browser, '_page_contains', return_value=True) as legacy, \\
+        with patch.object(browser, 'project_record', return_value=self.record), \
+             patch.object(daemon, 'ensure_browser_running', return_value={'port': 9224}), \
+             patch.object(browser, '_find_chatgpt_target', return_value=object()), \
+             patch.object(browser, '_page_contains', return_value=True) as legacy, \
              patch.object(browser, 'receipt_acknowledgment',
-                          return_value={'visible': False, 'acknowledged': False}), \\
+                          return_value={'visible': False, 'acknowledged': False}), \
              patch.object(browser, 'send_message') as send:
             with self.assertRaises(BrowserSubmissionUncertain):
                 daemon._reconcile_uncertain_delivery(self.repo, self.state,
