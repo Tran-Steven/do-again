@@ -69,6 +69,59 @@ def _tick():
     return {'state':'completed','delivered':delivered,'liveness':outcome,'acknowledgments':acknowledgments}
 
 
+def _tick_with_root_budget():
+    """Leave root's 60s helper timeout enough time to record terminal proof."""
+    import signal
+    import threading
+    if sys.platform != 'darwin' or threading.current_thread() is not threading.main_thread():
+        return _tick()
+    # This helper runs in a separate, root-pinned operator process. A
+    # cancellation at 45s precedes the root broker's hard kill at 60s.
+    previous = signal.getsignal(signal.SIGALRM)
+    def deadline(_signum, _frame):
+        raise TimeoutError('browser helper reached its pre-root deadline')
+    signal.signal(signal.SIGALRM, deadline)
+    signal.setitimer(signal.ITIMER_REAL, 45.0)
+    try:
+        return _tick()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def _pre_dispatch_timeout_result(state: Path) -> dict | None:
+    """Only a durable *pre-gesture* intent can be classified as unsent.
+
+    The Send implementation fsyncs dispatch_started through before_dispatch
+    before the first mouse gesture. An absent/malformed intent or any
+    post-dispatch state is NOT evidence of a non-send. Never touch it.
+    """
+    p=state/'browser_submission_uncertain.json'
+    if p.is_symlink() or not p.is_file():
+        return None
+    try:
+        intent=json.loads(p.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    if (not isinstance(intent,dict) or intent.get('schema_version')!=1
+            or intent.get('state')!='preparing'
+            or intent.get('payload_sha256') is not None
+            or intent.get('acknowledgment_token') is not None
+            or not isinstance(intent.get('request_ids'),list)
+            or not 1<=len(intent['request_ids'])<=20
+            or any(not isinstance(r,str) or not r for r in intent['request_ids'])):
+        return None
+    outbox=state/'browser_outbox'
+    if outbox.is_symlink() or not outbox.is_dir() or any(
+            (outbox/(request_id+'.json')).is_symlink()
+            or not (outbox/(request_id+'.json')).is_file()
+            for request_id in intent['request_ids']):
+        return None
+    return {'state':'completed','delivered':0,
+            'liveness':'pre_dispatch_blocked',
+            'delivery_acknowledged':False,'outbox_preserved':True}
+
+
 def main():
     # Fixed identity arguments are supplied by the root broker, never scripts.
     from .macos_execution import REQUEST_ID
@@ -79,17 +132,37 @@ def main():
     request_id, source, epoch = sys.argv[6], sys.argv[7], int(sys.argv[8])
     if epoch < 1:
         raise ValueError('browser helper epoch is invalid')
-    from ..browser.errors import BrowserAuthRequired, BrowserSubmissionUncertain
+    from ..browser.errors import BrowserAuthRequired, BrowserSubmissionUncertain, BrowserError
+    state=Path(sys.argv[2])
+    pre_dispatch_timeout=False
     try:
-        result = _tick()
+        result = _tick_with_root_budget()
     except (BrowserAuthRequired, BrowserSubmissionUncertain) as exc:
         outcome='waiting_for_human' if isinstance(exc,BrowserAuthRequired) else 'awaiting_ack'
-        atomic_json(Path(sys.argv[2])/'attention.json',{'state':outcome,'reason':type(exc).__name__,
+        atomic_json(state/'attention.json',{'state':outcome,'reason':type(exc).__name__,
             'action':'Inspect the original event and bound conversation; do not replay'})
         result={'state':'completed','delivered':0,'liveness':outcome,
                 'delivery_acknowledged':False,'outbox_preserved':True}
-    # The fixed sealed helper has no effects after this durable terminal receipt.
-    # Loss of stdout can therefore be reconciled by the broker without CDP access.
-    atomic_json(Path(sys.argv[2]) / 'browser_tick_receipts' / (request_id + '.json'),
+    except (TimeoutError, BrowserError) as exc:
+        # A timeout or unknown browser failure is terminal *only* when the
+        # original fsynced journal proves the Send gesture was never begun.
+        # Post-dispatch and missing evidence must stay unresolved.
+        result=_pre_dispatch_timeout_result(state)
+        if result is None:
+            raise
+        pre_dispatch_timeout=True
+        atomic_json(state/'attention.json',{'state':'pre_dispatch_blocked',
+            'reason':type(exc).__name__,
+            'action':'Browser helper stopped before Send; preserve outbox and verify authentication.'})
+    # Durable terminal proof is written BEFORE retiring the preparing record.
+    # A crash here leaves the original receipt recoverable through the broker.
+    atomic_json(state / 'browser_tick_receipts' / (request_id + '.json'),
         {'schema_version':1,'request_id':request_id,'source_sha':source,'epoch':epoch,'result':result})
+    if pre_dispatch_timeout:
+        intent=state/'browser_submission_uncertain.json'
+        # Only the unique guarded helper can be in this broker-held effect.
+        # The receipt is already durable; future ticks can retry *pre-Send*
+        # after browser authentication without replaying a previous Send.
+        if _pre_dispatch_timeout_result(state) is not None:
+            intent.unlink(missing_ok=True)
     print(json.dumps(result),flush=True)
