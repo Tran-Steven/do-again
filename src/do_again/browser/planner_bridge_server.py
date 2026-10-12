@@ -20,6 +20,12 @@ import json
 import stat
 from pathlib import Path
 
+def private_operator_directory(directory_fd):
+    metadata = os.fstat(directory_fd)
+    return (stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == 501
+            and not (metadata.st_mode & 0o077))
+
+
 class DurableDeliveryReservation:
     """Create-once user-private delivery journal; duplicate calls fail closed."""
 
@@ -39,9 +45,7 @@ class DurableDeliveryReservation:
         except OSError as exc:
             raise ExecutionBlocked('private browser delivery directory unavailable') from exc
         try:
-            metadata = os.fstat(directory_fd)
-            if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != 501
-                    or metadata.st_mode & 0o077):
+            if not private_operator_directory(directory_fd):
                 raise ExecutionBlocked('browser delivery journal ownership or privacy differs')
             name = identity['call_id'] + '.json'
             mode = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
