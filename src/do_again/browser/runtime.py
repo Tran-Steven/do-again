@@ -304,6 +304,14 @@ def _project_operation(function):
     return wrapped
 
 
+def _exclusive_blank_chat(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with _file_lock(browser_paths().root / "blank-chat-bootstrap.lock", timeout=600.0):
+            return function(*args, **kwargs)
+    return wrapped
+
+
 def _owns_process(state: dict[str, Any]) -> bool:
     pid = int(state.get("pid") or 0)
     if not _pid_alive(pid):
@@ -1979,6 +1987,7 @@ def _rollover_needed(target: cdp.Target) -> bool:
     return _conversation_pressure_chars(target) >= threshold
 
 
+@_exclusive_blank_chat
 def _rollover_project_chat(
     repo: Path,
     record: dict[str, Any],
@@ -2185,6 +2194,7 @@ When development work is requested in this conversation, use the Do Again reques
     return prompt
 
 
+@_exclusive_blank_chat
 def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, Any]]:
     target = cdp.create_target(port, CHATGPT_URL, background=True)
     try:
