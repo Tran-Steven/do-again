@@ -673,6 +673,19 @@ else:
                            codex_native_payload=self.root/'codex-stub')
         self.assertFalse(output.exists())
 
+    def test_controller_grant_hardlink_rejected_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
+        other=self.root/'controller-hardlink.json'
+        os.link(proposal,other)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'operator-owned and private'):
+            module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
+        self.assertFalse(output.exists())
+
     def test_hosted_planner_preflight_rejects_mismatched_identity_before_staging(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
