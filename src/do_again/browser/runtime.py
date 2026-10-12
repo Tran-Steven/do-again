@@ -836,8 +836,10 @@ def _ensure_high_reasoning(target: cdp.Target) -> None:
             opened = cdp.evaluate(target, r"""(() => {
                 if(document.readyState!=='complete')return 'page_loading';
                 const composer=document.querySelector(
-                    '#prompt-textarea,[data-testid="prompt-textarea"]');
-                if(!composer)return 'page_loading';
+                    '#prompt-textarea,[data-testid="prompt-textarea"],'
+                    +'[role="textbox"][contenteditable="true"][aria-label="Ask ChatGPT"]');
+                if(!composer || composer.getBoundingClientRect().width<=0
+                    || composer.getBoundingClientRect().height<=0)return 'page_loading';
                 const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
                     .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled;});
                 if(buttons.length!==1)return 'missing_picker';
