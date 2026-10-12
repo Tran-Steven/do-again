@@ -16,6 +16,51 @@ from ..service.browser_bridge import (
 from ..supervisor.macos_execution import ExecutionBlocked
 
 
+import json
+import stat
+from pathlib import Path
+
+class DurableDeliveryReservation:
+    """Create-once user-private delivery journal; duplicate calls fail closed."""
+
+    def __init__(self, directory):
+        self.directory = Path(directory)
+
+    def __call__(self, identity):
+        if (not isinstance(identity, dict)
+                or set(identity) != {'call_id', 'conversation_id',
+                                     'profile_sha256', 'message_sha256'}
+                or not isinstance(identity.get('call_id'), str)
+                or not CALL_ID.fullmatch(identity['call_id'])):
+            raise ExecutionBlocked('browser delivery reservation identity invalid')
+        flags = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+        try:
+            directory_fd = os.open(self.directory, flags)
+        except OSError as exc:
+            raise ExecutionBlocked('private browser delivery directory unavailable') from exc
+        try:
+            metadata = os.fstat(directory_fd)
+            if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != 501
+                    or metadata.st_mode & 0o077):
+                raise ExecutionBlocked('browser delivery journal ownership or privacy differs')
+            name = identity['call_id'] + '.json'
+            mode = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0)
+            try:
+                fd = os.open(name, mode, 0o600, dir_fd=directory_fd)
+            except OSError as exc:
+                raise ExecutionBlocked('browser delivery was already reserved or cannot be recorded') from exc
+            try:
+                data = canonical_json(identity) + bytes([10])
+                with os.fdopen(fd, 'wb', closefd=False) as stream:
+                    stream.write(data)
+                    stream.flush()
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
 class OperatorBrowserBridge:
     def __init__(self, *, grant, driver, reserve_delivery):
         self.grant = grant
