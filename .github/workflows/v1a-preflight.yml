@@ -1,0 +1,28 @@
+name: V1A preflight regression
+
+on:
+  pull_request:
+    branches:
+      - fix/v1a-safe-recovery
+    paths:
+      - "tools/prepare_macos_supervisor.py"
+      - "src/do_again/supervisor/controller_*.py"
+      - "src/do_again/service/offline_continuation.py"
+      - "tests/test_macos_supervisor_installation.py"
+
+permissions:
+  contents: read
+
+jobs:
+  authorization-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.13"
+      - name: Run scoped preflight tests (no privileged installation)
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -p test_macos_supervisor_installation.py -v
