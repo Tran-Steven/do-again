@@ -45,7 +45,11 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python -m unittest discover -s tests -p 'test_browser*.py' -v
+          python -m unittest discover -s tests -p test_browser_bridge.py -v
+          python -m unittest discover -s tests -p test_browser_planner_grant.py -v
+          python -m unittest discover -s tests -p test_browser_planner_driver.py -v
+          python -m unittest discover -s tests -p test_browser_planner_preflight.py -v
+          python -m unittest discover -s tests -p test_browser_native_qualification.py -v
           python -m unittest discover -s tests -p test_operator_browser_bridge.py -v
           python -m unittest discover -s tests -p test_planner_service.py -v
           python -m unittest discover -s tests -p test_sealed_browser_helper.py -v
