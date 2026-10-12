@@ -12,7 +12,8 @@ from do_again.supervisor.macos_execution import ExecutionBlocked
 
 class OperatorPlannerServiceTests(unittest.TestCase):
     def test_service_rejects_unsupported_platform_before_browser_access(self):
-        with patch('do_again.browser.planner_service.runtime.load_config') as config:
+        with patch('do_again.browser.planner_service.sys.platform', 'linux'), \
+             patch('do_again.browser.planner_service.runtime.load_config') as config:
             with self.assertRaisesRegex(ExecutionBlocked, 'macOS operator'):
                 planner_service.serve_forever(repo=Path('/tmp/empty'),
                                               grant_path=Path('/tmp/absent.json'))
@@ -32,6 +33,7 @@ class OperatorPlannerServiceTests(unittest.TestCase):
 
     def test_non_private_operator_directory_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
+            Path(directory).chmod(0o755)
             with self.assertRaisesRegex(ExecutionBlocked, 'not private'):
                 planner_service.private_operator_directory(directory)
 
