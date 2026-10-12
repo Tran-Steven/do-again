@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,14 +16,14 @@ class DualOfflineGrantTests(unittest.TestCase):
     def setUp(self):
         now=datetime(2026,10,12,2,0,tzinfo=timezone.utc)
         self.now=now
-        home="/Users/approved-operator"
+        home=str((Path(tempfile.gettempdir())/"dual-operator-fixture").resolve())
         self.projects=[]
         scopes=[]
         self.statuses={}
         for account,name in (("_doagain_da","do-again"),("_doagain_jp","jobpipe"),
                              ("_doagain_so","Sonary")):
             repo=Path(home)/name
-            key=hashlib.sha256(str(repo).encode()).hexdigest()
+            key=hashlib.sha256(os.fsencode(repo.resolve())).hexdigest()
             self.projects.append({"account":account,"repo":str(repo),
                                   "key":key,"source_sha":"c"*40})
             self.statuses[account]={"intent":"maintenance","goal_revision":"review-v1",
