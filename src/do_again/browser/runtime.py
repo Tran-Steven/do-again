@@ -723,7 +723,15 @@ def setup_browser(
     try:
         try:
             wait_for_authenticated(port, timeout=6.0)
-        except BrowserAuthRequired:
+        except BrowserError as exc:
+            # A slow initial page load has no login button and no composer,
+            # which the short probe reports as BrowserError. Keep the dedicated
+            # window available for interactive authentication rather than
+            # closing it after six seconds. Transport/Chrome failures still
+            # fail closed instead of silently extending the timeout.
+            if (not isinstance(exc, BrowserAuthRequired)
+                    and str(exc) != "ChatGPT did not load a usable composer; check connectivity and retry"):
+                raise
             print("")
             print("Do Again needs one-time ChatGPT authentication.")
             print("A dedicated automation Chrome profile is open.")
