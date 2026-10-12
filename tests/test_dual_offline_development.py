@@ -7,6 +7,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from do_again.supervisor.dual_development import require_dual_offline_grant
 from do_again.supervisor.macos_execution import ExecutionBlocked
@@ -70,6 +71,51 @@ class DualOfflineGrantTests(unittest.TestCase):
         del native["operator_intent"]
         with self.assertRaises(ExecutionBlocked):
             self.check(self.da)
+
+    def test_exact_dual_grant_admits_both_worker_entrypoints_with_real_broker_shape(self):
+        from do_again.supervisor.admission import require_worker_active
+        from do_again.core.schema import OperatorError
+        # This exercise uses no real macOS socket. Both parent statuses match
+        # the actual root broker's operator_intent/status response contract.
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        grant=self.config["development_scope"]
+        grant["issued_at_utc"]=(now-timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        grant["expires_at_utc"]=(now+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.config["operator_uid"]=os.getuid()
+        paths={}
+        for p in self.projects:
+            account=p["account"]
+            p["uid"]={"_doagain_da":401,"_doagain_jp":402,"_doagain_so":403}[account]
+            p["worktree"]="/root-sealed/"+account
+            p["github_repository"]={"_doagain_da":"Tran-Steven/do-again",
+                                    "_doagain_jp":"Tran-Steven/jobpipe",
+                                    "_doagain_so":"Tran-Steven/Sonary"}[account]
+            self.statuses[account].update(
+                worktree=p["worktree"],uid=p["uid"],canary_authorized=False)
+            paths[Path(p["repo"])]=account
+        self.statuses["_doagain_da"]["operator_intent"]="active"
+        self.statuses["_doagain_jp"]["operator_intent"]="active"
+        seen=[]
+        def rpc(repo,packet):
+            self.assertEqual(packet,{"operation":"status"})
+            seen.append(paths[Path(repo)])
+            return self.statuses[paths[Path(repo)]]
+        with patch("do_again.supervisor.admission.sys.platform","darwin"), \
+             patch("do_again.supervisor.immutable_worker.read_worker_configuration",
+                   return_value=self.config):
+            self.assertIs(require_worker_active(self.da.repo,status=self.statuses["_doagain_da"],
+                                                rpc=rpc),self.statuses["_doagain_da"])
+            self.assertIs(require_worker_active(self.jp.repo,status=self.statuses["_doagain_jp"],
+                                                rpc=rpc),self.statuses["_doagain_jp"])
+            self.assertIn("_doagain_so",seen)
+            self.statuses["_doagain_so"]["operator_intent"]="active"
+            with self.assertRaises(OperatorError):
+                require_worker_active(self.da.repo,status=self.statuses["_doagain_da"],rpc=rpc)
+            self.statuses["_doagain_so"]["operator_intent"]="maintenance"
+            self.statuses["_doagain_jp"]["unresolved_executions"]=[
+                {"request_id":"browser-48b9fd1c09734faf98f77944a64581f2"}]
+            with self.assertRaises(OperatorError):
+                require_worker_active(self.da.repo,status=self.statuses["_doagain_da"],rpc=rpc)
 
     def test_old_jobpipe_only_grant_is_never_treated_as_dual(self):
         self.config["development_scope"]["kind"]="jobpipe-offline-v1"
