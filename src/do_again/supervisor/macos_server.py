@@ -210,6 +210,9 @@ class ProjectBroker:
                 raise ExecutionBlocked('no root-installed Codex canary for CI status')
             from .model_checkpoint import observe_checkpoint
             return observe_checkpoint(self,self.codex.scope)
+        if packet.get('operation') in {'controller_start', 'controller_stop', 'controller_status', 'controller_tick'}:
+            from .controller_service import controller_service
+            return controller_service(self, packet)
         if packet.get('operation') in {'control_sync','control_publish','control_reconcile'}:
             from .control_history import sync_control,publish_control,reconcile_control
             return {'control_sync':sync_control,'control_publish':publish_control,'control_reconcile':reconcile_control}[packet['operation']](self,packet)

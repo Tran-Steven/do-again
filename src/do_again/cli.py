@@ -1225,6 +1225,10 @@ def main() -> int:
     )
     chatgpt_check.add_argument("request_id")
     chatgpt_check.add_argument("path", nargs="?", default=".")
+    controller_parser = sub.add_parser("controller", help="Control a separately authorized native controller")
+    controller_sub = controller_parser.add_subparsers(dest="controller_command", required=True)
+    for action in ("start", "stop", "status"):
+        controller_sub.add_parser(action).add_argument("path", nargs="?", default=".")
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
     summary_parser = sub.add_parser(
@@ -1405,6 +1409,16 @@ def main() -> int:
         print(json.dumps(outcome, indent=2, sort_keys=True))
         return 0 if (args.chatgpt_command == "prepare" or
                      outcome.get("completed") is True) else 2
+    if args.command == "controller":
+        from .supervisor.macos_client import broker_request
+        from .supervisor.macos_execution import ExecutionBlocked
+        try:
+            value = broker_request(find_repo(args.path), {'operation': 'controller_'+args.controller_command})
+        except (ExecutionBlocked, ServiceError, OSError, ValueError) as exc:
+            print(f"do-again: controller: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(value, indent=2, sort_keys=True))
+        return 0
     if args.command == "status":
         return status(args.path)
     if args.command == "summary":

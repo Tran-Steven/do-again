@@ -30,7 +30,7 @@ def validate_scope(scope, *, binding, now: datetime):
     if (scope['kind'] != 'jobpipe-offline-controller-v1'
             or scope['repository'] != 'Tran-Steven/jobpipe'
             or scope['branch'] != 'operator-control'
-            or scope['planner'] != 'sealed-offline'
+            or scope['planner'] not in {'sealed-offline', 'codex-cli'}
             or scope['integration'] != 'proposal-only'
             or any(scope[k] is not False for k in
                    ('network_access', 'application_submissions', 'browser_messages'))
@@ -89,6 +89,11 @@ class OfflineContinuation:
 
     def status(self, now):
         return self._load(now)
+
+    def block(self, reason, now):
+        state = self._load(now)
+        state.update(state='blocked', blocker=reason)
+        return self._save(state)
 
     def reserve(self, proposal, *, pending_ids, now):
         state = self._load(now)
