@@ -699,8 +699,14 @@ else:
         # capabilities, wrong source, and absent approved endpoints/resolvers.
         grant={'source_sha':'c'*40,'goal_sha256':goal,'epoch':13,
                'network_endpoints':[],'dns_resolvers':[]}
+        with self.assertRaisesRegex(ExecutionBlocked,'explicitly approved public IPv4 endpoints and DNS resolvers'):
+            validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+        grant['network_endpoints']=['8.8.8.8']
+        grant['dns_resolvers']=['1.1.1.1']
         with self.assertRaisesRegex(ExecutionBlocked,'hosted scope identity/capabilities differ'):
             validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+        with self.assertRaisesRegex(ExecutionBlocked,'separate approved hosted planner grant'):
+            validate_hosted_scope(config,None,datetime.now(timezone.utc))
 
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
