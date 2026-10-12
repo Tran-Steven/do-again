@@ -1145,6 +1145,10 @@ const buttons=[...document.querySelectorAll(
 )].filter(visible);
 if(inputs.length!==1 || buttons.length!==1 || buttons[0].disabled ||
    buttons[0].getAttribute('aria-disabled')==='true')return false;
+// A background keyboard gesture must never target a stale or wrong editor.
+// The insertion step focused this exact unique element; verify the focus
+// still belongs to it before committing a durable dispatch boundary.
+if(document.activeElement!==inputs[0])return false;
 const editor=inputs[0], expected=EXPECTED;
 const raw=String(editor.value||editor.innerText||editor.textContent||'').trim();
 if(raw===expected)return true;
@@ -1173,7 +1177,16 @@ return rendered===expected.split(lineBreak).join(lineBreak+lineBreak) &&
             # A failed/crashed durable commit is uncertain even when Send
             # may never occur. Never permit a fallback after this boundary.
             before_dispatch()
-        cdp.click_send(target)
+        # Background Chrome can retain a fully enabled, unobscured Send
+        # button yet ignore a CDP mouse press/release while visibility=hidden.
+        # Use ONE trusted Enter key gesture when the supervisor has explicitly
+        # reserved virtual focus for this bound target. Do not try the mouse
+        # afterward, even if the composer remains filled or key delivery times
+        # out: dispatch is uncertain and reconciliation must decide.
+        if getattr(_background_send_session, "target_id", None) == target.id:
+            cdp.press_enter(target)
+        else:
+            cdp.click_send(target)
         accepted = False
         for _ in range(20):
             time.sleep(0.1)
