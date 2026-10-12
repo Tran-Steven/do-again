@@ -638,6 +638,7 @@ else:
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         proposal=self.root/'controller.json'
         proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
         output=self.root/'not-created'
         with self.assertRaisesRegex(ValueError,'requires both a separately approved hosted-planner grant'):
             module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
@@ -676,7 +677,9 @@ else:
         proposal=self.root/'controller.json'
         hosted=self.root/'hosted.json'
         proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
         hosted.write_text(json.dumps({'source_sha':'old','network_endpoints':[],'dns_resolvers':[]}))
+        hosted.chmod(0o600)
         from do_again.supervisor.macos_execution import ExecutionBlocked
         with self.assertRaisesRegex(ExecutionBlocked,'controller requires separate offline execution and sealed goal'):
             module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
