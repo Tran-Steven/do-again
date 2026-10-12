@@ -127,6 +127,9 @@ def _proof(broker, config):
     # This protected policy existed before the failed service was staged.
     # The immutable 9726d249 browser runtime rejects precisely this mode pair
     # before it creates a browser_submission_uncertain intent or clicks Send.
+    process = MacOSProcesses().identity(browser["pid"])
+    if not process or process[0] != config["operator_uid"] or process[3] == 5:
+        raise RuntimeError("original background Chrome kernel identity differs")
     plist = Path("/Library/LaunchAgents") / (label + ".plist")
     _file_bytes(plist, 0, root_file=True)
     if not cfgpath.stat().st_mtime_ns < plist.stat().st_mtime_ns:
