@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from do_again.browser.planner_bridge_server import OperatorBrowserBridge, DurableDeliveryReservation
+from do_again.service.browser_planner import browser_grant_digest
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 
@@ -36,6 +37,7 @@ class OperatorBridgeTests(unittest.TestCase):
             'max_prompt_bytes': 32768,
             'max_answer_bytes': 65536,
         }
+        self.request['grant_sha256'] = browser_grant_digest(self.grant)
         self.events = []
         class Driver:
             def send_once(inner, message, **kwargs):
@@ -63,7 +65,8 @@ class OperatorBridgeTests(unittest.TestCase):
                     reservation(identity)
 
     def test_authenticated_probe_is_read_only(self):
-        probe = {'operation':'probe','nonce':'a'*32}
+        probe = {'operation':'probe','nonce':'a'*32,
+                 'grant_sha256':browser_grant_digest(self.grant)}
         conn = FakeConnection(probe)
         with patch('do_again.browser.planner_bridge_server.os.geteuid', return_value=501), \
              patch('do_again.browser.planner_bridge_server.authenticated_peer_uid', return_value=0):
@@ -74,6 +77,7 @@ class OperatorBridgeTests(unittest.TestCase):
             'operation':'probe-result', 'nonce':'a'*32,
             'conversation_id':self.conversation,
             'profile_sha256':self.profile,
+            'grant_sha256':browser_grant_digest(self.grant),
         })
 
     def test_authenticated_root_request_is_reserved_before_send(self):
@@ -85,6 +89,7 @@ class OperatorBridgeTests(unittest.TestCase):
         self.assertEqual(self.events, ['reserve', 'send'])
         self.assertEqual(json.loads(conn.outgoing[0]), {
             'call_id': self.call, 'conversation_id': self.conversation,
+            'grant_sha256':browser_grant_digest(self.grant),
             'response': '{"result":"test"}',
         })
 
