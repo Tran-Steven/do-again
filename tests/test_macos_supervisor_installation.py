@@ -52,6 +52,25 @@ else:
                               str(self.root),str(stage)],capture_output=True,text=True)
         self.assertEqual(child.returncode,0,child.stderr[-800:])
 
+    @unittest.skipUnless(sys.platform=='darwin','requires actual Apple system Python')
+    def test_installer_controller_import_with_apple_system_python(self):
+        # The administrator installer uses /usr/bin/python3, not the 3.13
+        # interpreter running the application tests. This must work even when
+        # Apple's system interpreter has no tomllib.
+        script = """
+import sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from do_again.supervisor.controller_installation import validate_controller_stage
+assert callable(validate_controller_stage)
+assert 'do_again.service.runtime' not in sys.modules
+"""
+        child=subprocess.run(
+            ['/usr/bin/python3','-I','-S','-B','-c',script,
+             str(Path(__file__).resolve().parents[1]/'src')],
+            capture_output=True,text=True,timeout=15)
+        self.assertEqual(child.returncode,0,child.stderr[-1600:])
+
     def test_jobpipe_development_grant_preflight_uses_isolated_system_python(self):
         from datetime import datetime, timedelta, timezone
         now=datetime.now(timezone.utc).replace(microsecond=0)
