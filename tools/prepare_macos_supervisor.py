@@ -159,7 +159,7 @@ def private_proposal_preflight(path):
     return path
 
 
-def require_planner_grants_before_staging(controller_grant, hosted_planner_grant, codex_native_payload):
+def require_planner_grants_before_staging(controller_grant, hosted_planner_grant, codex_native_payload, browser_planner_grant=None):
     """Fail before packaging a runtime when the requested planner has no authority."""
     if controller_grant is None:
         return
@@ -169,6 +169,8 @@ def require_planner_grants_before_staging(controller_grant, hosted_planner_grant
     private_proposal_preflight(path)
     if hosted_planner_grant is not None:
         private_proposal_preflight(hosted_planner_grant)
+    if browser_planner_grant is not None:
+        private_proposal_preflight(browser_planner_grant)
     proposal=json.loads(path.read_text())
     if not isinstance(proposal,dict) or set(proposal)!={'scope','goal','profile'}:
         raise ValueError('controller grant requires exact scope, goal and profile')
@@ -177,16 +179,25 @@ def require_planner_grants_before_staging(controller_grant, hosted_planner_grant
         raise ValueError('controller scope must be a mapping')
     planner=scope.get('planner')
     if planner=='codex-cli':
+        if browser_planner_grant is not None:
+            raise ValueError('Codex planner cannot inherit a browser planner grant')
         if hosted_planner_grant is None or codex_native_payload is None:
             raise ValueError('codex-cli controller requires both a separately approved hosted-planner grant and exact native Codex payload before staging; offline-only staging cannot activate autonomous coding')
+    elif planner=='chatgpt-browser-cdp':
+        if browser_planner_grant is None:
+            raise ValueError('ChatGPT browser planner requires a separate private browser grant')
+        if hosted_planner_grant is not None or codex_native_payload is not None:
+            raise ValueError('browser planner cannot inherit Codex planner payload or authority')
     elif planner=='sealed-offline':
+        if browser_planner_grant is not None:
+            raise ValueError('sealed-offline controller cannot inherit browser planner access')
         if hosted_planner_grant is not None or codex_native_payload is not None:
             raise ValueError('sealed-offline controller cannot inherit hosted planner access')
     else:
         raise ValueError('unrecognized controller planner; no stage prepared')
 
 
-def validate_planner_authorization_preflight(source_sha, uid, gid, controller_grant, hosted_planner_grant):
+def validate_planner_authorization_preflight(source_sha, uid, gid, controller_grant, hosted_planner_grant, browser_planner_grant=None):
     """Validate the entire proposed controller/hosted scope before copying a runtime."""
     if controller_grant is None:
         return
@@ -194,13 +205,15 @@ def validate_planner_authorization_preflight(source_sha, uid, gid, controller_gr
     proposal=json.loads(private_proposal_preflight(controller_grant).read_text())
     hosted=(json.loads(private_proposal_preflight(hosted_planner_grant).read_text())
             if hosted_planner_grant is not None else None)
+    browser=(json.loads(private_proposal_preflight(browser_planner_grant).read_text())
+             if browser_planner_grant is not None else None)
     candidate={'source_sha':source_sha,'operator_uid':uid,'operator_gid':gid,
                'development_scope':{'kind':'jobpipe-offline-v1'},'production_ready':False}
-    apply_controller_grant(candidate,proposal,hosted)
+    apply_controller_grant(candidate,proposal,hosted,browser=browser)
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None):
-    if controller_grant is None and (hosted_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None):
+    if controller_grant is None and (hosted_planner_grant is not None or browser_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
         raise ValueError('hosted capabilities require a separate controller package')
     if controller_grant is not None and (canary_grant is not None or codex_grant is not None or classify_canary_partial):
         raise ValueError('controller cannot inherit browser or synthetic model canary authority')
@@ -216,7 +229,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         raise ValueError('Codex canary cannot inherit browser partial-publication disposition')
     if classify_canary_partial and canary_grant is None:
         raise ValueError('explicit partial disposition requires a fresh sealed canary grant')
-    require_planner_grants_before_staging(controller_grant,hosted_planner_grant,codex_native_payload)
+    require_planner_grants_before_staging(controller_grant,hosted_planner_grant,codex_native_payload,browser_planner_grant)
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if sonary_repo is not None:
@@ -230,7 +243,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     source_package=str(source/'src')
     if source_package not in sys.path:
         sys.path.insert(0,source_package)
-    validate_planner_authorization_preflight(source_sha,uid,gid,controller_grant,hosted_planner_grant)
+    validate_planner_authorization_preflight(source_sha,uid,gid,controller_grant,hosted_planner_grant,browser_planner_grant)
     installed=None
     installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')
     if sonary_repo is not None and sonary_repo != Path(identity.pw_dir)/'Sonary':
@@ -424,7 +437,8 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             config['development_scope']=dict(installed['development_scope'],source_sha=source_sha)
         grant=private_proposal(controller_grant)
         hosted=private_proposal(hosted_planner_grant) if hosted_planner_grant is not None else None
-        apply_controller_grant(config,grant,hosted)
+        browser=private_proposal(browser_planner_grant) if browser_planner_grant is not None else None
+        apply_controller_grant(config,grant,hosted,browser=browser)
         jp=next(p for p in projects if p['account']=='_doagain_jp')
         from do_again.supervisor.jobpipe_development import require_jobpipe_grant
         from do_again.supervisor.macos_execution import project_from_dict
@@ -535,6 +549,7 @@ if __name__=='__main__':
     parser.add_argument('--controller-test-wheels',type=Path,help='Offline directory of preapproved wheels named by artifact id')
     parser.add_argument('--controller-grant',type=Path,help='Private exact controller scope/goal/profile for administrator review')
     parser.add_argument('--hosted-planner-grant',type=Path,help='Separate private hosted-model authority; never inferred from execution')
+    parser.add_argument('--browser-planner-grant',type=Path,help='Separate private ChatGPT browser planner authority; never inferred from Codex')
     parser.add_argument('--codex-native-payload',type=Path,help='Existing native Codex CLI payload matching the hosted grant')
     parser.add_argument('--jobpipe-migration-sha',help='Exact remote jobpipe main SHA for opt-in protected fast-forward')
     parser.add_argument('--classify-canary-partial-publication',action='store_true')
@@ -546,4 +561,4 @@ if __name__=='__main__':
                               sonary_repo=args.sonary_repo,
                               jobpipe_offline_development=args.jobpipe_offline_development,
                               jobpipe_migration_sha=args.jobpipe_migration_sha,controller_grant=args.controller_grant,
-                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels),indent=2))
+                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels,browser_planner_grant=args.browser_planner_grant),indent=2))
