@@ -62,6 +62,20 @@ class OperatorBridgeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ExecutionBlocked, 'already reserved'):
                     reservation(identity)
 
+    def test_authenticated_probe_is_read_only(self):
+        probe = {'operation':'probe','nonce':'a'*32}
+        conn = FakeConnection(probe)
+        with patch('do_again.browser.planner_bridge_server.os.geteuid', return_value=501), \
+             patch('do_again.browser.planner_bridge_server.authenticated_peer_uid', return_value=0):
+            result = self.handler.handle_once(conn)
+        self.assertEqual(result, {'state':'probed','model_calls':0})
+        self.assertEqual(self.events, [])
+        self.assertEqual(json.loads(conn.outgoing[0]), {
+            'operation':'probe-result', 'nonce':'a'*32,
+            'conversation_id':self.conversation,
+            'profile_sha256':self.profile,
+        })
+
     def test_authenticated_root_request_is_reserved_before_send(self):
         conn = FakeConnection(self.request)
         with patch('do_again.browser.planner_bridge_server.os.geteuid', return_value=501), \
