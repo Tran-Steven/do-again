@@ -18,33 +18,37 @@ class HighReasoningSelectionTests(unittest.TestCase):
         # The live October 2026 UI exposes 0=Instant,1=Medium,2=High.
         values=iter([
             "opened", {"min":"0","max":"2","value":"1","x":1130,"y":460},
-            True, True, True,
+            True, True, True, True,
         ])
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(values)) as ev, \
              patch.object(cdp,"target_call",return_value={}) as call:
             runtime._ensure_high_reasoning(self.target)
-        self.assertEqual(ev.call_count,5)
-        self.assertEqual([c.args[1] for c in call.call_args_list],
-                         ["Input.dispatchKeyEvent"]*4)
-        self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
+        self.assertEqual(ev.call_count,6)
+        self.assertEqual(call.call_args_list[0].args[1],"Emulation.setFocusEmulationEnabled")
+        self.assertEqual(call.call_args_list[-1].args[1],"Emulation.setFocusEmulationEnabled")
+        self.assertTrue(call.call_args_list[0].args[2]["enabled"])
+        self.assertFalse(call.call_args_list[-1].args[2]["enabled"])
+        gestures=[c for c in call.call_args_list if c.args[1]=="Input.dispatchKeyEvent"]
+        self.assertEqual([c.args[2]["key"] for c in gestures],
                          ["End","End","Escape","Escape"])
-        self.assertEqual([c.args[2]["type"] for c in call.call_args_list],
+        self.assertEqual([c.args[2]["type"] for c in gestures],
                          ["keyDown","keyUp","keyDown","keyUp"])
 
     def test_new_chat_hydration_is_bounded_and_remains_high(self):
         # Live disposable tab briefly exposed a composer, then reloaded and
         # lost the model-picker element. Retry hydration, not prompt Send.
         answers=iter(["page_loading","missing_picker","opened",
-                      {"min":"0","max":"2","value":"2"},True,True])
+                      {"min":"0","max":"2","value":"2"},True,True,True,True])
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(answers)) as ev, \
              patch.object(cdp,"target_call") as call, \
              patch.object(runtime.time,"sleep") as sleep:
             runtime._ensure_high_reasoning(self.target)
-        self.assertEqual(ev.call_count,6)
+        self.assertEqual(ev.call_count,7)
         self.assertIn('[role="textbox"][contenteditable="true"][aria-label="Ask ChatGPT"]',
                       ev.call_args_list[0].args[1])
         self.assertEqual(sleep.call_count,2)
-        self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
+        gestures=[c for c in call.call_args_list if c.args[1]=="Input.dispatchKeyEvent"]
+        self.assertEqual([c.args[2]["key"] for c in gestures],
                          ["Escape","Escape"])
 
     def test_new_chat_without_stable_picker_refuses_send(self):
@@ -54,7 +58,8 @@ class HighReasoningSelectionTests(unittest.TestCase):
             with self.assertRaisesRegex(runtime.BrowserPreDispatchBlocked,"page hydration"):
                 runtime._ensure_high_reasoning(self.target)
         self.assertEqual(evaluate.call_count,30)
-        effect.assert_not_called()
+        self.assertEqual([c.args[2]["enabled"] for c in effect.call_args_list],
+                         [True,False])
 
     def test_new_chat_reloading_cdp_context_retries_before_send(self):
         answers=iter(["page_loading","opened",
@@ -68,26 +73,29 @@ class HighReasoningSelectionTests(unittest.TestCase):
              patch.object(cdp,"target_call") as effect, \
              patch.object(runtime.time,"sleep"):
             runtime._ensure_high_reasoning(self.target)
-        self.assertEqual([c.args[2]["key"] for c in effect.call_args_list],
+        gestures=[c for c in effect.call_args_list if c.args[1]=="Input.dispatchKeyEvent"]
+        self.assertEqual([c.args[2]["key"] for c in gestures],
                          ["Escape","Escape"])
 
     def test_already_high_is_idempotent_and_does_not_click_slider(self):
         values=iter(["opened",{"min":"0","max":"2","value":"2","x":1130,"y":460},
-                     True,True,True])
+                     True,True,True,True])
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(values)), \
              patch.object(cdp,"target_call") as call:
             runtime._ensure_high_reasoning(self.target)
-        self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
+        gestures=[c for c in call.call_args_list if c.args[1]=="Input.dispatchKeyEvent"]
+        self.assertEqual([c.args[2]["key"] for c in gestures],
                          ["Escape","Escape"])
 
     def test_nested_effort_menu_requires_second_escape_before_high_confirmed(self):
         observations=["opened",{"min":"0","max":"2","value":"2"},
-                      True,False,True,True]
+                      True,False,True,True,True]
         with patch.object(cdp,"evaluate",side_effect=observations), \
              patch.object(cdp,"target_call") as keys, \
              patch.object(runtime.time,"sleep"):
             runtime._ensure_high_reasoning(self.target)
-        self.assertEqual([c.args[2]["key"] for c in keys.call_args_list],
+        gestures=[c for c in keys.call_args_list if c.args[1]=="Input.dispatchKeyEvent"]
+        self.assertEqual([c.args[2]["key"] for c in gestures],
                          ["Escape","Escape","Escape","Escape"])
 
     def test_high_slider_without_persisted_label_blocks_send(self):
@@ -109,7 +117,31 @@ class HighReasoningSelectionTests(unittest.TestCase):
                  patch.object(runtime.time,"sleep"):
                 with self.assertRaises(runtime.BrowserPreDispatchBlocked):
                     runtime._ensure_high_reasoning(self.target)
-                call.assert_not_called()
+                self.assertEqual([c.args[1] for c in call.call_args_list],
+                                 ["Emulation.setFocusEmulationEnabled"]*2)
+
+    def test_focus_emulation_always_disabled_after_blocker(self):
+        with patch.object(runtime,"_ensure_high_reasoning_focused",
+                          side_effect=runtime.BrowserPreDispatchBlocked("not ready")), \
+             patch.object(cdp,"target_call") as calls, \
+             patch.object(cdp,"evaluate") as read:
+            with self.assertRaises(runtime.BrowserPreDispatchBlocked):
+                runtime._ensure_high_reasoning(self.target)
+        self.assertEqual([c.args[2]["enabled"] for c in calls.call_args_list],
+                         [True,False])
+        read.assert_not_called()
+
+    def test_high_must_persist_after_focus_emulation_is_disabled(self):
+        answers=["opened",{"min":"0","max":"2","value":"2"},
+                 True,True,False]
+        with patch.object(cdp,"evaluate",side_effect=answers), \
+             patch.object(cdp,"target_call") as calls:
+            with self.assertRaisesRegex(runtime.BrowserPreDispatchBlocked,
+                                        "background focus was restored"):
+                runtime._ensure_high_reasoning(self.target)
+        self.assertEqual(calls.call_args_list[-1].args[1],
+                         "Emulation.setFocusEmulationEnabled")
+        self.assertFalse(calls.call_args_list[-1].args[2]["enabled"])
 
     def test_high_unavailable_or_unverified_fails_closed(self):
         for observation,verified in [
