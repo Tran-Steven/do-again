@@ -132,7 +132,7 @@ class OneGestureDeliveryTests(unittest.TestCase):
     def test_composer_never_ready_fails_without_the_send_gesture(self):
         evaluate,_,gesture=self.mocks()
         evaluate.side_effect=["ready",False]
-        with patch.object(browser.time,'monotonic',side_effect=[0,11]):
+        with patch.object(browser.time,'monotonic',side_effect=[0,0,11]):
             with self.assertRaisesRegex(BrowserError,'did not become enabled'):
                 browser.send_message(self.target,"DO_AGAIN_NO_SEND_IF_DISABLED",wait_for_response=False)
         gesture.assert_not_called()
@@ -140,7 +140,7 @@ class OneGestureDeliveryTests(unittest.TestCase):
     def test_mixed_cross_project_draft_is_never_sent(self):
         evaluate, _, gesture = self.mocks()
         evaluate.side_effect = ["ready", False]
-        with patch.object(browser.time, "monotonic", side_effect=[0, 11]):
+        with patch.object(browser.time, "monotonic", side_effect=[0, 0, 11]):
             with self.assertRaisesRegex(BrowserError, "did not become enabled"):
                 browser.send_message(
                     self.target,
