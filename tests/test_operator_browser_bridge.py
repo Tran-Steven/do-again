@@ -101,6 +101,14 @@ class OperatorBridgeTests(unittest.TestCase):
                 self.handler.handle_once(conn)
         self.assertEqual(self.events, [])
 
+    def test_cross_grant_request_cannot_reserve_or_dispatch(self):
+        wrong = dict(self.request, grant_sha256='0'*64)
+        with patch('do_again.browser.planner_bridge_server.os.geteuid', return_value=501), \
+             patch('do_again.browser.planner_bridge_server.authenticated_peer_uid', return_value=0):
+            with self.assertRaisesRegex(ExecutionBlocked, 'approved scope'):
+                self.handler.handle_once(FakeConnection(wrong))
+        self.assertEqual(self.events, [])
+
     def test_wrong_conversation_is_rejected_before_reserving(self):
         bad = dict(self.request, conversation_id='wrong')
         with patch('do_again.browser.planner_bridge_server.os.geteuid', return_value=501), \
