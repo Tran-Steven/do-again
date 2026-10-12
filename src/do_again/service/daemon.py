@@ -219,6 +219,7 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
     session = ensure_browser_running(verify_auth=True)
     target = browser_runtime._find_chatgpt_target(int(session["port"]), chat_url)
     if target is not None:
+        # Do not confuse legacy page text with proof of delivery: the old
         # The legacy text probe can miss user turns in modern ChatGPT layouts
         # even when the exact, causally bound receipt marker is present.
         # Never gate stronger token-and-role attestation behind that probe.
