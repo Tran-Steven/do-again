@@ -2415,6 +2415,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispat
         )
         if _page_contains(target, batch_marker):
             return {"response": "already_delivered", "chat_url": target.url}
+        _ensure_high_reasoning(target)
         return send_message(
             target,
             message,
