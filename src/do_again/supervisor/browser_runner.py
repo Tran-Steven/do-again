@@ -73,7 +73,13 @@ def _tick_with_root_budget():
     """Leave root's 60s helper timeout enough time to record terminal proof."""
     import signal
     import threading
-    if sys.platform != 'darwin' or threading.current_thread() is not threading.main_thread():
+    if (sys.platform != 'darwin'
+            or not hasattr(signal, 'SIGALRM')
+            or not hasattr(signal, 'ITIMER_REAL')
+            or not hasattr(signal, 'setitimer')
+            or threading.current_thread() is not threading.main_thread()):
+        # Cross-platform simulated-broker tests may override sys.platform;
+        # never assume macOS signal facilities exist on Windows.
         return _tick()
     # This helper runs in a separate, root-pinned operator process. A
     # cancellation at 45s precedes the root broker's hard kill at 60s.
