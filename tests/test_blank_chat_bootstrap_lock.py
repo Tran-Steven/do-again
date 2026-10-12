@@ -68,6 +68,44 @@ class BlankChatSerializationTests(unittest.TestCase):
                 (Path(tmp)/"state/browser/blank-chat-bootstrap.lock").exists(),
             )
 
+    def test_send_lock_serializes_two_independent_project_workers(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(
+                os.environ, {"DO_AGAIN_HOME": str(Path(tmp) / "state")}):
+            first_started=threading.Event()
+            allow_first=threading.Event()
+            second_started=threading.Event()
+            order=[]
+            failures=[]
+
+            @runtime._exclusive_message_send
+            def send(project):
+                if project=="do-again":
+                    first_started.set()
+                    if not allow_first.wait(5):
+                        raise AssertionError("first project timed out")
+                else:
+                    second_started.set()
+                order.append(project)
+
+            def start(project):
+                try:
+                    send(project)
+                except Exception as exc:
+                    failures.append(exc)
+
+            a=threading.Thread(target=start,args=("do-again",),daemon=True)
+            b=threading.Thread(target=start,args=("jobpipe",),daemon=True)
+            a.start()
+            self.assertTrue(first_started.wait(4))
+            b.start()
+            self.assertFalse(second_started.wait(0.15))
+            allow_first.set()
+            a.join(5)
+            b.join(5)
+            self.assertEqual(failures,[])
+            self.assertEqual(order,["do-again","jobpipe"])
+            self.assertFalse((Path(tmp)/"state/browser/chatgpt-send.lock").exists())
+
     def test_failure_releases_shared_blank_chat_lock(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(
                 os.environ, {"DO_AGAIN_HOME": str(Path(tmp) / "state")}):
