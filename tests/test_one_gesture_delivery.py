@@ -149,7 +149,7 @@ class OneGestureDeliveryTests(unittest.TestCase):
                     before_dispatch=lambda: self.fail("unclean draft committed"),
                 )
         gesture.assert_not_called()
-        self.assertIn(').trim()=="DO_AGAIN_ONLY"', evaluate.call_args_list[1].args[1])
+        self.assertIn(').trim()==="DO_AGAIN_ONLY"', evaluate.call_args_list[1].args[1])
         self.assertNotIn(".includes(PREFIX)", evaluate.call_args_list[1].args[1])
         self.assertIn("DO_AGAIN_ONLY", evaluate.call_args_list[1].args[1])
 
