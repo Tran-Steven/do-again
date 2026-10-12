@@ -166,7 +166,7 @@ def run(argv=None):
     if fence.is_symlink() or not fence.is_file() or fence.stat().st_uid != 0:
         raise SystemExit("protected admission fence is unavailable")
     import fcntl
-    with fence.open("rb") as lock:
+    with fence.open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         identity, status, proof = _read_original(config, helper)
         from do_again.supervisor.macos_execution import MacOSProcesses
