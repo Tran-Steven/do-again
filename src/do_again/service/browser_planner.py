@@ -1,0 +1,84 @@
+"""Explicit authorization boundary for a future ChatGPT browser planner.
+
+This module cannot launch CDP, choose a browser profile, read cookies or send
+a chat message. A separately qualified installed broker must supply transport.
+Never reinterpret a Codex grant as browser authority.
+"""
+from __future__ import annotations
+
+import hashlib
+import re
+from datetime import timedelta
+
+from ..core.schema import canonical_json, parse_utc
+from ..supervisor.macos_execution import ExecutionBlocked
+from .planner_contract import AuthorizedTransportPlanner
+
+
+def browser_grant_digest(grant):
+    return hashlib.sha256(canonical_json(grant)).hexdigest()
+
+
+def validate_browser_planner_grant(grant, *, source_sha, goal_sha256, epoch, now):
+    """Verify a tightly scoped, separate browser grant, without a browser effect."""
+    required = {
+        'kind', 'transport', 'repository', 'branch', 'source_sha',
+        'goal_sha256', 'epoch', 'issued_at_utc', 'expires_at_utc',
+        'conversation_id', 'profile_sha256', 'max_calls',
+        'max_prompt_bytes', 'max_answer_bytes', 'application_submissions',
+        'worker_network_access', 'production_deployment', 'automatic_merge',
+    }
+    if not isinstance(grant, dict) or set(grant) != required:
+        raise ExecutionBlocked('separate browser planner grant absent or contains unknown authority')
+    if (grant['kind'] != 'browser-planning-v1'
+            or grant['transport'] != 'chatgpt-browser-cdp'
+            or grant['repository'] != 'Tran-Steven/jobpipe'
+            or grant['branch'] != 'operator-control'
+            or grant['source_sha'] != source_sha
+            or grant['goal_sha256'] != goal_sha256
+            or type(grant['epoch']) is not int
+            or grant['epoch'] != epoch):
+        raise ExecutionBlocked('browser planner grant identity differs')
+    if (not isinstance(grant['conversation_id'], str)
+            or not re.fullmatch(r'[0-9a-f-]{36}', grant['conversation_id'])
+            or not isinstance(grant['profile_sha256'], str)
+            or not re.fullmatch(r'[0-9a-f]{64}', grant['profile_sha256'])):
+        raise ExecutionBlocked('browser planner conversation or profile identity differs')
+    if (type(grant['max_calls']) is not int or grant['max_calls'] != 3
+            or type(grant['max_prompt_bytes']) is not int
+            or grant['max_prompt_bytes'] != 32768
+            or type(grant['max_answer_bytes']) is not int
+            or grant['max_answer_bytes'] != 65536
+            or any(grant[key] is not False for key in
+                   ('application_submissions', 'worker_network_access',
+                    'production_deployment', 'automatic_merge'))):
+        raise ExecutionBlocked('browser planner privileges or budgets differ')
+    try:
+        issued = parse_utc(grant['issued_at_utc'])
+        expires = parse_utc(grant['expires_at_utc'])
+    except (TypeError, ValueError, KeyError) as exc:
+        raise ExecutionBlocked('browser planner grant timestamps invalid') from exc
+    if not issued <= now < expires or not timedelta(0) < expires-issued <= timedelta(hours=2):
+        raise ExecutionBlocked('browser planner grant expired, premature, or overlong')
+    return grant
+
+
+class BrowserPlanner(AuthorizedTransportPlanner):
+    """Adapter contract: only a trusted installed caller can supply a transport.
+
+    A call still needs an independent, broker-side browser capability and
+    durable no-retry reservation before first dispatch.
+    """
+
+    def __init__(self, authorize, reserve_call, transport, request_builder,
+                 *, source_sha, goal_sha256, epoch):
+        super().__init__(authorize, reserve_call, transport, request_builder)
+        self.source_sha = source_sha
+        self.goal_sha256 = goal_sha256
+        self.epoch = epoch
+
+    def _validated_grant(self, now):
+        grant = self.authorize(now)
+        return validate_browser_planner_grant(
+            grant, source_sha=self.source_sha, goal_sha256=self.goal_sha256,
+            epoch=self.epoch, now=now)
