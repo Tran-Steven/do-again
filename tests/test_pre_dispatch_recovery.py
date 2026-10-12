@@ -15,6 +15,7 @@ from do_again.supervisor.pre_dispatch_recovery import (
 )
 
 
+@unittest.skipUnless(hasattr(os, "getuid"), "POSIX ownership required")
 class PreDispatchRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
