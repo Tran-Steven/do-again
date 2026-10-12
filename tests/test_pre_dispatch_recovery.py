@@ -3,6 +3,8 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from do_again.core.schema import atomic_json
 from do_again.supervisor.macos_execution import ExecutionBlocked
@@ -12,6 +14,7 @@ from do_again.supervisor.pre_dispatch_recovery import (
     ORIGINAL_SOURCE,
     MAINTENANCE_EPOCH,
     verify_pre_dispatch,
+    reconcile_verified_pre_dispatch,
 )
 
 
@@ -26,7 +29,9 @@ class PreDispatchRecoveryTests(unittest.TestCase):
             "repo": str(self.home / "jobpipe"),
             "key": "f" * 64,
         }
-        self.config = {"operator_home": str(self.home), "operator_uid": os.getuid()}
+        self.config = {"operator_home": str(self.home), "operator_uid": os.getuid(),
+                       "authority_path": str(self.home / "root" / "authority.db"),
+                       "projects": [{**self.project, "uid": 450}], "production_ready": False}
         self.status = {"intent": "maintenance", "epoch": MAINTENANCE_EPOCH}
         self.intent = {
             "operation": "browser_tick",
@@ -55,6 +60,67 @@ class PreDispatchRecoveryTests(unittest.TestCase):
             overrides.get("intent", self.intent),
             overrides.get("status", self.status),
         )
+
+    def recovery_broker(self, *, finish=None):
+        registry = SimpleNamespace(status=Mock(return_value=self.status))
+        ledger = SimpleNamespace(
+            pending=Mock(return_value=[{"request_id": ORIGINAL_REQUEST}]),
+            intent=Mock(return_value=self.intent),
+            finish=Mock(side_effect=finish),
+        )
+        return SimpleNamespace(
+            config=self.config,
+            project=SimpleNamespace(key=self.project["key"], repo=Path(self.project["repo"])),
+            ledger=ledger, registry=registry,
+        )
+
+    def test_one_time_recovery_preserves_outbox_and_records_original_evidence(self):
+        broker = self.recovery_broker()
+        root = Path(self.config["authority_path"]).parent
+        root.mkdir(exist_ok=True)
+        original_outbox = (self.state / "browser_outbox/message-0001.json").read_bytes()
+        with patch("do_again.supervisor.macos_execution.MacOSProcesses.owned", return_value=False), \
+             patch("do_again.supervisor.worker_service.service_spec", return_value=("label", {})), \
+             patch("do_again.supervisor.worker_service.service_present", return_value=False):
+            result = reconcile_verified_pre_dispatch(broker, ORIGINAL_REQUEST)
+        self.assertEqual(result["delivered"], 0)
+        self.assertTrue(result["outbox_preserved"])
+        self.assertTrue(result["reconciled_pre_dispatch"])
+        self.assertFalse(self.current.exists())
+        self.assertTrue(self.archive.exists())
+        self.assertEqual((self.state / "browser_outbox/message-0001.json").read_bytes(), original_outbox)
+        broker.ledger.finish.assert_called_once()
+        audit = root / ("pre_dispatch_recovery_" + ORIGINAL_REQUEST + ".json")
+        self.assertEqual(json.loads(audit.read_text())["request_id"], ORIGINAL_REQUEST)
+
+    def test_crash_after_root_audit_and_archive_can_resume_without_replay(self):
+        broker = self.recovery_broker(finish=[OSError("simulated interrupted commit"), None])
+        Path(self.config["authority_path"]).parent.mkdir(exist_ok=True)
+        with patch("do_again.supervisor.macos_execution.MacOSProcesses.owned", return_value=False), \
+             patch("do_again.supervisor.worker_service.service_spec", return_value=("label", {})), \
+             patch("do_again.supervisor.worker_service.service_present", return_value=False):
+            with self.assertRaisesRegex(OSError, "simulated interrupted commit"):
+                reconcile_verified_pre_dispatch(broker, ORIGINAL_REQUEST)
+            self.assertFalse(self.current.exists())
+            self.assertTrue(self.archive.exists())
+            result = reconcile_verified_pre_dispatch(broker, ORIGINAL_REQUEST)
+        self.assertEqual(result["delivered"], 0)
+        self.assertEqual(broker.ledger.finish.call_count, 2)
+        self.assertEqual(result["liveness"], "reconciled_before_send")
+
+    def test_ambiguous_existing_root_audit_never_finishes_started_effect(self):
+        broker = self.recovery_broker()
+        root = Path(self.config["authority_path"]).parent
+        root.mkdir(exist_ok=True)
+        audit = root / ("pre_dispatch_recovery_" + ORIGINAL_REQUEST + ".json")
+        atomic_json(audit, {"state": "different_evidence"})
+        with patch("do_again.supervisor.macos_execution.MacOSProcesses.owned", return_value=False), \
+             patch("do_again.supervisor.worker_service.service_spec", return_value=("label", {})), \
+             patch("do_again.supervisor.worker_service.service_present", return_value=False):
+            with self.assertRaisesRegex(ExecutionBlocked, "audit differs"):
+                reconcile_verified_pre_dispatch(broker, ORIGINAL_REQUEST)
+        broker.ledger.finish.assert_not_called()
+        self.assertTrue(self.current.exists())
 
     def test_exact_pre_send_evidence_is_read_only(self):
         initial = self.current.read_bytes()
