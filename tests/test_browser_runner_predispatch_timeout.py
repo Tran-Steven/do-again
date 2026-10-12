@@ -38,7 +38,7 @@ class BrowserRunnerDeadlineTests(unittest.TestCase):
         return value
 
     def invoke(self, error):
-        with patch.object(browser_runner.sys,"argv",self.args), \\
+        with patch.object(browser_runner.sys,"argv",self.args), \
              patch.object(browser_runner,"_tick_with_root_budget",side_effect=error):
             browser_runner.main()
 
