@@ -79,7 +79,7 @@ class PreDispatchRecoveryTests(unittest.TestCase):
         root = Path(self.config["authority_path"]).parent
         root.mkdir(exist_ok=True)
         original_outbox = (self.state / "browser_outbox/message-0001.json").read_bytes()
-        with patch("do_again.supervisor.macos_execution.MacOSProcesses.owned", return_value=False), \
+        with patch("do_again.supervisor.macos_execution.MacOSProcesses", return_value=SimpleNamespace(owned=lambda uid: False)), \
              patch("do_again.supervisor.worker_service.service_spec", return_value=("label", {})), \
              patch("do_again.supervisor.worker_service.service_present", return_value=False):
             result = reconcile_verified_pre_dispatch(broker, ORIGINAL_REQUEST)
@@ -96,7 +96,7 @@ class PreDispatchRecoveryTests(unittest.TestCase):
     def test_crash_after_root_audit_and_archive_can_resume_without_replay(self):
         broker = self.recovery_broker(finish=[OSError("simulated interrupted commit"), None])
         Path(self.config["authority_path"]).parent.mkdir(exist_ok=True)
-        with patch("do_again.supervisor.macos_execution.MacOSProcesses.owned", return_value=False), \
+        with patch("do_again.supervisor.macos_execution.MacOSProcesses", return_value=SimpleNamespace(owned=lambda uid: False)), \
              patch("do_again.supervisor.worker_service.service_spec", return_value=("label", {})), \
              patch("do_again.supervisor.worker_service.service_present", return_value=False):
             with self.assertRaisesRegex(OSError, "simulated interrupted commit"):
@@ -114,7 +114,7 @@ class PreDispatchRecoveryTests(unittest.TestCase):
         root.mkdir(exist_ok=True)
         audit = root / ("pre_dispatch_recovery_" + ORIGINAL_REQUEST + ".json")
         atomic_json(audit, {"state": "different_evidence"})
-        with patch("do_again.supervisor.macos_execution.MacOSProcesses.owned", return_value=False), \
+        with patch("do_again.supervisor.macos_execution.MacOSProcesses", return_value=SimpleNamespace(owned=lambda uid: False)), \
              patch("do_again.supervisor.worker_service.service_spec", return_value=("label", {})), \
              patch("do_again.supervisor.worker_service.service_present", return_value=False):
             with self.assertRaisesRegex(ExecutionBlocked, "audit differs"):
