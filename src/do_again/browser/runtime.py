@@ -827,16 +827,35 @@ def _ensure_high_reasoning(target: cdp.Target) -> None:
     Keyboard End is verified on the Oct 2026 three-stop slider; a pointer click
     was rejected because the model dropdown overlays the High tick.
     """
-    opened = cdp.evaluate(target, r"""(() => {
-        const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
-            .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled;});
-        if(buttons.length!==1)return 'missing_picker';
-        if(buttons[0].getAttribute('aria-expanded')==='true')return 'already_open';
-        buttons[0].click();
-        return 'opened';
-    })()""", timeout=10.0, user_gesture=True)
+    # A fresh / chat can briefly render the composer, then hydrate again.
+    # The model picker may be absent or momentarily detach in that transition.
+    # Wait only for a *settled* composer + picker; never send at a lower effort.
+    opened = None
+    for _ in range(30):
+        try:
+            opened = cdp.evaluate(target, r"""(() => {
+                if(document.readyState!=='complete')return 'page_loading';
+                const composer=document.querySelector(
+                    '#prompt-textarea,[data-testid="prompt-textarea"]');
+                if(!composer)return 'page_loading';
+                const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                    .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled;});
+                if(buttons.length!==1)return 'missing_picker';
+                if(buttons[0].getAttribute('aria-expanded')==='true')return 'already_open';
+                buttons[0].click();
+                return 'opened';
+            })()""", timeout=10.0, user_gesture=True)
+        except cdp.CdpError:
+            # A navigation may detach the execution context. The only
+            # possible effect here is opening the model menu, never Send.
+            opened = 'page_loading'
+        if opened in {'opened','already_open'}:
+            break
+        if opened not in {'page_loading','missing_picker'}:
+            break
+        time.sleep(0.2)
     if opened not in {'opened', 'already_open'}:
-        raise BrowserPreDispatchBlocked("ChatGPT High reasoning picker is unavailable; no prompt submitted")
+        raise BrowserPreDispatchBlocked("ChatGPT High reasoning picker is unavailable after page hydration; no prompt submitted")
     try:
         observed = None
         for _ in range(12):
