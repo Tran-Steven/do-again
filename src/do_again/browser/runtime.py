@@ -1016,22 +1016,29 @@ def _require_send_target_focus(target: cdp.Target) -> None:
             and config.get("allow_visible_fallback") is not True
             and state.get("mode") == "background" and not virtual):
         raise BrowserPreDispatchBlocked("unattended auto mode refuses GUI tab focus; no browser submission was attempted")
-    probe = r"""(() => ({
-        focused: document.hasFocus(),
-        visibility: document.visibilityState,
-        url: location.href
-    }))()"""
+    probe = r"""(() => {
+        const editor = [...document.querySelectorAll(
+            '#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]'
+        )].find(el => {
+            const bounds = el.getBoundingClientRect();
+            return bounds.width > 0 && bounds.height > 0;
+        });
+        return {focused: document.hasFocus(), visibility: document.visibilityState,
+                url: location.href, ready: document.readyState, editor_visible: !!editor};
+    })()"""
     observed = cdp.evaluate(target, probe, timeout=10.0)
     if virtual:
         if not (state.get("mode") == "background"
                 and config.get("preferred_mode") == "auto"
                 and config.get("allow_visible_fallback") is not True
                 and isinstance(observed, dict)
-                and observed.get("focused") is True
+                and type(observed.get("focused")) is bool
                 and observed.get("visibility") in {"visible", "hidden"}
+                and observed.get("ready") == "complete"
+                and observed.get("editor_visible") is True
                 and isinstance(observed.get("url"), str)
                 and observed["url"].startswith("https://chatgpt.com/")):
-            raise BrowserPreDispatchBlocked("background ChatGPT virtual focus could not be verified; no prompt submitted")
+            raise BrowserPreDispatchBlocked("background ChatGPT composer or origin could not be verified; no prompt submitted")
         return
     if not (isinstance(observed, dict)
             and observed.get("focused") is True
