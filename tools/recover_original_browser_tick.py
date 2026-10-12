@@ -9,7 +9,6 @@ the existing installed execution ledger's terminal transition.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import importlib.util
 import json
@@ -48,7 +47,7 @@ def _verified_candidate(commit: str) -> Path:
         expected = _git("rev-parse", "HEAD:" + relative)
         data = path.read_bytes()
         actual = hashlib.sha1(
-            b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+            b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
         if actual != expected:
             raise RuntimeError("recovery source does not match exact committed tree")
     return REPO / "src/do_again/supervisor/pre_dispatch_recovery.py"
@@ -143,6 +142,7 @@ def run(argv=None):
     fence = INSTALLED.parent / "state" / project["key"] / "admission.lock"
     if fence.is_symlink() or not fence.is_file() or fence.stat().st_uid != 0:
         raise SystemExit("protected admission fence is unavailable")
+    import fcntl
     with fence.open("rb") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         identity, status, proof = _read_original(config, helper)
