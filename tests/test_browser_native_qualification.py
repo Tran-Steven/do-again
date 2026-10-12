@@ -28,10 +28,8 @@ class NativeBrowserQualificationTests(unittest.TestCase):
                                                           'epoch':13}))
 
     def qualify(self):
-        with patch('do_again.supervisor.controller_browser_helper.sys.platform',
-                   'darwin', create=True), \
-             patch('do_again.supervisor.controller_browser_helper.os.geteuid',
-                   return_value=0), \
+        with patch('sys.platform', 'darwin'), \
+             patch('os.geteuid', return_value=0), \
              patch('do_again.supervisor.macos_server.verify_installation'), \
              patch('do_again.supervisor.controller_configuration.validate_controller_configuration',
                    return_value=self.scope), \
