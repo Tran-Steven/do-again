@@ -26,7 +26,7 @@ class DualOfflineGrantTests(unittest.TestCase):
             key=hashlib.sha256(os.fsencode(repo.resolve())).hexdigest()
             self.projects.append({"account":account,"repo":str(repo),
                                   "key":key,"source_sha":"c"*40})
-            self.statuses[account]={"intent":"maintenance","goal_revision":"review-v1",
+            self.statuses[account]={"operator_intent":"maintenance","goal_revision":"review-v1",
                                     "production_ready":False,"source_sha":"b"*40,
                                     "enforcement_verified":True,"enforcement_blocker":None,
                                     "authority":{"repo_head":"c"*40},
@@ -54,9 +54,9 @@ class DualOfflineGrantTests(unittest.TestCase):
 
     def test_only_two_exact_scopes_are_admitted_with_sonary_held(self):
         self.assertEqual(self.check()["kind"],"offline-dual-v1")
-        self.statuses["_doagain_da"]["intent"]="active"
+        self.statuses["_doagain_da"]["operator_intent"]="active"
         self.assertEqual(self.check(self.da)["max_parallel_workers"],2)
-        self.statuses["_doagain_jp"]["intent"]="active"
+        self.statuses["_doagain_jp"]["operator_intent"]="active"
         self.assertEqual(self.check()["kind"],"offline-dual-v1")
 
     def test_old_jobpipe_only_grant_is_never_treated_as_dual(self):
@@ -98,9 +98,9 @@ class DualOfflineGrantTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):self.check()
 
     def test_sonary_or_unapproved_caller_never_gets_authority(self):
-        self.statuses["_doagain_so"]["intent"]="active"
+        self.statuses["_doagain_so"]["operator_intent"]="active"
         with self.assertRaises(ExecutionBlocked):self.check()
-        self.statuses["_doagain_so"]["intent"]="maintenance"
+        self.statuses["_doagain_so"]["operator_intent"]="maintenance"
         sonary=self.projects[-1]
         caller=SimpleNamespace(account=sonary["account"],repo=Path(sonary["repo"]),key=sonary["key"])
         with self.assertRaises(ExecutionBlocked):self.check(caller)
@@ -132,9 +132,9 @@ class DualOfflineGrantTests(unittest.TestCase):
     def test_incomplete_or_ambiguous_sibling_observations_fail(self):
         self.statuses.pop("_doagain_so")
         with self.assertRaises(ExecutionBlocked):self.check()
-        self.statuses["_doagain_so"]={"intent":"maintenance",
+        self.statuses["_doagain_so"]={"operator_intent":"maintenance",
                                     "unresolved_executions":[],"inflight_request_ids":[]}
-        self.statuses["_doagain_jp"]["intent"]="paused"
+        self.statuses["_doagain_jp"]["operator_intent"]="paused"
         with self.assertRaises(ExecutionBlocked):self.check()
 
 
