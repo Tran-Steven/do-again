@@ -38,9 +38,11 @@ class BrowserPlannerTests(unittest.TestCase):
         import json
         call = {'call_id': 'planner-' + 'a'*20 + '-1'}
         grant = {'conversation_id': '01234567-89ab-4cde-8012-0123456789ab',
-                 'max_prompt_bytes': 32768, 'max_answer_bytes': 65536}
+                 'max_prompt_bytes': 32768, 'max_answer_bytes': 65536,
+                 'profile_sha256': 'd'*64}
         result = {'gap': 'g', 'acceptance': 'a', 'script': 'print(1)'}
-        def sender(message, *, conversation_id, call_id):
+        def sender(message, *, conversation_id, call_id, profile_sha256):
+            self.assertEqual(profile_sha256, grant['profile_sha256'])
             self.assertEqual(conversation_id, grant['conversation_id'])
             self.assertEqual(call_id, call['call_id'])
             return {'conversation_id': conversation_id,
