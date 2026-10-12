@@ -1,4 +1,5 @@
 import copy
+import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -26,8 +27,10 @@ class ContinuationTests(unittest.TestCase):
         self.c = OfflineContinuation(self.path, self.scope, self.binding)
 
     def proposal(self):
+        state = json.loads(self.path.read_text()) if self.path.exists() else {}
         return dict(request={'schema_version': 1, 'operation': 'scratch_script',
-                    'args': {'language': 'python', 'content': 'pass'}, 'expected': {'repo_head': 'c'*40},
+                    'args': {'language': 'python', 'content': 'pass'},
+                    'expected': {'repo_head': state.get('validated_head', 'c'*40)},
                     'limits': {'timeout_seconds': 120}, 'issued_at_utc': self.now.isoformat(),
                     'expires_at_utc': (self.now+timedelta(minutes=10)).isoformat()},
                     gap='fixture checkpoint recovery gap', acceptance='restart retains exact checkpoint',
@@ -39,6 +42,9 @@ class ContinuationTests(unittest.TestCase):
         evidence = {k: True for k in ('remote_durable', 'native_terminal', 'tests_passed',
                     'implementation_changed', 'authority_matches', 'no_submission')}
         evidence['request_fingerprint'] = record['fingerprint']
+        evidence['implementation_commit'] = record['fingerprint'][:40]
+        evidence['test_commit'] = record['fingerprint'][:40]
+        evidence['branch'] = 'do-again/task-fixture'
         return receipt, evidence
 
     def test_three_mock_cycles_and_budget(self):

@@ -128,6 +128,8 @@ class OfflineContinuation:
                 or expires > parse_utc(self.scope['expires_at_utc'])
                 or not re.fullmatch('[0-9a-f]{64}', proposal['evidence_sha256'])):
             raise ExecutionBlocked('request lifetime or evidence binding differs')
+        if state.get('validated_head') and request['expected']['repo_head'] != state['validated_head']:
+            raise ExecutionBlocked('next development cycle must build on prior validated head')
         ordinal = len(state['requests']) + 1
         rid = 'offline-' + digest(self.scope)[:20] + '-' + str(ordinal)
         request['request_id'] = rid
@@ -170,16 +172,23 @@ class OfflineContinuation:
         # accept worker stdout or model assertions as these attestations.
         checks = ('remote_durable', 'native_terminal', 'tests_passed',
                   'implementation_changed', 'authority_matches', 'no_submission')
+        sha = evidence.get('implementation_commit')
         if (record['phase'] != 'published' or receipt.get('state') != 'succeeded'
                 or receipt.get('request_fingerprint') != record['fingerprint']
                 or any(evidence.get(k) is not True for k in checks)
-                or evidence.get('request_fingerprint') != record['fingerprint']):
+                or evidence.get('request_fingerprint') != record['fingerprint']
+                or not isinstance(sha, str) or not re.fullmatch('[0-9a-f]{40}', sha)
+                or evidence.get('test_commit') != sha
+                or sha == record['request']['expected']['repo_head']):
             state.update(state='blocked', blocker='completion lacks verified implementation/test evidence')
             self._save(state)
             raise ExecutionBlocked(state['blocker'])
         state['acknowledged'].append(rid)
         state['outstanding'] = None
         record.update(phase='acknowledged', receipt_sha256=digest(receipt))
+        state['validated_head'] = sha
+        record.update(implementation_commit=sha, test_commit=sha,
+                      branch=evidence.get('branch'))
         if state['state'] != 'stopped':
             state['state'] = 'completed' if len(state['acknowledged']) == 3 else 'planning'
         return self._save(state)

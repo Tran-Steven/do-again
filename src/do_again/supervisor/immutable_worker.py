@@ -292,7 +292,14 @@ def main(argv: list[str] | None = None) -> int:
             return {'delivered':0,'liveness':'running'}
         return broker_request(repo,{'operation':'browser_tick','request_id':'browser-'+uuid.uuid4().hex,
                                     'epoch':status['epoch']})
-    return daemon_main(argv,admission_check=admission_check,control_transport=transport,browser_effect=browser_effect)
+    def controller_effect():
+        # A separately sealed controller replaces browser continuation for this
+        # worker. Existing uncertain browser journals/outbox remain untouched.
+        value = broker_request(repo, {'operation': 'controller_tick'})
+        return {'delivered': 0, 'liveness': value.get('state', 'blocked')}
+    effect = controller_effect if (config.get('controller_scope') is not None
+                                   and project.get('account') == '_doagain_jp') else browser_effect
+    return daemon_main(argv,admission_check=admission_check,control_transport=transport,browser_effect=effect)
 
 
 if __name__ == "__main__":
