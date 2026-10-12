@@ -30,8 +30,8 @@ class BackgroundChatSendTests(unittest.TestCase):
             effects.append((operation, arguments))
             self.assertNotEqual(operation, "Page.bringToFront")
 
-        def click(target):
-            effects.append(("click", {}))
+        def enter(target):
+            effects.append(("enter", {}))
 
         def durable():
             effects.append(("dispatch_intent", {}))
@@ -43,7 +43,7 @@ class BackgroundChatSendTests(unittest.TestCase):
              patch.object(cdp, "target_call", side_effect=call), \
              patch.object(cdp, "evaluate", side_effect=observations) as evaluate, \
              patch.object(cdp, "insert_text") as insert, \
-             patch.object(cdp, "click_send", side_effect=click) as gesture, \
+             patch.object(cdp, "press_enter", side_effect=enter) as gesture, \
              patch.object(runtime.time, "sleep"):
             result = runtime.send_message(
                 self.target, "SCOPED_BACKGROUND_TEST", background_focus=True,
@@ -57,7 +57,7 @@ class BackgroundChatSendTests(unittest.TestCase):
         self.assertEqual(
             [entry[0] for entry in effects],
             ["Emulation.setFocusEmulationEnabled", "dispatch_intent",
-             "click", "Emulation.setFocusEmulationEnabled"],
+             "enter", "Emulation.setFocusEmulationEnabled"],
         )
         self.assertTrue(effects[0][1]["enabled"])
         self.assertFalse(effects[-1][1]["enabled"])
@@ -85,6 +85,7 @@ class BackgroundChatSendTests(unittest.TestCase):
              patch.object(cdp, "target_call", side_effect=command), \
              patch.object(cdp, "evaluate", side_effect=states), \
              patch.object(cdp, "insert_text") as insert, \
+             patch.object(cdp, "press_enter") as enter, \
              patch.object(cdp, "click_send") as click, \
              patch.object(runtime.time, "sleep"):
             result = runtime.send_message(
@@ -93,7 +94,8 @@ class BackgroundChatSendTests(unittest.TestCase):
             )
         self.assertEqual(result["response"], "submitted")
         insert.assert_called_once_with(self.target, "EXPLICIT_BACKGROUND")
-        click.assert_called_once_with(self.target)
+        enter.assert_called_once_with(self.target)
+        click.assert_not_called()
         self.assertEqual(
             [name for name, _ in calls],
             ["Emulation.setFocusEmulationEnabled",
@@ -169,7 +171,7 @@ class BackgroundChatSendTests(unittest.TestCase):
                 gesture.assert_not_called()
                 insert.assert_not_called()
 
-    def test_after_single_click_failure_remains_uncertain_and_restores_focus(self):
+    def test_after_single_keyboard_gesture_failure_remains_uncertain_and_restores_focus(self):
         calls = []
         responses = [
             {"focused": False, "visibility": "hidden",
@@ -184,13 +186,15 @@ class BackgroundChatSendTests(unittest.TestCase):
              patch.object(cdp, "evaluate", side_effect=responses), \
              patch.object(cdp, "target_call", side_effect=lambda t, op, arg, **kw: calls.append((op, arg))), \
              patch.object(cdp, "insert_text"), \
-             patch.object(cdp, "click_send", side_effect=cdp.CdpTimeoutError("gesture lost")) as click:
+             patch.object(cdp, "press_enter", side_effect=cdp.CdpTimeoutError("gesture lost")) as enter, \
+             patch.object(cdp, "click_send") as click:
             with self.assertRaises(BrowserSubmissionUncertain):
                 runtime.send_message(
                     self.target, "DO_NOT_REPLAY", background_focus=True,
                     wait_for_response=False, before_dispatch=lambda: None,
                 )
-        click.assert_called_once()
+        enter.assert_called_once()
+        click.assert_not_called()
         self.assertEqual(
             [event[1]["enabled"] for event in calls],
             [True, False],

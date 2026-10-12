@@ -47,12 +47,20 @@ const addMessage = (role, text) => {
   node.append(content);
   document.querySelector('#messages').append(node);
 };
-document.querySelector('button[aria-label="Send"]').addEventListener('click', () => {
+const sendDraft = () => {
   const text = editor.innerText.trim();
   if (!text) return;
   addMessage('user', text);
   editor.innerText = '';
   setTimeout(() => addMessage('assistant', 'DO_AGAIN_BROWSER_OK'), 100);
+};
+document.querySelector('button[aria-label="Send"]').addEventListener('click', sendDraft);
+// Synthetic local composer mimics Enter-to-send without any network calls.
+editor.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendDraft();
+  }
 });
 </script>""").encode("utf-8")
         self.send_response(200)
@@ -212,7 +220,8 @@ def main() -> int:
 
             if args.background:
                 background = launch_browser("background", config=load_config())
-                target = cdp.create_target(int(background["port"]), url, background=True)
+                # Use the interactive fixture, not the blank index page.
+                target = cdp.create_target(int(background["port"]), url + "legacy", background=True)
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     try:
@@ -223,6 +232,54 @@ def main() -> int:
                     time.sleep(0.2)
                 else:
                     raise RuntimeError("background fallback target did not become ready")
+
+                # Actual Chrome CDP integration, not a mock: in a hidden GUI
+                # tab, exercise the exact Input.insertText + single trusted
+                # Input.dispatchKeyEvent gesture proposed for receipt delivery.
+                # This fixture is local-only; it never contacts ChatGPT and
+                # cannot access the authenticated automation profile.
+                try:
+                    cdp.target_call(target, "Emulation.setFocusEmulationEnabled",
+                                    {"enabled": True}, timeout=10.0)
+                    prepared = cdp.evaluate(target, r"""(() => {
+                        const el=document.querySelector('[contenteditable="true"]');
+                        el.focus({preventScroll:true});
+                        return document.activeElement===el;
+                    })()""")
+                    if prepared is not True:
+                        raise RuntimeError("background keyboard fixture did not focus editor")
+                    expected = "DO_AGAIN_BACKGROUND_KEYBOARD_FIXTURE_ONCE"
+                    cdp.insert_text(target, expected)
+                    cdp.press_enter(target)
+                    deadline = time.monotonic() + 5
+                    result = None
+                    while time.monotonic() < deadline:
+                        result = cdp.evaluate(target, r"""(() => {
+                            const users=[...document.querySelectorAll(
+                                '#messages [data-message-author-role="user"]')];
+                            const composer=document.querySelector('[contenteditable="true"]');
+                            return {count:users.length,
+                                    text:users.map(el=>el.innerText.trim()),
+                                    empty:!composer.innerText.trim()};
+                        })()""")
+                        if isinstance(result, dict) and result.get("count") == 1:
+                            break
+                        time.sleep(0.1)
+                    if result != {"count": 1, "text": [expected], "empty": True}:
+                        raise RuntimeError(
+                            f"hidden Chrome did not accept one keyboard Send: {result!r}")
+                    # After the response settles, prove that a single gesture
+                    # did not duplicate the submitted user message.
+                    time.sleep(0.35)
+                    accepted = cdp.evaluate(target, r"""(() => (
+                        document.querySelectorAll(
+                        '#messages [data-message-author-role="user"]').length
+                    ))()""")
+                    if accepted != 1:
+                        raise RuntimeError("background keyboard gesture duplicated send")
+                finally:
+                    cdp.target_call(target, "Emulation.setFocusEmulationEnabled",
+                                    {"enabled": False}, timeout=10.0)
                 stop_browser(force=True)
 
             print("BROWSER_SMOKE_OK")
