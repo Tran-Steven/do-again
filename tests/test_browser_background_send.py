@@ -62,6 +62,77 @@ class BackgroundChatSendTests(unittest.TestCase):
         self.assertTrue(effects[0][1]["enabled"])
         self.assertFalse(effects[-1][1]["enabled"])
 
+    def test_explicit_background_mode_emulates_focus_without_activating_gui(self):
+        # Live regression: the v1 worker switched from auto to explicit
+        # background to keep its authenticated GUI Chrome session. The
+        # previous guard enabled emulation only for auto, blocking every Send.
+        self.config["preferred_mode"] = "background"
+        self.assertIs(self.config["allow_visible_fallback"], False)
+        calls = []
+        states = [
+            {"focused": False, "visibility": "hidden",
+             "url": "https://chatgpt.com/c/background-test",
+             "ready": "complete", "editor_visible": True},
+            "ready", True, True,
+        ]
+        def command(target, operation, arguments, **kwargs):
+            self.assertNotEqual(operation, "Page.bringToFront")
+            calls.append((operation, arguments))
+        with patch.object(runtime, "load_config", return_value=self.config), \
+             patch.object(runtime, "load_state", return_value=self.state), \
+             patch.object(runtime, "_assistant_snapshot", return_value={"busy": False}), \
+             patch.object(runtime, "_context_limit_warning", return_value=""), \
+             patch.object(cdp, "target_call", side_effect=command), \
+             patch.object(cdp, "evaluate", side_effect=states), \
+             patch.object(cdp, "insert_text") as insert, \
+             patch.object(cdp, "click_send") as click, \
+             patch.object(runtime.time, "sleep"):
+            result = runtime.send_message(
+                self.target, "EXPLICIT_BACKGROUND", wait_for_response=False,
+                background_focus=True,
+            )
+        self.assertEqual(result["response"], "submitted")
+        insert.assert_called_once_with(self.target, "EXPLICIT_BACKGROUND")
+        click.assert_called_once_with(self.target)
+        self.assertEqual(
+            [name for name, _ in calls],
+            ["Emulation.setFocusEmulationEnabled",
+             "Emulation.setFocusEmulationEnabled"],
+        )
+        self.assertEqual([c[1]["enabled"] for c in calls], [True, False])
+
+    def test_explicit_background_without_virtual_focus_remains_unsendable(self):
+        self.config["preferred_mode"] = "background"
+        with patch.object(runtime, "load_config", return_value=self.config), \
+             patch.object(runtime, "load_state", return_value=self.state), \
+             patch.object(cdp, "evaluate", return_value={
+                 "focused": False, "visibility": "hidden",
+             }), \
+             patch.object(cdp, "target_call") as events, \
+             patch.object(cdp, "insert_text") as insert, \
+             patch.object(cdp, "click_send") as click:
+            with self.assertRaises(BrowserPreDispatchBlocked):
+                runtime.send_message(self.target, "DO_NOT_SEND")
+        events.assert_not_called()
+        insert.assert_not_called()
+        click.assert_not_called()
+
+    def test_explicit_background_with_visible_fallback_does_not_grant_virtual_focus(self):
+        self.config.update(preferred_mode="background", allow_visible_fallback=True)
+        with patch.object(runtime, "load_config", return_value=self.config), \
+             patch.object(runtime, "load_state", return_value=self.state), \
+             patch.object(cdp, "evaluate", return_value={
+                 "focused": False, "visibility": "hidden",
+             }), \
+             patch.object(cdp, "target_call") as events, \
+             patch.object(cdp, "insert_text") as insert, \
+             patch.object(cdp, "click_send") as click:
+            with self.assertRaises(BrowserPreDispatchBlocked):
+                runtime.send_message(self.target, "DO_NOT_SEND", background_focus=True)
+        events.assert_not_called()
+        insert.assert_not_called()
+        click.assert_not_called()
+
     def test_virtual_focus_rejects_other_origins_or_unready_composer(self):
         for invalid in (
             {"focused": False, "visibility": "hidden",
