@@ -7,13 +7,16 @@ from .controller_configuration import validate_controller_configuration
 from .macos_execution import ExecutionBlocked
 
 
-def apply_controller_grant(config,grant,hosted=None,*,now=None):
+def apply_controller_grant(config,grant,hosted=None,*,browser=None,now=None):
     if not isinstance(grant,dict) or set(grant)!={'scope','goal','profile'}:
         raise ExecutionBlocked('controller grant package requires exact scope, goal and profile')
     from ..service.offline_continuation import digest
     config.update(controller_scope=grant['scope'],controller_goal=grant['goal'],
         controller_goal_sha256=digest(grant['goal']),controller_profile=grant['profile'])
+    if hosted is not None and browser is not None:
+        raise ExecutionBlocked('controller cannot combine hosted and browser planner grants')
     if hosted is not None:config['hosted_planning_scope']=hosted
+    if browser is not None:config['browser_planning_scope']=browser
     validate_controller_configuration(config,now=now)
 
 
