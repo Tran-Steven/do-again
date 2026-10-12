@@ -648,6 +648,28 @@ else:
             module.require_planner_grants_before_staging(proposal,self.root/'hosted.json',None)
         self.assertFalse(output.exists())
 
+    def test_controller_proposals_must_be_private_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        controller=self.root/'controller.json'
+        hosted=self.root/'hosted.json'
+        controller.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        hosted.write_text('{}')
+        controller.chmod(0o600)
+        hosted.chmod(0o644)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'operator-owned and private'):
+            module.prepare(self.root,self.root,self.root,output,
+                           controller_grant=controller,hosted_planner_grant=hosted)
+        self.assertFalse(output.exists())
+        hosted.chmod(0o600)
+        alias=self.root/'hosted-link.json'
+        alias.symlink_to(hosted)
+        with self.assertRaisesRegex(ValueError,'unalias'):
+            module.prepare(self.root,self.root,self.root,output,
+                           controller_grant=controller,hosted_planner_grant=alias)
+        self.assertFalse(output.exists())
+
     def test_hosted_planner_preflight_rejects_mismatched_identity_before_staging(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
