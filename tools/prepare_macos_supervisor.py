@@ -148,7 +148,11 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None):
+    if controller_grant is None and (hosted_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
+        raise ValueError('hosted capabilities require a separate controller package')
+    if controller_grant is not None and (canary_grant is not None or codex_grant is not None or classify_canary_partial):
+        raise ValueError('controller cannot inherit browser or synthetic model canary authority')
     if canary_grant is not None and codex_grant is not None:
         raise ValueError('browser and Codex canary grants cannot coexist')
     if jobpipe_offline_development and (canary_grant is not None or codex_grant is not None or classify_canary_partial):
@@ -347,6 +351,45 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
             'expires_at_utc':expires.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'network_access':False, 'application_submissions':False}
         require_jobpipe_grant(config,project_from_dict(jobpipe_project),now=issued)
+    if controller_grant is not None:
+        from do_again.supervisor.controller_installation import apply_controller_grant
+        def private_proposal(path):
+            path=Path(path)
+            if path.is_symlink() or path.stat().st_uid!=uid or path.stat().st_mode&0o077 or path.stat().st_nlink!=1:
+                raise ValueError('controller authorization proposal must be private and unaliased')
+            return json.loads(path.read_text())
+        if 'development_scope' not in config:
+            if installed is None or installed.get('development_scope',{}).get('kind')!='jobpipe-offline-v1':
+                raise ValueError('controller requires existing or explicitly prepared offline execution authority')
+            # Rebind only source identity through the administrator-approved stage;
+            # do not silently renew or broaden the existing offline grant.
+            config['development_scope']=dict(installed['development_scope'],source_sha=source_sha)
+        grant=private_proposal(controller_grant)
+        hosted=private_proposal(hosted_planner_grant) if hosted_planner_grant is not None else None
+        apply_controller_grant(config,grant,hosted)
+        jp=next(p for p in projects if p['account']=='_doagain_jp')
+        from do_again.supervisor.jobpipe_development import require_jobpipe_grant
+        from do_again.supervisor.macos_execution import project_from_dict
+        require_jobpipe_grant(config,project_from_dict(jp))
+        for path,blob in config['controller_profile']['test_files'].items():
+            if git(jobpipe,'rev-parse',jp['source_sha']+':'+path)!=blob:
+                raise ValueError('controller baseline test hash differs from sealed jobpipe snapshot')
+        if hosted is not None:
+            if codex_native_payload is None:raise ValueError('hosted planner requires exact native CLI payload')
+            native=Path(codex_native_payload)
+            if native.is_symlink() or not native.is_file() or native.stat().st_nlink!=1:
+                raise ValueError('native CLI payload must be regular and unaliased')
+            if hashlib.sha256(native.read_bytes()).hexdigest()!=hosted['payload_sha256']:
+                raise ValueError('native CLI payload differs from hosted authorization')
+            dependencies=subprocess.run(['/usr/bin/otool','-L',str(native)],check=True,capture_output=True,text=True).stdout.splitlines()[1:]
+            if any(not line.strip().startswith(('/usr/lib/','/System/Library/')) for line in dependencies):
+                raise ValueError('Codex payload has unsealed external dependencies')
+            target=payload/'runtimes/codex/bin/codex';target.parent.mkdir(parents=True)
+            shutil.copyfile(native,target);target.chmod(0o755)
+        from do_again.supervisor.controller_installation import validate_controller_stage,prepare_test_wheels
+        if controller_test_wheels is not None:
+            prepare_test_wheels(payload,config,controller_test_wheels)
+        validate_controller_stage(payload,config)
     selected_grant=canary_grant if canary_grant is not None else codex_grant
     if selected_grant is not None:
         grant_path=Path(selected_grant).resolve(strict=True)
@@ -431,6 +474,10 @@ if __name__=='__main__':
     grants.add_argument('--canary-grant',type=Path)
     grants.add_argument('--codex-grant',type=Path)
     grants.add_argument('--jobpipe-offline-development',action='store_true',help='Seal a 14-day jobpipe-only offline coding grant; does not resume or start workers')
+    parser.add_argument('--controller-test-wheels',type=Path,help='Offline directory of preapproved wheels named by artifact id')
+    parser.add_argument('--controller-grant',type=Path,help='Private exact controller scope/goal/profile for administrator review')
+    parser.add_argument('--hosted-planner-grant',type=Path,help='Separate private hosted-model authority; never inferred from execution')
+    parser.add_argument('--codex-native-payload',type=Path,help='Existing native Codex CLI payload matching the hosted grant')
     parser.add_argument('--jobpipe-migration-sha',help='Exact remote jobpipe main SHA for opt-in protected fast-forward')
     parser.add_argument('--classify-canary-partial-publication',action='store_true')
     args=parser.parse_args()
@@ -440,4 +487,5 @@ if __name__=='__main__':
                              classify_canary_partial=args.classify_canary_partial_publication,
                               sonary_repo=args.sonary_repo,
                               jobpipe_offline_development=args.jobpipe_offline_development,
-                              jobpipe_migration_sha=args.jobpipe_migration_sha),indent=2))
+                              jobpipe_migration_sha=args.jobpipe_migration_sha,controller_grant=args.controller_grant,
+                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels),indent=2))

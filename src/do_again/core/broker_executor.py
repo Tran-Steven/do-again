@@ -107,6 +107,10 @@ class BrokerExecutor:
                     'expected_head':status.get('authority',{}).get('repo_head'),
                     'expected_epoch':status.get('epoch'),
                     'request_fingerprint':request_fingerprint(request)}
+        if (request['operation'] == 'scratch_script'
+                and status.get('controller_enabled') is True
+                and request.get('request_id', '').startswith('offline-')):
+            return {'operation': 'development_execute', 'request': request}
         worktree = Path(status['worktree'])
         executables = [Path(value) for value in status['executables']]
 

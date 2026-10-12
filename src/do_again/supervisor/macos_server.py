@@ -131,6 +131,7 @@ class ProjectBroker:
             status = self.registry.status(self.project.repo)
             return {'operator_intent': status['intent'], 'epoch': status['epoch'],
                     'source_sha': self.config['source_sha'], 'uid': self.project.uid,
+                    'controller_enabled': self.config.get('controller_scope') is not None and self.project.account == '_doagain_jp',
                     'worktree': str(self.project.worktree),
                     'production_ready': self.config.get('production_ready', False),
                     'canary_authorized': self._canary_authorized(),
@@ -210,6 +211,17 @@ class ProjectBroker:
                 raise ExecutionBlocked('no root-installed Codex canary for CI status')
             from .model_checkpoint import observe_checkpoint
             return observe_checkpoint(self,self.codex.scope)
+        if (self.config.get('controller_scope') is not None and self.project.account == '_doagain_jp'
+                and packet.get('operation') in {'controller_start','controller_stop','controller_status','controller_tick',
+                    'development_execute','execute','git_commit','git_publish','dependency_install'}):
+            with self.lock:
+                if getattr(self, 'controller_backend', None) is None:
+                    from .controller_backend import create_controller_backend
+                    self.controller_backend = create_controller_backend(self)
+            if packet.get('operation') == 'development_execute':
+                return self.controller_backend.execute(packet)
+            if packet.get('operation') in {'execute','git_commit','git_publish','dependency_install'}:
+                self.controller_backend.guard_packet(packet)
         if packet.get('operation') in {'controller_start', 'controller_stop', 'controller_status', 'controller_tick'}:
             from .controller_service import controller_service
             return controller_service(self, packet)

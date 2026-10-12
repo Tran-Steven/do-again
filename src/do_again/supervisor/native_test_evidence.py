@@ -13,7 +13,7 @@ def observe_tests(*, expected_head, cases, measure, execute):
     if (not re.fullmatch('[0-9a-f]{40}', expected_head)
             or not isinstance(cases, tuple) or not cases or len(cases) > 64
             or len(set(cases)) != len(cases)
-            or any(not isinstance(c, str) or not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*', c) for c in cases)):
+            or any(not isinstance(c, str) or not re.fullmatch(r'(?:[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*|tests/(?:[A-Za-z_][A-Za-z_0-9]*/)*test_[A-Za-z_0-9]+\.py(?:::[A-Za-z_][A-Za-z_0-9]*)*)', c) for c in cases)):
         raise ExecutionBlocked('sealed native test profile is invalid')
     before = measure()
     def valid(value):

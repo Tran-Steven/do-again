@@ -629,6 +629,8 @@ def runtime_executables(config, current):
               'git':current/'runtimes/git/bin/git'}
     if any(config.get(key)!=str(path) for key,path in expected.items()):
         raise RuntimeError('invalid sealed runtime executable path')
+    if (config.get('controller_scope') or {}).get('planner')=='codex-cli':
+        expected['codex']=current/'runtimes/codex/bin/codex'
     return tuple(expected.values())
 
 
@@ -698,6 +700,12 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
             raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation')
     if config.get('live_canary') is not None and config.get('codex_canary') is not None:
         raise RuntimeError('browser and Codex grants cannot coexist in an installed runtime')
+    # Authenticated stage code is imported only after verify_stage succeeds,
+    # before account, authority, runtime or launchd mutation.
+    sys.path.insert(0,str(stage/'package'))
+    from do_again.supervisor.controller_installation import validate_controller_stage
+    try:validate_controller_stage(stage,config)
+    except Exception as exc:raise RuntimeError('controller stage authorization rejected') from exc
     previous_config=json.loads(prior_path.read_text()) if prior_path.exists() else None
     enrolling_sonary=validate_project_scope(config,previous_config)
     # Refuse a dirty or ambiguous protected source before any account/runtime
@@ -858,6 +866,10 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
         temporary.write_bytes(plistlib.dumps(definition));temporary.chmod(0o644)
         os.chown(temporary,0,0);os.replace(temporary,PLIST)
         run(['/bin/launchctl','bootstrap','system',str(PLIST)])
+        if config.get('hosted_planning_scope') is not None:
+            from do_again.supervisor.controller_codex_helper import qualify_codex_helper
+            jp=next(p for p in config['projects'] if p['account']=='_doagain_jp')
+            qualify_codex_helper(config,ROOT/'state'/jp['key'])
         wait_for_supervisor_readiness(config)
         journal['source_sha']=config['source_sha'];journal['status']='installed_maintenance'
         journal['runtime_transition']['phase']='complete'

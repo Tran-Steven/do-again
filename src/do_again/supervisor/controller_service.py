@@ -35,6 +35,6 @@ def controller_service(broker, packet):
             backend = getattr(broker, 'controller_backend', None)
             if backend is None or backend.controller.scope != scope:
                 raise ExecutionBlocked('sealed controller backend has not been installed and qualified')
-            operation = packet['operation']
-            if operation == 'controller_tick': return backend.tick(now)
-            return getattr(backend.controller, operation.split('_', 1)[1])(now)
+        operation = packet['operation']
+        if operation == 'controller_tick': return backend.tick(now)
+        return getattr(backend.controller, operation.split('_', 1)[1])(now)
