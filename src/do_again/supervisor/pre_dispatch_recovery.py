@@ -27,7 +27,8 @@ def _protected_file(path: Path, uid: int):
 def verify_pre_dispatch(config, project, request_id, intent, status):
     home = Path(config["operator_home"])
     uid = config["operator_uid"]
-    if (request_id != ORIGINAL_REQUEST
+    if (config.get("source_sha") != ORIGINAL_SOURCE
+            or request_id != ORIGINAL_REQUEST
             or project.get("account") != "_doagain_jp"
             or project.get("repo") != str(home / "jobpipe")
             or status.get("intent") != "maintenance"
@@ -54,6 +55,7 @@ def verify_pre_dispatch(config, project, request_id, intent, status):
     ids = value.get("request_ids") if isinstance(value, dict) else None
     if (not isinstance(value, dict) or value.get("schema_version") != 1
             or value.get("state") != "preparing"
+            or value.get("dispatch_started", False) is not False
             or value.get("payload_sha256") is not None
             or value.get("acknowledgment_token") is not None
             or not isinstance(ids, list) or not 1 <= len(ids) <= 20
