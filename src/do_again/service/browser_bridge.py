@@ -17,20 +17,20 @@ from pathlib import Path
 from ..core.schema import canonical_json
 from ..supervisor.macos_execution import ExecutionBlocked
 
-CALL_ID = re.compile(r'planner-[0-9a-f]{20}-[123]\\Z')
+CALL_ID = re.compile(r'planner-[0-9a-f]{20}-[123]')
 MAX_FRAME = 100000
 
 
 def read_frame(connection):
     buffer = bytearray()
-    while b'\\n' not in buffer:
+    while 10 not in buffer:
         chunk = connection.recv(min(8192, MAX_FRAME + 1 - len(buffer)))
         if not chunk:
             raise ExecutionBlocked('browser bridge closed before a complete frame')
         buffer.extend(chunk)
         if len(buffer) > MAX_FRAME:
             raise ExecutionBlocked('browser bridge frame exceeds bound')
-    raw, suffix = bytes(buffer).split(b'\\n', 1)
+    raw, suffix = bytes(buffer).split(bytes([10]), 1)
     if suffix:
         raise ExecutionBlocked('browser bridge sent more than one frame')
     try:
@@ -43,7 +43,7 @@ def read_frame(connection):
 
 
 def write_frame(connection, value):
-    data = canonical_json(value) + b'\\n'
+    data = canonical_json(value) + bytes([10])
     if len(data) > MAX_FRAME:
         raise ExecutionBlocked('browser bridge output exceeds bound')
     connection.sendall(data)
