@@ -38,7 +38,7 @@ class HighReasoningSelectionTests(unittest.TestCase):
         # Live disposable tab briefly exposed a composer, then reloaded and
         # lost the model-picker element. Retry hydration, not prompt Send.
         answers=iter(["page_loading","missing_picker","opened",
-                      {"min":"0","max":"2","value":"2"},True,True,True,True])
+                      {"min":"0","max":"2","value":"2"},True,True,True])
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(answers)) as ev, \
              patch.object(cdp,"target_call") as call, \
              patch.object(runtime.time,"sleep") as sleep:
