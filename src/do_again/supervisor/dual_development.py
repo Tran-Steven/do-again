@@ -95,7 +95,7 @@ def require_dual_offline_grant(
                 or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", scope["goal_revision"])
                 or not isinstance(status, dict)
                 or status.get("goal_revision") != scope["goal_revision"]
-                or status.get("intent") not in {"active", "maintenance"}
+                or status.get("operator_intent") not in {"active", "maintenance"}
                 or status.get("production_ready") is not False
                 or status.get("source_sha") != config["source_sha"]
                 or status.get("enforcement_verified") is not True
@@ -108,7 +108,7 @@ def require_dual_offline_grant(
 
     sonary = statuses.get("_doagain_so")
     if sonary is not None and (not isinstance(sonary, dict)
-            or sonary.get("intent") != "maintenance"
+            or sonary.get("operator_intent") != "maintenance"
             or sonary.get("production_ready") is not False
             or sonary.get("source_sha") != config["source_sha"]
             or sonary.get("enforcement_verified") is not True
