@@ -898,6 +898,22 @@ def _ensure_high_reasoning(target: cdp.Target) -> None:
             cdp.target_call(target,'Input.dispatchKeyEvent',{
                 'type':kind,'key':'Escape','code':'Escape',
                 'windowsVirtualKeyCode':27,'nativeVirtualKeyCode':27},timeout=10.0)
+    # A value of 2 *inside* an open picker is necessary but insufficient.
+    # Verify that ChatGPT persisted High after the picker was dismissed.
+    for _ in range(12):
+        persisted=cdp.evaluate(target, r"""(() => {
+            const options=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                .filter(el=>el.getBoundingClientRect().width>0);
+            return options.length===1
+                && options[0].getAttribute('aria-expanded')==='false'
+                && (options[0].innerText||'').trim()==='High';
+        })()""",timeout=10.0)
+        if persisted is True:
+            break
+        time.sleep(0.15)
+    else:
+        raise BrowserPreDispatchBlocked(
+            "ChatGPT did not persist High after closing the model picker; no prompt submitted")
 
 
 def _require_send_target_focus(target: cdp.Target) -> None:
