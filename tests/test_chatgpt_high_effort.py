@@ -31,6 +31,44 @@ class HighReasoningSelectionTests(unittest.TestCase):
         self.assertEqual([c.args[2]["type"] for c in call.call_args_list],
                          ["keyDown","keyUp","keyDown","keyUp"])
 
+    def test_new_chat_hydration_is_bounded_and_remains_high(self):
+        # Live disposable tab briefly exposed a composer, then reloaded and
+        # lost the model-picker element. Retry hydration, not prompt Send.
+        answers=iter(["page_loading","missing_picker","opened",
+                      {"min":"0","max":"2","value":"2"},True,True,True])
+        with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(answers)) as ev, \
+             patch.object(cdp,"target_call") as call, \
+             patch.object(runtime.time,"sleep") as sleep:
+            runtime._ensure_high_reasoning(self.target)
+        self.assertEqual(ev.call_count,7)
+        self.assertEqual(sleep.call_count,2)
+        self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
+                         ["Escape","Escape"])
+
+    def test_new_chat_without_stable_picker_refuses_send(self):
+        with patch.object(cdp,"evaluate",return_value="page_loading") as evaluate, \
+             patch.object(cdp,"target_call") as effect, \
+             patch.object(runtime.time,"sleep"):
+            with self.assertRaisesRegex(runtime.BrowserPreDispatchBlocked,"page hydration"):
+                runtime._ensure_high_reasoning(self.target)
+        self.assertEqual(evaluate.call_count,30)
+        effect.assert_not_called()
+
+    def test_new_chat_reloading_cdp_context_retries_before_send(self):
+        answers=iter(["page_loading","opened",
+                      {"min":"0","max":"2","value":"2"},True,True,True])
+        def attempt(*args,**kwargs):
+            current=next(answers)
+            if current=="page_loading":
+                raise cdp.CdpError("navigating")
+            return current
+        with patch.object(cdp,"evaluate",side_effect=attempt), \
+             patch.object(cdp,"target_call") as effect, \
+             patch.object(runtime.time,"sleep"):
+            runtime._ensure_high_reasoning(self.target)
+        self.assertEqual([c.args[2]["key"] for c in effect.call_args_list],
+                         ["Escape","Escape"])
+
     def test_already_high_is_idempotent_and_does_not_click_slider(self):
         values=iter(["opened",{"min":"0","max":"2","value":"2","x":1130,"y":460},
                      True,True,True])
@@ -55,7 +93,8 @@ class HighReasoningSelectionTests(unittest.TestCase):
         for state in ["missing_picker","other"]:
             with self.subTest(state=state), \
                  patch.object(cdp,"evaluate",return_value=state), \
-                 patch.object(cdp,"target_call") as call:
+                 patch.object(cdp,"target_call") as call, \
+                 patch.object(runtime.time,"sleep"):
                 with self.assertRaises(runtime.BrowserPreDispatchBlocked):
                     runtime._ensure_high_reasoning(self.target)
                 call.assert_not_called()
