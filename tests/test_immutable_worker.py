@@ -5,6 +5,7 @@ import os
 import tempfile
 import threading
 import sys
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import unittest
 from pathlib import Path
@@ -51,6 +52,56 @@ class WorkerAdmissionTests(unittest.TestCase):
         self.assertEqual(second[0],self.home/'jobpipe')
         self.assertNotEqual(first[1],second[1]);self.assertNotEqual(first[2],second[2])
 
+
+    def test_offline_dual_immutable_worker_requires_fresh_sibling_attestation(self):
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        cfg=copy.deepcopy(self.config)
+        cfg['production_ready']=False
+        for p in cfg['projects']:
+            p['source_sha']='b'*40
+        cfg['development_scope']={
+            'kind':'offline-dual-v1','source_sha':cfg['source_sha'],
+            'issued_at_utc':(now-timedelta(minutes=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'expires_at_utc':(now+timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'projects':[{'account':p['account'],'project_key':p['key'],
+                         'goal_revision':'accepted-goal'} for p in cfg['projects']],
+            'max_parallel_workers':2,
+            'network_access':False,'application_submissions':False,
+        }
+        da={**self.status,'production_ready':False,'inflight_request_ids':[]}
+        jp={**da,'uid':402,'worktree':self.projects[1]['worktree']}
+        siblings={'_doagain_da':da,'_doagain_jp':jp}
+        self.assertEqual(self.context(config=cfg,status=da,sibling_statuses=siblings)[0],
+                         self.home/'do-again')
+        self.assertEqual(self.context(project_name='jobpipe',config=cfg,status=jp,
+                                      sibling_statuses=siblings)[0],self.home/'jobpipe')
+        with self.assertRaisesRegex(OperatorError,'sibling statuses'):
+            self.context(config=cfg,status=da)
+        tampered={**siblings,'_doagain_jp':{**jp,'operator_intent':'paused'}}
+        with self.assertRaises(OperatorError):
+            self.context(config=cfg,status=da,sibling_statuses=tampered)
+        unresolved={**siblings,'_doagain_jp':{**jp,'unresolved_executions':[
+            {'request_id':'browser-48b9fd1c09734faf98f77944a64581f2'}]}}
+        with self.assertRaises(OperatorError):
+            self.context(config=cfg,status=da,sibling_statuses=unresolved)
+        unsafe=copy.deepcopy(cfg)
+        unsafe['development_scope']['application_submissions']=True
+        with self.assertRaises(OperatorError):
+            self.context(config=unsafe,status=da,sibling_statuses=siblings)
+
+    def test_native_dual_sibling_reader_only_uses_authenticated_broker_status(self):
+        cfg=copy.deepcopy(self.config)
+        cfg['development_scope']={'kind':'offline-dual-v1'}
+        own={'operator_intent':'active'}
+        other={'operator_intent':'maintenance'}
+        with patch.object(worker,'broker_request',return_value=other) as request:
+            snapshots=worker.native_dual_sibling_statuses(cfg,self.projects[0],own)
+        self.assertIs(snapshots['_doagain_da'],own)
+        self.assertIs(snapshots['_doagain_jp'],other)
+        request.assert_called_once_with(Path(self.projects[1]['repo']),{'operation':'status'})
+        with patch.object(worker,'broker_request') as request:
+            self.assertIsNone(worker.native_dual_sibling_statuses(self.config,self.projects[0],own))
+            request.assert_not_called()
 
     def test_optional_sonary_has_separate_identity_and_exact_canonical_case(self):
         sonary=self.home/'Sonary';key=project_identity(sonary)
