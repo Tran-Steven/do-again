@@ -7,8 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
-from ..core.schema import canonical_json, parse_utc, atomic_json
+from ..core.schema import canonical_json, parse_utc, atomic_json, OperatorError
 from ..supervisor.macos_execution import ExecutionBlocked
 
 
@@ -21,6 +22,13 @@ class CodexPlanner:
         grant = self.authorize(now)  # Root-sealed gate, independent of worker scope.
         if (not isinstance(grant, dict) or grant.get('provider') != 'openai'
                 or grant.get('transport') != 'codex-cli'
+                or grant.get('model') != 'gpt-6.1-sol'
+                or not isinstance(grant.get('backend_sha256'), str)
+                or not re.fullmatch('[0-9a-f]{64}', grant['backend_sha256'])
+                or grant.get('max_call_seconds') != 120
+                or grant.get('max_total_seconds') != 360
+                or grant.get('max_prompt_bytes') != 32768
+                or grant.get('max_answer_bytes') != 65536
                 or type(grant.get('execution_uid')) is not int
                 or grant.get('execution_uid') != 501
                 or grant.get('max_calls_per_cycle') != 1
@@ -28,7 +36,14 @@ class CodexPlanner:
                 or grant.get('worker_network_access') is not False
                 or grant.get('browser_messages') is not False
                 or grant.get('application_submissions') is not False
-                or not now < parse_utc(grant.get('expires_at_utc', ''))):
+                ):
+            raise ExecutionBlocked('separate hosted planning authority absent or differs')
+        try:
+            issued = parse_utc(grant.get('issued_at_utc', ''))
+            expires = parse_utc(grant.get('expires_at_utc', ''))
+        except (ValueError, TypeError, OperatorError):
+            raise ExecutionBlocked('hosted planning authorization timestamps invalid') from None
+        if not issued <= now < expires or (expires-issued).total_seconds() > 7200:
             raise ExecutionBlocked('separate hosted planning authority absent or differs')
         # Only pre-redacted repository evidence/goal enters this object. The
         # collector must exclude private candidate data and operational secrets.
