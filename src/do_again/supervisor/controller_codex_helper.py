@@ -139,6 +139,13 @@ class SealedCodexHelper:
 def validate_hosted_scope(config,grant,now):
     from ..service.offline_continuation import digest
     scope=config['controller_scope']
+    if grant is None:
+        raise ExecutionBlocked('codex-cli requires a separate approved hosted planner grant')
+    if isinstance(grant,dict) and ('network_endpoints' in grant or 'dns_resolvers' in grant):
+        endpoints=grant.get('network_endpoints')
+        resolvers=grant.get('dns_resolvers')
+        if endpoints==[] or resolvers==[]:
+            raise ExecutionBlocked('hosted planner requires explicitly approved public IPv4 endpoints and DNS resolvers; empty allowlists cannot activate autonomous development')
     required={'provider','transport','model','execution_uid','execution_gid','backend_sha256',
         'source_sha','goal_sha256','epoch','issued_at_utc','expires_at_utc',
         'max_calls_per_cycle','max_total_calls','max_call_seconds','max_total_seconds',
