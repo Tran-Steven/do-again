@@ -148,6 +148,30 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
+def require_planner_grants_before_staging(controller_grant, hosted_planner_grant, codex_native_payload):
+    """Fail before packaging a runtime when the requested planner has no authority."""
+    if controller_grant is None:
+        return
+    path=Path(controller_grant)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('controller grant must be a regular private proposal')
+    proposal=json.loads(path.read_text())
+    if not isinstance(proposal,dict) or set(proposal)!={'scope','goal','profile'}:
+        raise ValueError('controller grant requires exact scope, goal and profile')
+    scope=proposal['scope']
+    if not isinstance(scope,dict):
+        raise ValueError('controller scope must be a mapping')
+    planner=scope.get('planner')
+    if planner=='codex-cli':
+        if hosted_planner_grant is None or codex_native_payload is None:
+            raise ValueError('codex-cli controller requires both a separately approved hosted-planner grant and exact native Codex payload before staging; offline-only staging cannot activate autonomous coding')
+    elif planner=='sealed-offline':
+        if hosted_planner_grant is not None or codex_native_payload is not None:
+            raise ValueError('sealed-offline controller cannot inherit hosted planner access')
+    else:
+        raise ValueError('unrecognized controller planner; no stage prepared')
+
+
 def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None):
     if controller_grant is None and (hosted_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
         raise ValueError('hosted capabilities require a separate controller package')
@@ -165,6 +189,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         raise ValueError('Codex canary cannot inherit browser partial-publication disposition')
     if classify_canary_partial and canary_grant is None:
         raise ValueError('explicit partial disposition requires a fresh sealed canary grant')
+    require_planner_grants_before_staging(controller_grant,hosted_planner_grant,codex_native_payload)
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if sonary_repo is not None:
