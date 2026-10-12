@@ -30,7 +30,7 @@ def validate_scope(scope, *, binding, now: datetime):
     if (scope['kind'] != 'jobpipe-offline-controller-v1'
             or scope['repository'] != 'Tran-Steven/jobpipe'
             or scope['branch'] != 'operator-control'
-            or scope['planner'] not in {'sealed-offline', 'codex-cli'}
+            or scope['planner'] not in {'sealed-offline', 'codex-cli', 'chatgpt-browser-cdp'}
             or scope['integration'] != 'proposal-only'
             or any(scope[k] is not False for k in
                    ('network_access', 'application_submissions', 'browser_messages'))
