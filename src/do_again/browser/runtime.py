@@ -1145,7 +1145,20 @@ const buttons=[...document.querySelectorAll(
 )].filter(visible);
 if(inputs.length!==1 || buttons.length!==1 || buttons[0].disabled ||
    buttons[0].getAttribute('aria-disabled')==='true')return false;
-return String(inputs[0].value||inputs[0].innerText||inputs[0].textContent||'').trim()===EXPECTED;
+const editor=inputs[0], expected=EXPECTED;
+const raw=String(editor.value||editor.innerText||editor.textContent||'').trim();
+if(raw===expected)return true;
+// A contenteditable can render each actual line break as two newlines in
+// innerText while textContent omits the same structural breaks entirely.
+// Accept only that exact paired DOM representation, *not* arbitrary
+// whitespace-equivalence, so modified request IDs, tokens, spaces and text
+// remain fail-closed. Never apply this fallback to input/textarea values.
+if(!editor.isContentEditable || 'value' in editor || !expected.includes('\\n'))
+  return false;
+const rendered=String(editor.innerText||'').trim();
+const flattened=String(editor.textContent||'').trim();
+return rendered===expected.split('\\n').join('\\n\\n') &&
+       flattened===expected.split('\\n').join('');
 })()""".replace('EXPECTED', json.dumps(expected))
         deadline = time.monotonic()+10.0
         while cdp.evaluate(target, readiness, timeout=10.0) is not True:
