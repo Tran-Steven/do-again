@@ -40,16 +40,16 @@ class OneGestureDeliveryTests(unittest.TestCase):
             repo.mkdir()
             browser.register_project(repo,chat_url=self.target.url)
             replacement=cdp.Target('successor','https://chatgpt.com/c/next','','ws://127.0.0.1/next')
-            with patch.object(browser,'ensure_browser_running',return_value={'port':9224}), \\
-                 patch.object(browser,'_find_chatgpt_target',return_value=self.target), \\
-                 patch.object(browser,'wait_for_authenticated',return_value=(self.target,{})), \\
-                 patch.object(browser,'_assistant_snapshot',return_value={'busy':False}), \\
-                 patch.object(browser,'_page_contains',return_value=False), \\
-                 patch.object(browser,'_rollover_needed',return_value=False), \\
-                 patch.object(browser,'_context_limit_warning',return_value='context limit'), \\
-                 patch.object(browser,'_rollover_project_chat',return_value=(replacement,{})) as rollover, \\
+            with patch.object(browser,'ensure_browser_running',return_value={'port':9224}), \
+                 patch.object(browser,'_find_chatgpt_target',return_value=self.target), \
+                 patch.object(browser,'wait_for_authenticated',return_value=(self.target,{})), \
+                 patch.object(browser,'_assistant_snapshot',return_value={'busy':False}), \
+                 patch.object(browser,'_page_contains',return_value=False), \
+                 patch.object(browser,'_rollover_needed',return_value=False), \
+                 patch.object(browser,'_context_limit_warning',return_value='context limit'), \
+                 patch.object(browser,'_rollover_project_chat',return_value=(replacement,{})) as rollover, \
                  patch.object(browser,'_ensure_high_reasoning',side_effect=[None,
-                        BrowserPreDispatchBlocked('High missing from successor')]) as high, \\
+                        BrowserPreDispatchBlocked('High missing from successor')]) as high, \
                  patch.object(browser,'send_message',
                         side_effect=BrowserError('context limit')) as send:
                 with self.assertRaisesRegex(BrowserPreDispatchBlocked,'successor'):
