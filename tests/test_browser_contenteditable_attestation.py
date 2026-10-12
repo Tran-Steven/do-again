@@ -33,7 +33,8 @@ const button = {
   getAttribute: key => key === 'aria-disabled' ? fixture.ariaDisabled || null : null,
   getBoundingClientRect: () => ({width: 50, height: 30}),
 };
-const document = {querySelectorAll: selector =>
+const document = {activeElement: fixture.editorFocused === false ? null : editor,
+  querySelectorAll: selector =>
   selector.startsWith('#prompt-textarea')
     ? (fixture.extraEditors ? [editor, makeEditor(fixture.editor)] : [editor])
     : (fixture.extraButtons ? [button, button] : fixture.buttonMissing ? [] : [button])};
@@ -104,6 +105,9 @@ class ContenteditableSendReadinessTests(unittest.TestCase):
                                        flattened=self.expected.replace("\n", "")))
         self.assertFalse(self.evaluate(rendered=self.expected.replace("\n", "\r\n"),
                                        flattened=self.expected.replace("\n", "")))
+
+    def test_unfocused_composer_blocks_all_send_paths(self):
+        self.assertFalse(self.evaluate(editorFocused=False))
 
     def test_changed_receipt_identity_or_acknowledgment_is_blocked(self):
         changed_id = self.expected.replace("alpha", "ALPHA", 1)
