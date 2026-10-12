@@ -112,6 +112,61 @@ class BrowserRuntimeTests(unittest.TestCase):
             self.assertEqual(saved["resolved_mode"], "headless")
             self.assertTrue(saved["authenticated"])
 
+    def test_slow_initial_composer_keeps_login_window_for_interactive_auth(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "chrome"
+            binary.write_text("", encoding="utf-8")
+            target = cdp.Target("target", "https://chatgpt.com/", "",
+                                "ws://127.0.0.1/target")
+            launches = []
+            probes = []
+
+            def launch(mode, **kwargs):
+                launches.append(mode)
+                return {"pid": 101 + len(launches), "port": 9223, "mode": mode}
+
+            def authenticate(port, *, timeout, **kwargs):
+                probes.append((len(launches), timeout))
+                if len(probes) == 1:
+                    raise BrowserError("ChatGPT did not load a usable composer; check connectivity and retry")
+                return target, {"prompt": True, "url": "https://chatgpt.com/"}
+
+            with (
+                patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}),
+                patch("do_again.browser.runtime.discover_browser", return_value=binary),
+                patch("do_again.browser.runtime.stop_browser") as stop,
+                patch("do_again.browser.runtime.launch_browser", side_effect=launch),
+                patch("do_again.browser.runtime.wait_for_authenticated", side_effect=authenticate),
+                patch("do_again.browser.runtime.browser_status", return_value={
+                    "running": True, "authenticated": True,
+                    "mode": "background", "session_ready": True,
+                }),
+            ):
+                result = setup_browser(mode="background", run_iteration_test=False)
+
+            self.assertEqual(probes[0], (1, 6.0))
+            self.assertEqual(probes[1], (1, 600.0))
+            self.assertEqual(launches, ["visible", "background"])
+            self.assertTrue(result["session_ready"])
+            self.assertEqual(stop.call_count, 2)
+
+    def test_login_does_not_swallow_other_browser_transport_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / "chrome"
+            binary.write_text("", encoding="utf-8")
+            with (
+                patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}),
+                patch("do_again.browser.runtime.discover_browser", return_value=binary),
+                patch("do_again.browser.runtime.stop_browser"),
+                patch("do_again.browser.runtime.launch_browser",
+                      return_value={"pid": 101, "port": 9223, "mode": "visible"}),
+                patch("do_again.browser.runtime.wait_for_authenticated",
+                      side_effect=BrowserError("CDP endpoint disconnected")) as authenticate,
+            ):
+                with self.assertRaisesRegex(BrowserError, "CDP endpoint disconnected"):
+                    setup_browser(mode="background", run_iteration_test=False)
+            authenticate.assert_called_once()
+            
     def test_setup_auto_falls_back_to_background_when_headless_auth_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict(os.environ, {"DO_AGAIN_HOME": tmp}):
