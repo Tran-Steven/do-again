@@ -648,6 +648,17 @@ else:
             module.require_planner_grants_before_staging(proposal,self.root/'hosted.json',None)
         self.assertFalse(output.exists())
 
+    def test_hosted_planner_preflight_rejects_mismatched_identity_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        hosted=self.root/'hosted.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        hosted.write_text(json.dumps({'source_sha':'old','network_endpoints':[],'dns_resolvers':[]}))
+        with self.assertRaises(Exception):
+            module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
+        self.assertFalse((self.root/'payload').exists())
+
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
