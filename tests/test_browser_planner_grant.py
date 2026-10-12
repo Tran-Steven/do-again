@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timedelta, timezone
-from do_again.service.browser_planner import validate_browser_planner_grant
+from do_again.service.browser_planner import validate_browser_planner_grant, BrowserResponseTransport
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 class BrowserPlannerTests(unittest.TestCase):
@@ -33,6 +33,31 @@ class BrowserPlannerTests(unittest.TestCase):
             with self.subTest(wrong=wrong):
                 with self.assertRaises(ExecutionBlocked):
                     check(wrong)
+
+    def test_reply_bound_to_reserved_call_and_conversation(self):
+        import json
+        call = {'call_id': 'planner-' + 'a'*20 + '-1'}
+        grant = {'conversation_id': '01234567-89ab-4cde-8012-0123456789ab',
+                 'max_prompt_bytes': 32768, 'max_answer_bytes': 65536}
+        result = {'gap': 'g', 'acceptance': 'a', 'script': 'print(1)'}
+        def sender(message, *, conversation_id, call_id):
+            self.assertEqual(conversation_id, grant['conversation_id'])
+            self.assertEqual(call_id, call['call_id'])
+            return {'conversation_id': conversation_id,
+                    'response': json.dumps({'call_id': call_id, 'result': result})}
+        transport = BrowserResponseTransport(sender)
+        self.assertEqual(transport('{}', {}, call=call, grant=grant), result)
+        with self.assertRaises(ExecutionBlocked):
+            transport('{}', {}, call={'call_id': 'unreserved'}, grant=grant)
+        bad = BrowserResponseTransport(
+            lambda *a, **kw: {'conversation_id': 'other', 'response': '{}'})
+        with self.assertRaises(ExecutionBlocked):
+            bad('{}', {}, call=call, grant=grant)
+        wrong_call = BrowserResponseTransport(
+            lambda *a, **kw: {'conversation_id': grant['conversation_id'],
+                              'response': json.dumps({'call_id': 'other', 'result': result})})
+        with self.assertRaises(ExecutionBlocked):
+            wrong_call('{}', {}, call=call, grant=grant)
 
 if __name__=='__main__':
     unittest.main()
