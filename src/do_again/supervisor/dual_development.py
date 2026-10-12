@@ -96,6 +96,12 @@ def require_dual_offline_grant(
                 or not isinstance(status, dict)
                 or status.get("goal_revision") != scope["goal_revision"]
                 or status.get("intent") not in {"active", "maintenance"}
+                or status.get("production_ready") is not False
+                or status.get("source_sha") != config["source_sha"]
+                or status.get("enforcement_verified") is not True
+                or status.get("enforcement_blocker") is not None
+                or not isinstance(status.get("authority"), dict)
+                or status["authority"].get("repo_head") != project_config["source_sha"]
                 or status.get("unresolved_executions") != []
                 or status.get("inflight_request_ids") != []):
             raise ExecutionBlocked("dual development sibling goal or execution is not admitted")
@@ -103,6 +109,13 @@ def require_dual_offline_grant(
     sonary = statuses.get("_doagain_so")
     if sonary is not None and (not isinstance(sonary, dict)
             or sonary.get("intent") != "maintenance"
+            or sonary.get("production_ready") is not False
+            or sonary.get("source_sha") != config["source_sha"]
+            or sonary.get("enforcement_verified") is not True
+            or sonary.get("enforcement_blocker") is not None
+            or not isinstance(sonary.get("authority"), dict)
+            or sonary["authority"].get("repo_head") !=
+               next(p["source_sha"] for p in protected if p["account"] == "_doagain_so")
             or sonary.get("unresolved_executions") != []
             or sonary.get("inflight_request_ids") != []):
         raise ExecutionBlocked("Sonary must remain in quiescent maintenance")
