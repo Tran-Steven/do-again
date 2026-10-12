@@ -44,7 +44,7 @@ class LoopTests(unittest.TestCase):
             'deduplicate': 'def deduplicate(ids):\n    return list(dict.fromkeys(ids))\nassert deduplicate(["a", "b", "a"]) == ["a", "b"]\n',
             'resume_handoff': 'def resume_handoff(completed, session_matches):\n    return completed is True and session_matches is True\nassert not resume_handoff(True, False)\nassert resume_handoff(True, True)\n'}
         proposal = self.proposal()
-        proposal['request']['args']['script'] = changes[name]
+        proposal['request']['args']['content'] = changes[name]
         proposal.update(gap=name, acceptance='fixture acceptance probes pass for '+name,
                         evidence_sha256=hashlib.sha256(canonical_json(evidence)).hexdigest())
         return proposal
@@ -69,7 +69,7 @@ class LoopTests(unittest.TestCase):
         record = state['requests'][-1]; rid = record['request']['request_id']
         if rid in self.executions: return
         before = self.product.read_text()
-        after = before+record['request']['args']['script']
+        after = before+record['request']['args']['content']
         exec(compile(after, str(self.product), 'exec'), {})  # Pure offline fixture regression tests.
         self.product.write_text(after)
         self.executions.append(rid)

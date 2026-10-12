@@ -112,8 +112,9 @@ class OfflineContinuation:
         if (request.get('operation') != 'scratch_script'
                 or request.get('schema_version') != 1
                 or not isinstance(request.get('args'), dict)
-                or not isinstance(request['args'].get('script'), str)
-                or not 1 <= len(request['args']['script'].encode()) <= 65536
+                or request['args'].get('language') != 'python'
+                or not isinstance(request['args'].get('content'), str)
+                or not 1 <= len(request['args']['content'].encode()) <= 65536
                 or not isinstance(request.get('expected'), dict)
                 or not re.fullmatch('[0-9a-f]{40}', str(request['expected'].get('repo_head', '')))
                 or not isinstance(request.get('limits'), dict)

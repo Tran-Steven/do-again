@@ -27,7 +27,7 @@ class ContinuationTests(unittest.TestCase):
 
     def proposal(self):
         return dict(request={'schema_version': 1, 'operation': 'scratch_script',
-                    'args': {'script': 'pass'}, 'expected': {'repo_head': 'c'*40},
+                    'args': {'language': 'python', 'content': 'pass'}, 'expected': {'repo_head': 'c'*40},
                     'limits': {'timeout_seconds': 120}, 'issued_at_utc': self.now.isoformat(),
                     'expires_at_utc': (self.now+timedelta(minutes=10)).isoformat()},
                     gap='fixture checkpoint recovery gap', acceptance='restart retains exact checkpoint',
