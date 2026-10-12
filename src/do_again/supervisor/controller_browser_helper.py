@@ -91,7 +91,8 @@ def qualify_operator_browser_bridge(broker):
         Path(broker.config['operator_home']) / '.do_again/browser/planner.sock')
     peer = client.probe_authorized(
         conversation_id=grant['conversation_id'],
-        profile_sha256=grant['profile_sha256'])
+        profile_sha256=grant['profile_sha256'],
+        grant_sha256=browser_grant_digest(grant))
     if peer['peer_uid'] != 501:
         raise ExecutionBlocked('operator browser peer identity differs')
     proof = {
