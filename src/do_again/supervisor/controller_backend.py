@@ -7,6 +7,7 @@ from ..core.schema import canonical_json
 from ..service.offline_continuation import OfflineContinuation, digest
 from ..service.controller_loop import ControllerLoop, DeterministicPlanner
 from ..service.controller_planner import CodexPlanner, PlanningCallJournal
+from ..service.planner_selection import select_controller_planner
 from .controller_configuration import validate_controller_configuration
 from .controller_receipts import NativeDevelopmentVerifier
 from .controller_transport import ControllerHistory
@@ -32,12 +33,15 @@ class ControllerBackend:
         self.verifier=NativeDevelopmentVerifier(source_sha=broker.config['source_sha'],
             observe_execution=lambda rid,fp:broker.ledger.observe_request(broker.project.key,rid,fp),
             observe_development=lambda rid,fp:self.attestations.observe(broker.project.key,rid,fp))
-        if scope['planner']=='sealed-offline':self.planner=DeterministicPlanner(self.offline_select)
-        else:
+        def codex_planner():
             from .controller_codex_helper import SealedCodexHelper
             helper=SealedCodexHelper(broker.config,broker.state,self.admission)
             journal=PlanningCallJournal(broker.state/'planning-calls.json')
-            self.planner=CodexPlanner(helper.authorize,journal.reserve,helper.transport,self.build_request)
+            return CodexPlanner(helper.authorize,journal.reserve,helper.transport,self.build_request)
+        self.planner=select_controller_planner(
+            scope['planner'],
+            offline_factory=lambda:DeterministicPlanner(self.offline_select),
+            codex_factory=codex_planner)
 
     @contextmanager
     def admission(self):
