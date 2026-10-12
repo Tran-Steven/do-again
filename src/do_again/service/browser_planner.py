@@ -110,7 +110,8 @@ class BrowserResponseTransport:
             raise ExecutionBlocked('browser envelope exceeds bounded transmission budget')
         # The broker must have reserved the call before this single dispatch.
         received = self.send_once(message, conversation_id=grant['conversation_id'],
-                                  call_id=call['call_id'])
+                                  call_id=call['call_id'],
+                                  profile_sha256=grant['profile_sha256'])
         if (not isinstance(received, dict) or set(received) != {'conversation_id', 'response'}
                 or received['conversation_id'] != grant['conversation_id']
                 or not isinstance(received['response'], str)
