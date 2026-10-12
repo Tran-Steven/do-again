@@ -820,6 +820,33 @@ return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: 
 
 
 def _ensure_high_reasoning(target: cdp.Target) -> None:
+    """Set and verify High in the dedicated background tab without GUI focus.
+
+    ChatGPT's nested model picker ignores Escape while Chrome treats a
+    background tab as unfocused. CDP focus emulation delivers the key events
+    without activating the window. Disable emulation even if the UI fails;
+    never send unless the closed model picker still reports High afterward.
+    """
+    try:
+        cdp.target_call(target,"Emulation.setFocusEmulationEnabled",
+                        {"enabled":True},timeout=10.0)
+        _ensure_high_reasoning_focused(target)
+    finally:
+        cdp.target_call(target,"Emulation.setFocusEmulationEnabled",
+                        {"enabled":False},timeout=10.0)
+    persisted=cdp.evaluate(target,r"""(() => {
+        const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+            .filter(el=>el.getBoundingClientRect().width>0);
+        return buttons.length===1
+            && buttons[0].getAttribute('aria-expanded')==='false'
+            && (buttons[0].innerText||'').trim()==='High';
+    })()""",timeout=10.0)
+    if persisted is not True:
+        raise BrowserPreDispatchBlocked(
+            "ChatGPT High did not persist after background focus was restored; no prompt submitted")
+
+
+def _ensure_high_reasoning_focused(target: cdp.Target) -> None:
     """Select and verify ChatGPT High before a model-authored development Send.
 
     Product-level effort must be selected in the real UI; prompt instructions
