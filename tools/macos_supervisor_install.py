@@ -12,6 +12,7 @@ import pwd
 import re
 import shutil
 import subprocess
+import time
 import sys
 import uuid
 from pathlib import Path
@@ -601,9 +602,26 @@ def preview_cutover(config, registry, live):
             verify_worker_quiescence(config)
             if live:
                 run(['/bin/launchctl','bootout','system/'+LABEL])
-                stopped=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
-                if stopped.returncode!=113:raise RuntimeError('helper stop is uncertain; cutover deferred')
+                # launchctl bootout may return before the service disappears.
+                # Poll observation only: no second bootout, force-kill, or
+                # unchecked cutover. The root-owned package and ledger remain
+                # unchanged unless the actual service is conclusively absent.
+                verify_helper_stopped()
         yield
+
+
+def verify_helper_stopped(*, timeout=12.0):
+    """Wait for launchd's asynchronous bootout without additional effects."""
+    deadline=time.monotonic()+timeout
+    while True:
+        stopped=subprocess.run(
+            ['/bin/launchctl','print','system/'+LABEL],
+            capture_output=True, timeout=8)
+        if stopped.returncode==113:
+            return
+        if stopped.returncode!=0 or time.monotonic()>=deadline:
+            raise RuntimeError('helper stop is uncertain; cutover deferred')
+        time.sleep(0.15)
 
 
 def runtime_executables(config, current):
