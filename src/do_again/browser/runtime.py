@@ -2041,8 +2041,15 @@ def register_project(
     if control_branch is not None:
         value["control_branch"] = control_branch
     if chat_url is not None:
+        prior_url = str(value.get("chat_url") or "")
         value["chat_url"] = chat_url
-        value['binding_generation']=uuid.uuid4().hex
+        # The binding generation represents the exact ChatGPT conversation,
+        # not the number of times setup or a CLI registration is repeated.
+        # Re-registering an unchanged URL must not invalidate durable
+        # in-flight/outbox evidence bearing the original binding identity.
+        # This also preserves the legacy implicit generation when present.
+        if prior_url != chat_url:
+            value["binding_generation"] = uuid.uuid4().hex
     _atomic_json(_project_record_path(repo), value)
     return value
 
