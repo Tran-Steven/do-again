@@ -66,7 +66,7 @@ class BrokerBrowserBridge:
             raise ExecutionBlocked('browser operator UID must equal approved identity')
         self.expected_uid = expected_uid
 
-    def probe_authorized(self, *, conversation_id, profile_sha256):
+    def probe_authorized(self, *, conversation_id, profile_sha256, grant_sha256):
         """Zero-model-call operator socket and grant identity probe."""
         path = self.socket_path
         if not path.is_absolute() or path.is_symlink():
@@ -84,17 +84,19 @@ class BrokerBrowserBridge:
             client.connect(str(path))
             if authenticated_peer_uid(client) != self.expected_uid:
                 raise ExecutionBlocked('browser bridge peer is not the approved operator')
-            write_frame(client, {'operation':'probe','nonce':nonce})
+            write_frame(client, {'operation':'probe','nonce':nonce,
+                                 'grant_sha256':grant_sha256})
             result = read_frame(client)
-        if (set(result) != {'operation','nonce','conversation_id','profile_sha256'}
+        if (set(result) != {'operation','nonce','conversation_id','profile_sha256','grant_sha256'}
                 or result['operation'] != 'probe-result' or result['nonce'] != nonce
                 or result['conversation_id'] != conversation_id
-                or result['profile_sha256'] != profile_sha256):
+                or result['profile_sha256'] != profile_sha256
+                or result['grant_sha256'] != grant_sha256):
             raise ExecutionBlocked('browser bridge probe identity differs')
         return {'peer_uid': self.expected_uid, 'conversation_id': conversation_id,
                 'profile_sha256': profile_sha256}
 
-    def send_once(self, message, *, conversation_id, call_id, profile_sha256):
+    def send_once(self, message, *, conversation_id, call_id, profile_sha256, grant_sha256):
         path = self.socket_path
         if not path.is_absolute() or path.is_symlink():
             raise ExecutionBlocked('browser bridge socket must be absolute and unaliased')
@@ -108,7 +110,8 @@ class BrokerBrowserBridge:
         if not isinstance(message, str) or not isinstance(call_id, str) or not CALL_ID.fullmatch(call_id):
             raise ExecutionBlocked('browser bridge requires a reserved planner call')
         request = {'call_id': call_id, 'conversation_id': conversation_id,
-                   'profile_sha256': profile_sha256, 'message': message}
+                   'profile_sha256': profile_sha256, 'grant_sha256':grant_sha256,
+                   'message': message}
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(120.0)
             client.connect(str(path))
@@ -116,9 +119,10 @@ class BrokerBrowserBridge:
                 raise ExecutionBlocked('browser bridge peer is not the approved operator')
             write_frame(client, request)
             reply = read_frame(client)
-        if (set(reply) != {'call_id', 'conversation_id', 'response'}
+        if (set(reply) != {'call_id', 'conversation_id', 'grant_sha256', 'response'}
                 or reply['call_id'] != call_id
                 or reply['conversation_id'] != conversation_id
+                or reply['grant_sha256'] != grant_sha256
                 or not isinstance(reply['response'], str)):
             raise ExecutionBlocked('browser bridge result differs from reserved call')
         return {'conversation_id': conversation_id, 'response': reply['response']}
