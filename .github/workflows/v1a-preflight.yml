@@ -40,3 +40,15 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -p test_macos_supervisor_installation.py -v
+
+      - name: Run ChatGPT browser planner protocol and grant regressions on macOS
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m unittest discover -s tests -p 'test_browser*.py' -v
+          python -m unittest discover -s tests -p test_operator_browser_bridge.py -v
+          python -m unittest discover -s tests -p test_planner_service.py -v
+          python -m unittest discover -s tests -p test_sealed_browser_helper.py -v
+          python -m unittest discover -s tests -p test_controller_provider_scope.py -v
+          python -m unittest discover -s tests -p test_planner_selection.py -v
+          python -m unittest discover -s tests -p test_planner_contract.py -v
