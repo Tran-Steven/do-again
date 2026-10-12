@@ -210,6 +210,11 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     source_sha=git(source,'rev-parse','HEAD')
     uid=os.getuid();gid=os.getgid();identity=pwd.getpwuid(uid)
     if uid==0:raise ValueError('prepare the bundle as the operator, not root')
+    # Preflight must use the exact checked-out candidate, not an installed Do Again package.
+    # The earlier source path insertion occurred only after this validation call.
+    source_package=str(source/'src')
+    if source_package not in sys.path:
+        sys.path.insert(0,source_package)
     validate_planner_authorization_preflight(source_sha,uid,gid,controller_grant,hosted_planner_grant)
     installed=None
     installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')
