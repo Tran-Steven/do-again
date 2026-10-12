@@ -218,18 +218,25 @@ def _reconcile_uncertain_delivery(repo: Path, state_dir: Path, state: dict[str, 
         raise BrowserSubmissionUncertain('Uncertain receipt binding generation changed; manual reconciliation required')
     session = ensure_browser_running(verify_auth=True)
     target = browser_runtime._find_chatgpt_target(int(session["port"]), chat_url)
-    if target is not None and browser_runtime._page_contains(target, str(state["batch_marker"])):
-        # Visibility is not acknowledgment. Legacy uncertain batches without a
-        # causally bound token remain blocked; historical probe replies cannot clear them.
-        state = dict(state, state='visible', message_visible=True)
+    if target is not None:
+        # Do not confuse legacy page text with proof of delivery: the old
+        # The legacy text probe can miss user turns in modern ChatGPT layouts
+        # even when the exact, causally bound receipt marker is present.
+        # Never gate stronger token-and-role attestation behind that probe.
+        # A legacy receipt without an acknowledgment token stays blocked.
         token = str(state.get('acknowledgment_token') or '')
-        observation = browser_runtime.receipt_acknowledgment(target, str(state['batch_marker']), token)
-        if observation.get('visible') and observation.get('acknowledged'):
-            state = dict(state, state='acknowledged', assistant_acknowledged=True)
+        observation = browser_runtime.receipt_acknowledgment(
+            target, str(state['batch_marker']), token
+        )
+        visible = observation.get('visible') is True
+        if visible:
+            state = dict(state, state='visible', message_visible=True)
+            if observation.get('acknowledged') is True:
+                state = dict(state, state='acknowledged', assistant_acknowledged=True)
+                atomic_json(_uncertain_delivery_path(state_dir), state)
+                _acknowledge_uncertain_batch(state_dir, paths, state)
+                return len(paths)
             atomic_json(_uncertain_delivery_path(state_dir), state)
-            _acknowledge_uncertain_batch(state_dir, paths, state)
-            return len(paths)
-        atomic_json(_uncertain_delivery_path(state_dir), state)
     age = time.time() - float(state.get("first_seen_epoch", time.time()))
     ack_token = str(state.get("ack_probe_token") or "")
     if ack_token and target is not None:

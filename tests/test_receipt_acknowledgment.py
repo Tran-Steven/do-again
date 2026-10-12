@@ -55,6 +55,44 @@ class ReceiptAcknowledgmentTests(unittest.TestCase):
         self.assertTrue(self.path.exists())
         self.assertTrue((self.state / 'incidents/browser-submission-unacknowledged.json').exists())
 
+    def test_exact_bound_ack_reconciles_when_legacy_text_probe_misses_user_turn(self):
+        # Regression: current ChatGPT can expose assistant nodes while the
+        # old body/heading text probe reports no user turn. A token-bearing
+        # role/ordering observation is independently sufficient.
+        with patch.object(browser, 'project_record', return_value=self.record), \
+             patch.object(daemon, 'ensure_browser_running', return_value={'port': 9224}), \
+             patch.object(browser, '_find_chatgpt_target', return_value=object()), \
+             patch.object(browser, '_page_contains', return_value=False) as legacy, \
+             patch.object(browser, 'receipt_acknowledgment',
+                          return_value={'visible': True, 'acknowledged': True}) as ack, \
+             patch.object(browser, 'send_message') as send:
+            result = daemon._reconcile_uncertain_delivery(self.repo, self.state,
+                daemon._read_uncertain_delivery(self.state))
+        self.assertEqual(result, 1)
+        ack.assert_called_once()
+        legacy.assert_not_called()
+        send.assert_not_called()
+        self.assertFalse(self.path.exists())
+        self.assertFalse(daemon._uncertain_delivery_path(self.state).exists())
+        evidence = json.loads(daemon._delivery_evidence_path(self.state, self.intent).read_text())
+        self.assertTrue(evidence['assistant_acknowledged'])
+
+    def test_text_probe_alone_never_reconciles_without_bound_token_proof(self):
+        with patch.object(browser, 'project_record', return_value=self.record), \
+             patch.object(daemon, 'ensure_browser_running', return_value={'port': 9224}), \
+             patch.object(browser, '_find_chatgpt_target', return_value=object()), \
+             patch.object(browser, '_page_contains', return_value=True) as legacy, \
+             patch.object(browser, 'receipt_acknowledgment',
+                          return_value={'visible': False, 'acknowledged': False}), \
+             patch.object(browser, 'send_message') as send:
+            with self.assertRaises(BrowserSubmissionUncertain):
+                daemon._reconcile_uncertain_delivery(self.repo, self.state,
+                    daemon._read_uncertain_delivery(self.state))
+        legacy.assert_not_called()
+        send.assert_not_called()
+        self.assertTrue(self.path.exists())
+        self.assertTrue(daemon._uncertain_delivery_path(self.state).exists())
+
     def test_ack_requires_original_user_evidence(self):
         with self.assertRaises(BrowserSubmissionUncertain):
             self.reconcile({'visible': False, 'acknowledged': True})
