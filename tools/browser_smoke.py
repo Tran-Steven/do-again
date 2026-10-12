@@ -220,7 +220,8 @@ def main() -> int:
 
             if args.background:
                 background = launch_browser("background", config=load_config())
-                target = cdp.create_target(int(background["port"]), url, background=True)
+                # Use the interactive fixture, not the blank index page.
+                target = cdp.create_target(int(background["port"]), url + "legacy", background=True)
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     try:
