@@ -18,12 +18,12 @@ class HighReasoningSelectionTests(unittest.TestCase):
         # The live October 2026 UI exposes 0=Instant,1=Medium,2=High.
         values=iter([
             "opened", {"min":"0","max":"2","value":"1","x":1130,"y":460},
-            True, True,
+            True, True, True,
         ])
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(values)) as ev, \
              patch.object(cdp,"target_call",return_value={}) as call:
             runtime._ensure_high_reasoning(self.target)
-        self.assertEqual(ev.call_count,4)
+        self.assertEqual(ev.call_count,5)
         self.assertEqual([c.args[1] for c in call.call_args_list],
                          ["Input.dispatchKeyEvent"]*4)
         self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
@@ -33,12 +33,23 @@ class HighReasoningSelectionTests(unittest.TestCase):
 
     def test_already_high_is_idempotent_and_does_not_click_slider(self):
         values=iter(["opened",{"min":"0","max":"2","value":"2","x":1130,"y":460},
-                     True,True])
+                     True,True,True])
         with patch.object(cdp,"evaluate",side_effect=lambda *a,**kw:next(values)), \
              patch.object(cdp,"target_call") as call:
             runtime._ensure_high_reasoning(self.target)
         self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
                          ["Escape","Escape"])
+
+    def test_high_slider_without_persisted_label_blocks_send(self):
+        # The slider can transiently show 2 even if ChatGPT declines to save.
+        values=["opened",{"min":"0","max":"2","value":"2","x":1130,"y":460},
+                True]+[False]*12
+        with patch.object(cdp,"evaluate",side_effect=values), \
+             patch.object(cdp,"target_call"), \
+             patch.object(runtime.time,"sleep"):
+            with self.assertRaisesRegex(runtime.BrowserPreDispatchBlocked,
+                                        "did not persist High"):
+                runtime._ensure_high_reasoning(self.target)
 
     def test_unknown_selector_fails_before_any_mouse_or_message(self):
         for state in ["missing_picker","other"]:
