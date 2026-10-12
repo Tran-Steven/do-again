@@ -30,6 +30,7 @@ class PreDispatchRecoveryTests(unittest.TestCase):
             "key": "f" * 64,
         }
         self.config = {"operator_home": str(self.home), "operator_uid": os.getuid(),
+                       "source_sha": ORIGINAL_SOURCE,
                        "authority_path": str(self.home / "root" / "authority.db"),
                        "projects": [{**self.project, "uid": 450}], "production_ready": False}
         self.status = {"intent": "maintenance", "epoch": MAINTENANCE_EPOCH}
@@ -146,6 +147,7 @@ class PreDispatchRecoveryTests(unittest.TestCase):
     def test_any_dispatch_or_acknowledgment_blocks_recovery(self):
         for change in (
             {"state": "dispatch_started"},
+            {"dispatch_started": True},
             {"payload_sha256": "a" * 64},
             {"acknowledgment_token": "ack"},
             {"request_ids": []},
