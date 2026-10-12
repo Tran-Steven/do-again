@@ -1153,12 +1153,13 @@ if(raw===expected)return true;
 // Accept only that exact paired DOM representation, *not* arbitrary
 // whitespace-equivalence, so modified request IDs, tokens, spaces and text
 // remain fail-closed. Never apply this fallback to input/textarea values.
-if(!editor.isContentEditable || 'value' in editor || !expected.includes('\\n'))
+const lineBreak=String.fromCharCode(10);
+if(!editor.isContentEditable || 'value' in editor || !expected.includes(lineBreak))
   return false;
 const rendered=String(editor.innerText||'').trim();
 const flattened=String(editor.textContent||'').trim();
-return rendered===expected.split('\\n').join('\\n\\n') &&
-       flattened===expected.split('\\n').join('');
+return rendered===expected.split(lineBreak).join(lineBreak+lineBreak) &&
+       flattened===expected.split(lineBreak).join('');
 })()""".replace('EXPECTED', json.dumps(expected))
         deadline = time.monotonic()+10.0
         while cdp.evaluate(target, readiness, timeout=10.0) is not True:
