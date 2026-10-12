@@ -997,7 +997,7 @@ def _approved_background_send(function):
             return function(target, *args, **kwargs)
         config = load_config()
         state = load_state()
-        if not (config.get("preferred_mode") == "auto"
+        if not (config.get("preferred_mode") in {"auto", "background"}
                 and config.get("allow_visible_fallback") is not True
                 and state.get("mode") == "background"):
             return function(target, *args, **kwargs)
@@ -1037,7 +1037,7 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     observed = cdp.evaluate(target, probe, timeout=10.0)
     if virtual:
         if not (state.get("mode") == "background"
-                and config.get("preferred_mode") == "auto"
+                and config.get("preferred_mode") in {"auto", "background"}
                 and config.get("allow_visible_fallback") is not True
                 and isinstance(observed, dict)
                 and type(observed.get("focused")) is bool
