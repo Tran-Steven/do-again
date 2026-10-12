@@ -17,6 +17,7 @@ from ..supervisor.macos_execution import ExecutionBlocked
 
 
 import json
+import re
 import stat
 from pathlib import Path
 
@@ -77,6 +78,16 @@ class OperatorBrowserBridge:
         if authenticated_peer_uid(connection) != 0:
             raise ExecutionBlocked('browser bridge request is not from root supervisor')
         request = read_frame(connection)
+        if set(request) == {'operation','nonce'}:
+            nonce = request['nonce']
+            if (request['operation'] != 'probe' or not isinstance(nonce,str)
+                    or not re.fullmatch('[0-9a-f]{32}',nonce)):
+                raise ExecutionBlocked('browser bridge probe malformed')
+            write_frame(connection, {
+                'operation':'probe-result', 'nonce':nonce,
+                'conversation_id':self.grant['conversation_id'],
+                'profile_sha256':self.grant['profile_sha256']})
+            return {'state':'probed','model_calls':0}
         if (set(request) != {'call_id', 'conversation_id', 'profile_sha256', 'message'}
                 or not isinstance(request['call_id'], str)
                 or not CALL_ID.fullmatch(request['call_id'])
