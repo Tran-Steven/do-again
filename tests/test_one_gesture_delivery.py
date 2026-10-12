@@ -137,6 +137,22 @@ class OneGestureDeliveryTests(unittest.TestCase):
                 browser.send_message(self.target,"DO_AGAIN_NO_SEND_IF_DISABLED",wait_for_response=False)
         gesture.assert_not_called()
 
+    def test_mixed_cross_project_draft_is_never_sent(self):
+        evaluate, _, gesture = self.mocks()
+        evaluate.side_effect = ["ready", False]
+        with patch.object(browser.time, "monotonic", side_effect=[0, 11]):
+            with self.assertRaisesRegex(BrowserError, "did not become enabled"):
+                browser.send_message(
+                    self.target,
+                    "DO_AGAIN_ONLY",
+                    wait_for_response=False,
+                    before_dispatch=lambda: self.fail("unclean draft committed"),
+                )
+        gesture.assert_not_called()
+        self.assertIn("===EXPECTED", evaluate.call_args_list[1].args[1])
+        self.assertNotIn(".includes(PREFIX)", evaluate.call_args_list[1].args[1])
+        self.assertIn("DO_AGAIN_ONLY", evaluate.call_args_list[1].args[1])
+
     def test_missing_acceptance_never_clicks_or_sends_again(self):
         evaluate, _, enter = self.mocks()
         with self.assertRaises(BrowserSubmissionUncertain):
