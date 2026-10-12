@@ -50,7 +50,7 @@ class BridgeTests(unittest.TestCase):
     def test_broker_requires_operator_owned_socket_and_kernel_peer(self):
         reply = {'call_id': 'planner-' + 'a'*20 + '-1',
                  'conversation_id': '01234567-89ab-4cde-8012-0123456789ab',
-                 'response': '{}'}
+                 'grant_sha256':'e'*64, 'response': '{}'}
         fake = BufferedSocket(json.dumps(reply).encode()+bytes([10]))
         metadata = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o600, st_uid=501,
                                    st_nlink=1)
@@ -60,7 +60,8 @@ class BridgeTests(unittest.TestCase):
              patch('do_again.service.browser_bridge.socket.socket', return_value=fake):
             result = bridge.send_once(
                 '{}', conversation_id=reply['conversation_id'],
-                call_id=reply['call_id'], profile_sha256='f'*64)
+                call_id=reply['call_id'], profile_sha256='f'*64,
+                grant_sha256='e'*64)
         self.assertEqual(result['response'], '{}')
         self.assertEqual(fake.timeout, 120.0)
         self.assertEqual(len(fake.sent), 1)
@@ -69,7 +70,7 @@ class BridgeTests(unittest.TestCase):
         identity = {
             'operation':'probe-result', 'nonce':'a'*32,
             'conversation_id':'01234567-89ab-4cde-8012-0123456789ab',
-            'profile_sha256':'f'*64,
+            'profile_sha256':'f'*64, 'grant_sha256':'e'*64,
         }
         fake = BufferedSocket(json.dumps(identity).encode()+bytes([10]))
         metadata = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o600, st_uid=501,
@@ -82,10 +83,12 @@ class BridgeTests(unittest.TestCase):
              patch('do_again.service.browser_bridge.socket.socket', return_value=fake):
             result = bridge.probe_authorized(
                 conversation_id=identity['conversation_id'],
-                profile_sha256=identity['profile_sha256'])
+                profile_sha256=identity['profile_sha256'],
+                grant_sha256=identity['grant_sha256'])
         self.assertEqual(result['peer_uid'], 501)
         self.assertEqual(json.loads(fake.sent[0]),
-                         {'operation':'probe','nonce':'a'*32})
+                         {'operation':'probe','nonce':'a'*32,
+                          'grant_sha256':'e'*64})
 
     def test_wrong_operator_owner_blocks_before_connection(self):
         metadata = SimpleNamespace(st_mode=stat.S_IFSOCK | 0o600,
@@ -96,7 +99,7 @@ class BridgeTests(unittest.TestCase):
             with self.assertRaises(ExecutionBlocked):
                 bridge.send_once('hi', conversation_id='test',
                                  call_id='planner-'+'a'*20+'-1',
-                                 profile_sha256='f'*64)
+                                 profile_sha256='f'*64, grant_sha256='e'*64)
             make_socket.assert_not_called()
 
 

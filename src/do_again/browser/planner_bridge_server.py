@@ -10,6 +10,7 @@ import hashlib
 import os
 
 from ..core.schema import canonical_json
+from ..service.browser_planner import browser_grant_digest
 from ..service.browser_bridge import (
     CALL_ID, authenticated_peer_uid, read_frame, write_frame,
 )
@@ -78,21 +79,24 @@ class OperatorBrowserBridge:
         if authenticated_peer_uid(connection) != 0:
             raise ExecutionBlocked('browser bridge request is not from root supervisor')
         request = read_frame(connection)
-        if set(request) == {'operation','nonce'}:
+        if set(request) == {'operation','nonce','grant_sha256'}:
             nonce = request['nonce']
             if (request['operation'] != 'probe' or not isinstance(nonce,str)
-                    or not re.fullmatch('[0-9a-f]{32}',nonce)):
+                    or not re.fullmatch('[0-9a-f]{32}',nonce)
+                    or request['grant_sha256'] != browser_grant_digest(self.grant)):
                 raise ExecutionBlocked('browser bridge probe malformed')
             write_frame(connection, {
                 'operation':'probe-result', 'nonce':nonce,
                 'conversation_id':self.grant['conversation_id'],
-                'profile_sha256':self.grant['profile_sha256']})
+                'profile_sha256':self.grant['profile_sha256'],
+                'grant_sha256':browser_grant_digest(self.grant)})
             return {'state':'probed','model_calls':0}
-        if (set(request) != {'call_id', 'conversation_id', 'profile_sha256', 'message'}
+        if (set(request) != {'call_id', 'conversation_id', 'profile_sha256', 'grant_sha256', 'message'}
                 or not isinstance(request['call_id'], str)
                 or not CALL_ID.fullmatch(request['call_id'])
                 or request['conversation_id'] != self.grant['conversation_id']
                 or request['profile_sha256'] != self.grant['profile_sha256']
+                or request['grant_sha256'] != browser_grant_digest(self.grant)
                 or not isinstance(request['message'], str)
                 or len(request['message'].encode()) > self.grant['max_prompt_bytes'] + 2048):
             raise ExecutionBlocked('browser bridge request differs from approved scope')
@@ -117,6 +121,7 @@ class OperatorBrowserBridge:
             raise ExecutionBlocked('browser driver response changed identity or exceeded limit')
         reply = {'call_id': request['call_id'],
                  'conversation_id': request['conversation_id'],
+                 'grant_sha256':browser_grant_digest(self.grant),
                  'response': result['response']}
         write_frame(connection, reply)
         return identity

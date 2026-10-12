@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timedelta, timezone
-from do_again.service.browser_planner import validate_browser_planner_grant, BrowserResponseTransport
+from do_again.service.browser_planner import validate_browser_planner_grant, BrowserResponseTransport, browser_grant_digest
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 class BrowserPlannerTests(unittest.TestCase):
@@ -41,7 +41,8 @@ class BrowserPlannerTests(unittest.TestCase):
                  'max_prompt_bytes': 32768, 'max_answer_bytes': 65536,
                  'profile_sha256': 'd'*64}
         result = {'gap': 'g', 'acceptance': 'a', 'script': 'print(1)'}
-        def sender(message, *, conversation_id, call_id, profile_sha256):
+        def sender(message, *, conversation_id, call_id, profile_sha256, grant_sha256):
+            self.assertEqual(grant_sha256, browser_grant_digest(grant))
             self.assertEqual(profile_sha256, grant['profile_sha256'])
             self.assertEqual(conversation_id, grant['conversation_id'])
             self.assertEqual(call_id, call['call_id'])
