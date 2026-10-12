@@ -110,7 +110,8 @@ class DurableBrowserUncertaintyTests(unittest.TestCase):
         self.assertEqual(notify.call_count, 1)
         self.assertTrue(a.exists())
         self.assertTrue(b.exists())
-        self.assertEqual(contain.call_count, 12)
+        # Exact token/role attestation is independent of the legacy text probe.
+        contain.assert_not_called()
 
     def test_reconciled_marker_clears_only_old_batch_and_resumes_later(self):
         a = self._enqueue("req-a")
