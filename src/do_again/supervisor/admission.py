@@ -57,6 +57,41 @@ def require_worker_active(repo: Path, *, status: dict | None = None, rpc=None) -
     from .jobpipe_development import require_jobpipe_grant
     config = read_worker_configuration()
     projects = config.get('projects', [])
+    scope = config.get('development_scope')
+    if isinstance(scope, dict) and scope.get('kind') == 'offline-dual-v1':
+        from .dual_development import require_dual_offline_grant
+        from .macos_execution import ExecutionBlocked
+        if (config.get('production_ready') is not False
+                or config.get('operator_uid') != os.getuid()
+                or observed.get('source_sha') != config.get('source_sha')
+                or not isinstance(projects, list)):
+            raise OperatorError('dual offline worker differs from installed operator and source')
+        project = next((p for p in projects if isinstance(p, dict)
+                        and p.get('repo') == str(repo)
+                        and p.get('account') in {'_doagain_da', '_doagain_jp'}), None)
+        if (project is None or project.get('key') != project_identity(repo)
+                or project.get('github_repository') !=
+                    {'_doagain_da': 'Tran-Steven/do-again',
+                     '_doagain_jp': 'Tran-Steven/jobpipe'}[project['account']]
+                or observed.get('worktree') != project.get('worktree')
+                or observed.get('uid') != project.get('uid')
+                or observed.get('unresolved_executions') != []
+                or observed.get('inflight_request_ids') != []):
+            raise OperatorError('dual offline worker is not an approved drained parent')
+        statuses = {}
+        for sibling in projects:
+            if not isinstance(sibling, dict) or not isinstance(sibling.get('repo'), str):
+                raise OperatorError('dual offline sibling identity is malformed')
+            statuses[sibling['account']] = (
+                observed if sibling['repo'] == str(repo)
+                else request(Path(sibling['repo']), {'operation': 'status'}))
+        try:
+            require_dual_offline_grant(config,
+                SimpleNamespace(account=project['account'], repo=repo, key=project['key']),
+                statuses)
+        except ExecutionBlocked as exc:
+            raise OperatorError(str(exc)) from exc
+        return observed
     if (config.get('production_ready') is not False
             or config.get('operator_uid') != os.getuid()
             or repo != Path(str(config.get('operator_home', ''))) / 'jobpipe'
