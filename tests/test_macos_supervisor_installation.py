@@ -687,6 +687,21 @@ else:
             module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
         self.assertFalse((self.root/'payload').exists())
 
+    def test_hosted_scope_rejects_wrong_source_and_unapproved_network(self):
+        from datetime import datetime, timezone
+        from do_again.supervisor.controller_codex_helper import validate_hosted_scope
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        source='a'*40
+        goal='b'*64
+        config={'source_sha':source,'operator_uid':501,'operator_gid':20,
+                'controller_scope':{'goal_sha256':goal,'epoch':13}}
+        # Deliberately malformed: the real hosted validator must reject missing
+        # capabilities, wrong source, and absent approved endpoints/resolvers.
+        grant={'source_sha':'c'*40,'goal_sha256':goal,'epoch':13,
+               'network_endpoints':[],'dns_resolvers':[]}
+        with self.assertRaisesRegex(ExecutionBlocked,'hosted scope identity/capabilities differ'):
+            validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
