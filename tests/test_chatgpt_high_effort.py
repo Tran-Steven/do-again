@@ -41,6 +41,8 @@ class HighReasoningSelectionTests(unittest.TestCase):
              patch.object(runtime.time,"sleep") as sleep:
             runtime._ensure_high_reasoning(self.target)
         self.assertEqual(ev.call_count,6)
+        self.assertIn('[role="textbox"][contenteditable="true"][aria-label="Ask ChatGPT"]',
+                      ev.call_args_list[0].args[1])
         self.assertEqual(sleep.call_count,2)
         self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
                          ["Escape","Escape"])
