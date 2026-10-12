@@ -148,13 +148,27 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
+def private_proposal_preflight(path):
+    """No symlink, hardlink, foreign owner, or shared permissions for grants."""
+    path=Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('authorization proposal must be an unaliased regular file')
+    stat=path.stat()
+    if stat.st_uid!=os.getuid() or stat.st_nlink!=1 or stat.st_mode&0o077:
+        raise ValueError('authorization proposal must be operator-owned and private')
+    return path
+
+
 def require_planner_grants_before_staging(controller_grant, hosted_planner_grant, codex_native_payload):
     """Fail before packaging a runtime when the requested planner has no authority."""
     if controller_grant is None:
         return
     path=Path(controller_grant)
-    if path.is_symlink() or not path.is_file():
-        raise ValueError('controller grant must be a regular private proposal')
+    # Validate both authority files *before* creating any staging directory.
+    # The later private_proposal check must not be the first such check.
+    private_proposal_preflight(path)
+    if hosted_planner_grant is not None:
+        private_proposal_preflight(hosted_planner_grant)
     proposal=json.loads(path.read_text())
     if not isinstance(proposal,dict) or set(proposal)!={'scope','goal','profile'}:
         raise ValueError('controller grant requires exact scope, goal and profile')
@@ -177,8 +191,9 @@ def validate_planner_authorization_preflight(source_sha, uid, gid, controller_gr
     if controller_grant is None:
         return
     from do_again.supervisor.controller_installation import apply_controller_grant
-    proposal=json.loads(Path(controller_grant).read_text())
-    hosted=json.loads(Path(hosted_planner_grant).read_text()) if hosted_planner_grant is not None else None
+    proposal=json.loads(private_proposal_preflight(controller_grant).read_text())
+    hosted=(json.loads(private_proposal_preflight(hosted_planner_grant).read_text())
+            if hosted_planner_grant is not None else None)
     candidate={'source_sha':source_sha,'operator_uid':uid,'operator_gid':gid,
                'development_scope':{'kind':'jobpipe-offline-v1'},'production_ready':False}
     apply_controller_grant(candidate,proposal,hosted)
@@ -210,6 +225,11 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     source_sha=git(source,'rev-parse','HEAD')
     uid=os.getuid();gid=os.getgid();identity=pwd.getpwuid(uid)
     if uid==0:raise ValueError('prepare the bundle as the operator, not root')
+    # Preflight must use the exact checked-out candidate, not an installed Do Again package.
+    # The earlier source path insertion occurred only after this validation call.
+    source_package=str(source/'src')
+    if source_package not in sys.path:
+        sys.path.insert(0,source_package)
     validate_planner_authorization_preflight(source_sha,uid,gid,controller_grant,hosted_planner_grant)
     installed=None
     installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')

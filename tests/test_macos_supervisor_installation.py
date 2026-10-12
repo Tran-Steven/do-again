@@ -638,26 +638,91 @@ else:
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         proposal=self.root/'controller.json'
         proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
         output=self.root/'not-created'
         with self.assertRaisesRegex(ValueError,'requires both a separately approved hosted-planner grant'):
             module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
         self.assertFalse(output.exists())
         # An explicitly offline planner never silently inherits hosted credentials.
         proposal.write_text(json.dumps({'scope':{'planner':'sealed-offline'},'goal':{},'profile':{}}))
+        hosted=self.root/'hosted.json'
+        hosted.write_text('{}')
+        hosted.chmod(0o600)
         with self.assertRaisesRegex(ValueError,'cannot inherit hosted planner'):
-            module.require_planner_grants_before_staging(proposal,self.root/'hosted.json',None)
+            module.require_planner_grants_before_staging(proposal,hosted,None)
         self.assertFalse(output.exists())
 
-    def test_hosted_planner_preflight_rejects_mismatched_identity_before_staging(self):
+    def test_controller_proposals_must_be_private_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        controller=self.root/'controller.json'
+        hosted=self.root/'hosted.json'
+        controller.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        hosted.write_text('{}')
+        controller.chmod(0o600)
+        hosted.chmod(0o644)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'operator-owned and private'):
+            module.prepare(self.root,self.root,self.root,output,
+                           controller_grant=controller,hosted_planner_grant=hosted,
+                           codex_native_payload=self.root/'codex-stub')
+        self.assertFalse(output.exists())
+        hosted.chmod(0o600)
+        alias=self.root/'hosted-link.json'
+        alias.symlink_to(hosted)
+        with self.assertRaisesRegex(ValueError,'unalias'):
+            module.prepare(self.root,self.root,self.root,output,
+                           controller_grant=controller,hosted_planner_grant=alias,
+                           codex_native_payload=self.root/'codex-stub')
+        self.assertFalse(output.exists())
+
+    def test_controller_grant_hardlink_rejected_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
+        other=self.root/'controller-hardlink.json'
+        os.link(proposal,other)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'operator-owned and private'):
+            module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
+        self.assertFalse(output.exists())
+
+    def test_controller_preflight_rejects_malformed_scope_before_staging(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         proposal=self.root/'controller.json'
         hosted=self.root/'hosted.json'
         proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
         hosted.write_text(json.dumps({'source_sha':'old','network_endpoints':[],'dns_resolvers':[]}))
-        with self.assertRaises(Exception):
+        hosted.chmod(0o600)
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        with self.assertRaisesRegex(ExecutionBlocked,'controller scope absent or contains unknown authority'):
             module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
         self.assertFalse((self.root/'payload').exists())
+
+    def test_hosted_scope_rejects_wrong_source_and_unapproved_network(self):
+        from datetime import datetime, timezone
+        from do_again.supervisor.controller_codex_helper import validate_hosted_scope
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        source='a'*40
+        goal='b'*64
+        config={'source_sha':source,'operator_uid':501,'operator_gid':20,
+                'controller_scope':{'goal_sha256':goal,'epoch':13}}
+        # Deliberately malformed: the real hosted validator must reject missing
+        # capabilities, wrong source, and absent approved endpoints/resolvers.
+        grant={'source_sha':'c'*40,'goal_sha256':goal,'epoch':13,
+               'network_endpoints':[],'dns_resolvers':[]}
+        with self.assertRaisesRegex(ExecutionBlocked,'explicitly approved public IPv4 endpoints and DNS resolvers'):
+            validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+        grant['network_endpoints']=['8.8.8.8']
+        grant['dns_resolvers']=['1.1.1.1']
+        with self.assertRaisesRegex(ExecutionBlocked,'hosted scope identity/capabilities differ'):
+            validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+        with self.assertRaisesRegex(ExecutionBlocked,'separate approved hosted planner grant'):
+            validate_hosted_scope(config,None,datetime.now(timezone.utc))
 
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
