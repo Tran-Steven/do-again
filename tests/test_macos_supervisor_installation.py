@@ -661,14 +661,16 @@ else:
         output=self.root/'not-created'
         with self.assertRaisesRegex(ValueError,'operator-owned and private'):
             module.prepare(self.root,self.root,self.root,output,
-                           controller_grant=controller,hosted_planner_grant=hosted)
+                           controller_grant=controller,hosted_planner_grant=hosted,
+                           codex_native_payload=self.root/'codex-stub')
         self.assertFalse(output.exists())
         hosted.chmod(0o600)
         alias=self.root/'hosted-link.json'
         alias.symlink_to(hosted)
         with self.assertRaisesRegex(ValueError,'unalias'):
             module.prepare(self.root,self.root,self.root,output,
-                           controller_grant=controller,hosted_planner_grant=alias)
+                           controller_grant=controller,hosted_planner_grant=alias,
+                           codex_native_payload=self.root/'codex-stub')
         self.assertFalse(output.exists())
 
     def test_hosted_planner_preflight_rejects_mismatched_identity_before_staging(self):
