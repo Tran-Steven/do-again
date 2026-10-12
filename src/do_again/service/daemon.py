@@ -22,7 +22,7 @@ from ..browser import (
     stop_if_unused,
 )
 from ..core.agent import Agent
-from ..core.schema import atomic_json, utc_now
+from ..core.schema import atomic_json, utc_now, OperatorError
 from ..browser import cdp
 from ..browser.errors import BrowserPreDispatchBlocked, BrowserSubmissionUncertain
 from ..browser import runtime as browser_runtime
@@ -391,10 +391,12 @@ def _browser_monitor(
         work_event.clear()
 
 
-def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | None = None, control_transport: Any | None = None, browser_effect: Callable[[], Any] | None = None) -> int:
+def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | None = None, control_transport: Any | None = None, browser_effect: Callable[[], Any] | None = None, continuation_effect: Callable[[], Any] | None = None) -> int:
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
     from ..supervisor.admission import require_active
+    if continuation_effect is not None and (admission_check is None or control_transport is None or browser_effect is None):
+        raise OperatorError('native continuation requires all sealed worker callbacks')
     if admission_check is None or control_transport is None or browser_effect is None:
         # Unsealed and legacy entrypoints never inherit the offline grant.
         require_active(repo)
@@ -409,12 +411,15 @@ def main(argv: list[str] | None = None, *, admission_check: Callable[[], Any] | 
     browser_enabled = layout.browser_enabled
 
     return _run_admitted_worker(args, repo, state_dir, browser_enabled,
-        admission_check=admission_check, control_transport=control_transport, browser_effect=browser_effect)
+        admission_check=admission_check, control_transport=control_transport, browser_effect=browser_effect,
+        continuation_effect=continuation_effect)
 
 
 def _run_admitted_worker(args, repo, state_dir, browser_enabled, *, admission_check=None,
-                         control_transport=None, browser_effect=None, executor=None, receipt_observer=None):
+                         control_transport=None, browser_effect=None, executor=None, receipt_observer=None, continuation_effect=None):
     """Shared sealed engine; callers establish production or fixed fixture authority."""
+    browser_enabled = browser_enabled and continuation_effect is None
+    if continuation_effect is not None:browser_effect=continuation_effect
     browser_monitor_stop = threading.Event()
     browser_work = threading.Event()
     browser_thread: threading.Thread | None = None
@@ -424,6 +429,7 @@ def _run_admitted_worker(args, repo, state_dir, browser_enabled, *, admission_ch
             _queue_receipt(state_dir, receipt)
             _record_browser_state(state_dir, "queued")
             browser_work.set()
+        if continuation_effect is not None:browser_work.set()
         if receipt_observer is not None and receipt_observer(receipt):
             agent.stop_requested = True
 
@@ -434,7 +440,7 @@ def _run_admitted_worker(args, repo, state_dir, browser_enabled, *, admission_ch
         remote=args.remote,
         policy_path=Path(args.policy),
         state_dir=state_dir,
-        receipt_callback=receipt_callback if browser_enabled or receipt_observer is not None else None,
+        receipt_callback=receipt_callback if browser_enabled or receipt_observer is not None or continuation_effect is not None else None,
         executor=executor,
         admission_check=admission_check,
         control_transport=control_transport,
@@ -481,7 +487,7 @@ def _run_admitted_worker(args, repo, state_dir, browser_enabled, *, admission_ch
         else:
             browser_thread = None
 
-    if browser_enabled and browser_effect is not None and not args.once:
+    if (browser_enabled or continuation_effect is not None) and browser_effect is not None and not args.once:
         browser_thread=threading.Thread(target=_browser_monitor,kwargs={"repo":repo,"state_dir":state_dir,
             "stop_event":browser_monitor_stop,"work_event":browser_work,"admission_check":admission_check,
             "browser_effect":browser_effect},daemon=True)

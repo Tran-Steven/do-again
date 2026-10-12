@@ -99,7 +99,7 @@ class ControllerBackend:
         from .control_history import api_for
         with self.admission():api=api_for(self.broker)
         history=ControllerHistory(self.controller,api,self.admission)
-        return ControllerLoop(self.controller,history,self.planner,self.broker.config['controller_goal'],
+        return ControllerLoop(self.controller,history,self.planner,planning_goal(self.broker.config['controller_goal']),
             self.collect,self.verifier).tick(now)
 
 
@@ -110,8 +110,23 @@ def require_sealed_factory(broker):
     if sys.platform!='darwin' or os.geteuid()!=0:
         raise ExecutionBlocked('backend construction requires sealed root macOS runtime')
     verify_installation(broker.config)
+    from .jobpipe_development import require_jobpipe_grant
+    require_jobpipe_grant(broker.config,broker.project,broker.registry.status(broker.project.repo))
 
 
 def create_controller_backend(broker):
     require_sealed_factory(broker)
     return ControllerBackend(broker)
+
+
+def planning_goal(goal):
+    """Bound public roadmap context while retaining the complete sealed goal hash."""
+    value={k:v for k,v in goal.items() if k!='roadmap_snapshot'}
+    snapshot=goal.get('roadmap_snapshot')
+    if isinstance(snapshot,dict):
+        body=snapshot.get('body','')
+        value['roadmap_snapshot']={'title':snapshot.get('title'),'state':snapshot.get('state'),
+            'body_prefix':body[:4096] if isinstance(body,str) else '',
+            'truncated':isinstance(body,str) and len(body)>4096,'snapshot_sha256':digest(snapshot)}
+    value['sealed_goal_sha256']=digest(goal)
+    return value

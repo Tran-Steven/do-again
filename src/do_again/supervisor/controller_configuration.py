@@ -18,7 +18,7 @@ def validate_controller_configuration(config, *, now=None, epoch=None):
     if (config.get('development_scope', {}).get('kind') != 'jobpipe-offline-v1'
             or config.get('production_ready') is not False
             or config.get('live_canary') is not None or config.get('codex_canary') is not None
-            or not isinstance(goal, dict) or len(canonical_json(goal)) > 16384
+            or not isinstance(goal, dict) or len(canonical_json(goal)) > 32768
             or config.get('controller_goal_sha256') != digest(goal)):
         raise ExecutionBlocked('controller requires separate offline execution and sealed goal')
     validate_scope(scope, binding={'repository':'Tran-Steven/jobpipe','branch':'operator-control',

@@ -151,6 +151,9 @@ class ProductionPipelineTests(unittest.TestCase):
         state=self.backend.controller.status(self.now)
         self.assertEqual(state['state'],'completed');self.assertEqual(len(state['acknowledged']),3)
         self.assertEqual(len(set(heads)),3)
+        self.assertEqual(state['ack_publication']['phase'],'committed')
+        status_blob=self.remote.trees[self.remote.commits[self.remote.head]['tree']['sha']]['automation/do_again/agent_status.json']
+        self.assertEqual(json.loads(self.remote.blobs[status_blob])['controller_ack']['acknowledged_receipts'],state['acknowledged'])
         self.backend.tick(datetime.now(timezone.utc));self.assertEqual(len(state['requests']),3)
         self.assertEqual(len([e for e in self.events if e[0]=='execute']),3)
         output=os.environ.get('DO_AGAIN_QUALIFICATION_REPORT')
@@ -162,6 +165,7 @@ class ProductionPipelineTests(unittest.TestCase):
                     'test_commit':head,'tests_executed':index+1,
                     'receipt':self.backend.attestations.observe('fixture',record['request']['request_id'],record['fingerprint'])}
                     for index,(record,head) in enumerate(zip(records,heads))],
+                'acknowledgment_control_commit':state['ack_publication']['head'],
                 'implementation_executions':3,'duplicate_executions':0,'restart_before_acknowledgment':True}
             Path(output).write_text(json.dumps(report,indent=2)+'\n')
 
@@ -201,6 +205,64 @@ class ProductionPipelineTests(unittest.TestCase):
         result=self.backend.effects.run_case('offline-empty-probe','empty_fixture')
         self.assertEqual(result['returncode'],1)
         self.assertIn('Ran 0 tests',result['stderr'])
+
+    def test_lost_acknowledgment_response_reconciles_without_repeat_publication(self):
+        self.backend.tick(self.now);record=self.backend.controller.status(self.now)['requests'][-1]
+        result=self.worker_execute(record['request']);self.receipt(record,result)
+        self.remote.lose_patch=True
+        with self.assertRaises(ExecutionBlocked):self.backend.tick(self.now)
+        self.remote.lose_patch=False;self.backend=self.factory();self.backend.tick(self.now)
+        writes=[payload for method,path,payload in self.remote.writes
+            if path=='git/commits' and payload['message'].startswith('Do Again verified receipt acknowledgment')]
+        self.assertEqual(len(writes),1)
+        self.assertEqual(self.backend.controller.status(self.now)['ack_publication']['phase'],'committed')
+        self.assertEqual(len([e for e in self.events if e[0]=='execute']),1)
+
+    def test_native_daemon_monitor_drives_three_cycles_with_browser_disabled(self):
+        import time
+        from do_again.service.daemon import _run_admitted_worker
+        owner=self
+        class FixtureAgent:
+            stop_requested=False
+            def __init__(self,**kwargs):self.callback=kwargs['receipt_callback']
+            def run(self,once=False):
+                deadline=time.monotonic()+20;seen=set()
+                while time.monotonic()<deadline:
+                    state=owner.backend.controller.status(datetime.now(timezone.utc))
+                    if state['state']=='completed' and state.get('ack_publication',{}).get('phase')=='committed':return 0
+                    if state['state']=='waiting' and state['requests'][-1]['phase']=='published':
+                        record=state['requests'][-1];rid=record['request']['request_id']
+                        if rid not in seen:
+                            result=owner.worker_execute(record['request']);seen.add(rid)
+                            receipt=owner.receipt(record,result)
+                            owner.backend=owner.factory() # Restart before ack; never prompt next task.
+                            self.callback(receipt)
+                    time.sleep(0.01)
+                raise AssertionError('native monitor did not complete bounded three-cycle fixture')
+        def continuation():
+            state=self.backend.tick(datetime.now(timezone.utc))
+            return {'delivered':int(state['state']=='planning'),'liveness':state['state']}
+        args=SimpleNamespace(once=False,control_worktree=str(self.root/'control'),branch='operator-control',
+            remote='origin',policy=str(self.root/'policy.json'))
+        with patch('do_again.service.daemon.Agent',FixtureAgent),patch('signal.signal'), \
+             patch('do_again.service.daemon._queue_receipt') as browser_queue, \
+             patch('do_again.service.daemon.ensure_browser_running') as browser:
+            result=_run_admitted_worker(args,self.repo,self.state,False,
+                admission_check=lambda:None,control_transport=self.remote,
+                browser_effect=continuation,continuation_effect=continuation)
+        self.assertEqual(result,0);browser_queue.assert_not_called();browser.assert_not_called()
+        state=self.backend.controller.status(datetime.now(timezone.utc))
+        self.assertEqual(len(state['acknowledged']),3)
+        self.assertEqual(len([e for e in self.events if e[0]=='execute']),3)
+        output=os.environ.get('DO_AGAIN_QUALIFICATION_REPORT')
+        if output:
+            Path(output).with_name('v1a-native-monitor-simulation.json').write_text(json.dumps({
+                'kind':'offline-native-monitor-simulation','production_monitor':True,'browser_enabled':False,
+                'acknowledged':state['acknowledged'],'state':state['state'],
+                'implementation_commits':[r['implementation_commit'] for r in state['requests']],
+                'implementation_executions':3,'human_prompts_between_cycles':0,
+                'substituted_boundaries':['root installation identity','dedicated UID/kernel adapter','GitHub API','worker protocol adapter'],
+                'real_jobpipe_cycles':0},indent=2)+'\n')
 
     def test_unreserved_request_and_direct_execution_denied(self):
         with self.assertRaises(ExecutionBlocked):self.backend.guard_packet({'operation':'execute'})

@@ -216,6 +216,16 @@ class OfflineJobpipeDevelopmentTests(unittest.TestCase):
         with self.assertRaises(OperatorError):
             validate_worker_context("do-again",cfg,status,policy,**kwargs)
 
+    def test_synthetic_qualification_never_inherits_controller_or_hosted_authority(self):
+        from do_again.supervisor.jobpipe_development import synthetic_qualification_config
+        config=dict(self.config,controller_scope={'kind':'private'},hosted_planning_scope={'provider':'openai'},
+            controller_goal={'goal':'private'},controller_profile={'test_runner':'pytest'})
+        with patch('do_again.supervisor.jobpipe_development.require_jobpipe_grant'):
+            result=synthetic_qualification_config(config)
+            for key in ('controller_scope','hosted_planning_scope','controller_goal','controller_profile'):
+                self.assertNotIn(key,result)
+            with self.assertRaises(ExecutionBlocked):synthetic_qualification_config(config,controller_scope={})
+
 
 if __name__=="__main__":
     unittest.main()

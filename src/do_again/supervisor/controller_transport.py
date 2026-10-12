@@ -97,3 +97,44 @@ class ControllerHistory:
         # artifacts, never copy completion assertions from model/worker stdout.
         evidence = native_verify(record, receipt)
         return self.controller.accept(receipt, evidence=evidence, now=now)
+
+    def acknowledgments(self,now):
+        """Audit acknowledgment through existing agent_status, without a fourth request."""
+        from ..service.offline_continuation import digest
+        state=self.controller.status(now)
+        if not state['acknowledged'] or state['state'] in {'stopped','blocked'}:return
+        value={'scope_sha256':digest(self.controller.scope),'source_sha':self.controller.scope['source_sha'],
+            'acknowledged_receipts':state['acknowledged'],'state':'completed' if len(state['acknowledged'])==3 else 'in_progress'}
+        original=state.get('ack_publication',{})
+        if original.get('value')==value and original.get('phase')=='committed':return
+        path='automation/do_again/agent_status.json'
+        base,commit,entries=self.snapshot()
+        current={}
+        if path in entries:
+            with self.effect():current=read_json_blob(self.api,entries[path])
+        if current.get('controller_ack')==value:
+            state['ack_publication']={'value':value,'phase':'committed','head':base}
+            self.controller._save(state);return
+        if original.get('value')==value and original.get('phase')=='started':
+            self.controller.block('acknowledgment publication uncertain; no replay',now)
+            raise ExecutionBlocked('acknowledgment publication uncertain; no replay')
+        state['ack_publication']={'value':value,'phase':'started'}
+        self.controller._save(state)
+        data=canonical_json(dict(current,controller_ack=value))+b'\n';sha=blob_sha(data)
+        with self.effect():blob=self.api.request('POST','git/blobs',{
+            'encoding':'base64','content':base64.b64encode(data).decode()})
+        if blob.get('sha')!=sha:raise ExecutionBlocked('acknowledgment blob differs')
+        with self.effect():tree=self.api.request('POST','git/trees',{'base_tree':commit['tree']['sha'],
+            'tree':[{'path':path,'mode':'100644','type':'blob','sha':sha}]})
+        with self.effect():created=self.api.request('POST','git/commits',{'tree':tree['sha'],
+            'parents':[base],'message':'Do Again verified receipt acknowledgment '+state['acknowledged'][-1]})
+        head=created.get('sha','')
+        if not SHA.fullmatch(head):raise ExecutionBlocked('acknowledgment commit invalid')
+        with self.effect():
+            reference=self.api.request('GET','git/ref/heads/operator-control')
+            if reference['object']['sha']!=base:raise ExecutionBlocked('acknowledgment base moved; no replay')
+            self.api.request('PATCH','git/refs/heads/operator-control',{'sha':head,'force':False})
+        observed,_,visible=self.snapshot()
+        if observed!=head or visible.get(path)!=sha:raise ExecutionBlocked('acknowledgment readback differs')
+        state['ack_publication']={'value':value,'phase':'committed','head':head}
+        self.controller._save(state)

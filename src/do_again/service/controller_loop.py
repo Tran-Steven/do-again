@@ -24,10 +24,13 @@ class ControllerLoop:
 
     def tick(self, now):
         state = self.controller.status(now)
-        if state['state'] in {'stopped', 'blocked', 'completed'}: return state
+        if state['state'] in {'stopped', 'blocked'}: return state
+        if hasattr(self.history,'acknowledgments'):self.history.acknowledgments(now)
+        if state['state']=='completed':return self.controller.status(now)
         if state['outstanding']:
             self.history.publish_reserved(now)  # Reconcile same identity after restart.
             self.history.completion(now, self.native_verify)
+            if hasattr(self.history,'acknowledgments'):self.history.acknowledgments(now)
             return self.controller.status(now)
         if state['state'] != 'planning': raise ExecutionBlocked('unknown controller lifecycle')
         pending = self.history.pending()
