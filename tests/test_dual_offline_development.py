@@ -81,7 +81,7 @@ class DualOfflineGrantTests(unittest.TestCase):
         grant=self.config["development_scope"]
         grant["issued_at_utc"]=(now-timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         grant["expires_at_utc"]=(now+timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        self.config["operator_uid"]=os.getuid()
+        self.config["operator_uid"]=501
         paths={}
         for p in self.projects:
             account=p["account"]
@@ -101,6 +101,7 @@ class DualOfflineGrantTests(unittest.TestCase):
             seen.append(paths[Path(repo)])
             return self.statuses[paths[Path(repo)]]
         with patch("do_again.supervisor.admission.sys.platform","darwin"), \
+             patch("do_again.supervisor.admission.os.getuid",return_value=501,create=True), \
              patch("do_again.supervisor.immutable_worker.read_worker_configuration",
                    return_value=self.config):
             self.assertIs(require_worker_active(self.da.repo,status=self.statuses["_doagain_da"],
