@@ -39,6 +39,7 @@ def validate_worker_context(
     uid: int,
     euid: int,
     ongoing: bool = False,
+    sibling_statuses: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[Path, Path, Path, Path]:
     """Pure admission decision; zero disk/network/process effects."""
     if project_name not in PROJECT_ACCOUNTS:
@@ -83,16 +84,25 @@ def validate_worker_context(
             or len({p.get('uid') for p in projects}) != len(projects)):
         raise OperatorError('dedicated project identity or workspace binding differs')
     if config.get('development_scope') is not None:
-        from .jobpipe_development import require_jobpipe_grant
         from .macos_execution import ExecutionBlocked
         from types import SimpleNamespace
+        caller = SimpleNamespace(account=project['account'], repo=repo, key=full_key)
         try:
-            require_jobpipe_grant(config, SimpleNamespace(account=project['account'], repo=repo,
-                                                       key=full_key), status)
+            grant = config.get('development_scope')
+            if isinstance(grant, dict) and grant.get('kind') == 'offline-dual-v1':
+                from .dual_development import require_dual_offline_grant
+                if not isinstance(sibling_statuses, dict):
+                    raise ExecutionBlocked('dual offline worker requires authenticated sibling statuses')
+                checked = dict(sibling_statuses)
+                checked[project['account']] = status
+                require_dual_offline_grant(config, caller, checked)
+            else:
+                from .jobpipe_development import require_jobpipe_grant
+                require_jobpipe_grant(config, caller, status)
         except ExecutionBlocked as exc:
             raise OperatorError(str(exc)) from exc
     elif config.get('production_ready') is not True:
-        raise OperatorError('worker requires root-sealed production or jobpipe development authority')
+        raise OperatorError('worker requires root-sealed production or offline development authority')
     key = hashlib.sha256(str(repo).encode("utf-8")).hexdigest()[:12]
     base = Path(home_value) / ".do_again" / "projects" / key
     control, state = base / "sealed-control", base / "state"
@@ -165,6 +175,24 @@ def read_admission_status(repo: Path) -> dict[str, Any]:
     return broker_request(repo, {'operation':'status'}) if pending else status
 
 
+def native_dual_sibling_statuses(config: dict, project: dict, own_status: dict) -> dict | None:
+    """Gather other parents' authenticated broker status only under dual scope."""
+    grant = config.get('development_scope')
+    if not isinstance(grant, dict) or grant.get('kind') != 'offline-dual-v1':
+        return None
+    projects = config.get('projects')
+    if not isinstance(projects, list) or len(projects) not in (2, 3):
+        raise OperatorError('dual offline worker requires the installed project roster')
+    observed = {}
+    for p in projects:
+        if not isinstance(p, dict) or not isinstance(p.get('account'), str) or not isinstance(p.get('repo'), str):
+            raise OperatorError('dual offline sibling identity is invalid')
+        observed[p['account']] = (
+            own_status if p['account'] == project['account']
+            else broker_request(Path(p['repo']), {'operation': 'status'}))
+    return observed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Immutable Do Again operator worker")
     parser.add_argument("--project", choices=sorted(PROJECT_ACCOUNTS), required=True)
@@ -214,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         args.project, config, status, policy,
         installed_root=INSTALL_ROOT, module_path=Path(__file__),
         interpreter=Path(sys.executable), uid=os.getuid(), euid=os.geteuid(),
+        sibling_statuses=native_dual_sibling_statuses(config,project,status),
     )
     validate_control_paths(control,state,os.getuid())
     # Recheck the original authority after filesystem validation. A pause/resume
@@ -221,7 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     latest = read_admission_status(repo)
     validate_worker_context(args.project,config,latest,policy,
         installed_root=INSTALL_ROOT,module_path=Path(__file__),
-        interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid())
+        interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid(),
+        sibling_statuses=native_dual_sibling_statuses(config,project,latest))
     if any(latest.get(k) != status.get(k) for k in ('epoch','goal_revision','authority')):
         raise OperatorError('worker authority changed during admission')
     broker_request(repo,{"operation":"worker_register","pid":os.getpid(),
@@ -245,7 +275,8 @@ def main(argv: list[str] | None = None) -> int:
             current = read_admission_status(repo)
             validate_worker_context(args.project,config,current,policy,
                 installed_root=INSTALL_ROOT,module_path=Path(__file__),
-                interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid(),ongoing=True)
+                interpreter=Path(sys.executable),uid=os.getuid(),euid=os.geteuid(),ongoing=True,
+                sibling_statuses=native_dual_sibling_statuses(config,project,current))
             if any(current.get(k) != status.get(k) for k in ('epoch','goal_revision')):
                 raise OperatorError('worker admission epoch or goal changed')
         except OperatorError as exc:
