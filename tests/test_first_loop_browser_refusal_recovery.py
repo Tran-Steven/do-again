@@ -60,6 +60,8 @@ class ExactFirstLoopRefusalTests(unittest.TestCase):
         tool.unlink()
         with self.assertRaisesRegex(RuntimeError, "missing or aliased"):
             script._candidate(self.commit)
+        if os.name != "posix":
+            return  # Symlink creation is not reliably permitted on Windows CI.
         tool.symlink_to(self.home / "tools")
         with self.assertRaisesRegex(RuntimeError, "missing or aliased"):
             script._candidate(self.commit)
