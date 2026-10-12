@@ -59,6 +59,18 @@ class DualOfflineGrantTests(unittest.TestCase):
         self.statuses["_doagain_jp"]["operator_intent"]="active"
         self.assertEqual(self.check()["kind"],"offline-dual-v1")
 
+    def test_real_native_status_contract_not_synthetic_intent_alias(self):
+        # macos_server._handle({'operation':'status'}) returns
+        # operator_intent; registry.status() independently uses intent.
+        self.assertEqual(self.statuses["_doagain_da"]["operator_intent"], "maintenance")
+        self.assertEqual(self.check(self.da)["kind"], "offline-dual-v1")
+        native=self.statuses["_doagain_da"]
+        native["intent"]="active"
+        self.assertEqual(self.check(self.da)["kind"], "offline-dual-v1")
+        del native["operator_intent"]
+        with self.assertRaises(ExecutionBlocked):
+            self.check(self.da)
+
     def test_old_jobpipe_only_grant_is_never_treated_as_dual(self):
         self.config["development_scope"]["kind"]="jobpipe-offline-v1"
         with self.assertRaises(ExecutionBlocked):
