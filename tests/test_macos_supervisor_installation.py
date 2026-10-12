@@ -632,6 +632,22 @@ else:
                 with self.module.preview_cutover(config,Mock(),True):self.fail('production helper admitted')
             run.assert_not_called()
 
+
+    def test_preparer_rejects_missing_hosted_planner_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'requires both a separately approved hosted-planner grant'):
+            module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
+        self.assertFalse(output.exists())
+        # An explicitly offline planner never silently inherits hosted credentials.
+        proposal.write_text(json.dumps({'scope':{'planner':'sealed-offline'},'goal':{},'profile':{}}))
+        with self.assertRaisesRegex(ValueError,'cannot inherit hosted planner'):
+            module.require_planner_grants_before_staging(proposal,self.root/'hosted.json',None)
+        self.assertFalse(output.exists())
+
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
