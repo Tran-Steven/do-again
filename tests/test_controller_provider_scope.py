@@ -56,6 +56,22 @@ class ProviderScopeTests(unittest.TestCase):
         self.assertEqual(validate_controller_configuration(self.config, now=self.now),
                          self.config['controller_scope'])
 
+    def test_install_grant_applies_separate_browser_authority(self):
+        from do_again.supervisor.controller_installation import apply_controller_grant
+        candidate = {'source_sha':'a'*40, 'production_ready':False,
+                     'development_scope':{'kind':'jobpipe-offline-v1'}}
+        package = {'scope':self.config['controller_scope'],
+                   'goal':self.config['controller_goal'],
+                   'profile':self.config['controller_profile']}
+        apply_controller_grant(candidate, package,
+                               browser=self.config['browser_planning_scope'],
+                               now=self.now)
+        self.assertEqual(candidate['browser_planning_scope']['max_calls'], 3)
+        self.assertNotIn('hosted_planning_scope', candidate)
+        with self.assertRaisesRegex(ExecutionBlocked, 'cannot combine'):
+            apply_controller_grant(dict(candidate), package, hosted={'provider':'openai'},
+                                   browser=self.config['browser_planning_scope'], now=self.now)
+
     def test_missing_browser_grant_is_not_codex_fallback(self):
         self.config.pop('browser_planning_scope')
         with self.assertRaises(ExecutionBlocked):
