@@ -645,8 +645,11 @@ else:
         self.assertFalse(output.exists())
         # An explicitly offline planner never silently inherits hosted credentials.
         proposal.write_text(json.dumps({'scope':{'planner':'sealed-offline'},'goal':{},'profile':{}}))
+        hosted=self.root/'hosted.json'
+        hosted.write_text('{}')
+        hosted.chmod(0o600)
         with self.assertRaisesRegex(ValueError,'cannot inherit hosted planner'):
-            module.require_planner_grants_before_staging(proposal,self.root/'hosted.json',None)
+            module.require_planner_grants_before_staging(proposal,hosted,None)
         self.assertFalse(output.exists())
 
     def test_controller_proposals_must_be_private_before_staging(self):
@@ -686,7 +689,7 @@ else:
             module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
         self.assertFalse(output.exists())
 
-    def test_hosted_planner_preflight_rejects_mismatched_identity_before_staging(self):
+    def test_controller_preflight_rejects_malformed_scope_before_staging(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         proposal=self.root/'controller.json'
@@ -696,7 +699,7 @@ else:
         hosted.write_text(json.dumps({'source_sha':'old','network_endpoints':[],'dns_resolvers':[]}))
         hosted.chmod(0o600)
         from do_again.supervisor.macos_execution import ExecutionBlocked
-        with self.assertRaisesRegex(ExecutionBlocked,'controller requires separate offline execution and sealed goal'):
+        with self.assertRaisesRegex(ExecutionBlocked,'controller scope absent or contains unknown authority'):
             module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
         self.assertFalse((self.root/'payload').exists())
 
