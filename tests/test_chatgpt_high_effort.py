@@ -80,10 +80,20 @@ class HighReasoningSelectionTests(unittest.TestCase):
         self.assertEqual([c.args[2]["key"] for c in call.call_args_list],
                          ["Escape","Escape"])
 
+    def test_nested_effort_menu_requires_second_escape_before_high_confirmed(self):
+        observations=["opened",{"min":"0","max":"2","value":"2"},
+                      True,False,True,True]
+        with patch.object(cdp,"evaluate",side_effect=observations), \
+             patch.object(cdp,"target_call") as keys, \
+             patch.object(runtime.time,"sleep"):
+            runtime._ensure_high_reasoning(self.target)
+        self.assertEqual([c.args[2]["key"] for c in keys.call_args_list],
+                         ["Escape","Escape","Escape","Escape"])
+
     def test_high_slider_without_persisted_label_blocks_send(self):
         # The slider can transiently show 2 even if ChatGPT declines to save.
         values=["opened",{"min":"0","max":"2","value":"2","x":1130,"y":460},
-                True]+[False]*12
+                True]+[False,False]*12
         with patch.object(cdp,"evaluate",side_effect=values), \
              patch.object(cdp,"target_call"), \
              patch.object(runtime.time,"sleep"):
