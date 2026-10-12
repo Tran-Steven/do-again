@@ -11,14 +11,13 @@ import re
 from pathlib import Path
 from ..core.schema import canonical_json, parse_utc, atomic_json, OperatorError
 from ..supervisor.macos_execution import ExecutionBlocked
+from .planner_contract import AuthorizedTransportPlanner
 
 
-class CodexPlanner:
-    def __init__(self, authorize, reserve_call, transport, request_builder):
-        self.authorize, self.reserve_call = authorize, reserve_call
-        self.transport, self.request_builder = transport, request_builder
+class CodexPlanner(AuthorizedTransportPlanner):
+    """Existing Codex implementation of the shared planner contract."""
 
-    def select(self, *, goal, evidence, state, now):
+    def _validated_grant(self, now):
         grant = self.authorize(now)  # Root-sealed gate, independent of worker scope.
         if (not isinstance(grant, dict) or grant.get('provider') != 'openai'
                 or grant.get('transport') != 'codex-cli'
@@ -35,8 +34,7 @@ class CodexPlanner:
                 or grant.get('max_total_calls') != 3
                 or grant.get('worker_network_access') is not False
                 or grant.get('browser_messages') is not False
-                or grant.get('application_submissions') is not False
-                ):
+                or grant.get('application_submissions') is not False):
             raise ExecutionBlocked('separate hosted planning authority absent or differs')
         try:
             issued = parse_utc(grant.get('issued_at_utc', ''))
@@ -45,27 +43,7 @@ class CodexPlanner:
             raise ExecutionBlocked('hosted planning authorization timestamps invalid') from None
         if not issued <= now < expires or (expires-issued).total_seconds() > 7200:
             raise ExecutionBlocked('separate hosted planning authority absent or differs')
-        # Only pre-redacted repository evidence/goal enters this object. The
-        # collector must exclude private candidate data and operational secrets.
-        prompt = canonical_json({'goal': goal, 'evidence': evidence,
-                                  'completed_request_ids': state['acknowledged']}).decode()
-        if len(prompt.encode()) > 32768:
-            raise ExecutionBlocked('planning prompt exceeds authorized exposure budget')
-        fields = {'gap': 1000, 'acceptance': 1000, 'script': 16000}
-        schema = {'type': 'object', 'properties': {
-            key: {'type': 'string', 'maxLength': length} for key, length in fields.items()},
-            'required': list(fields), 'additionalProperties': False}
-        cycle = len(state['requests']) + 1
-        # Must durably reserve a unique scope/cycle call identity before any
-        # hosted effect. A lost response remains uncertain; never auto-retry.
-        call = self.reserve_call(grant, cycle, prompt, schema)
-        answer = self.transport(prompt, schema, call=call, grant=grant)
-        if (not isinstance(answer, dict) or set(answer) != set(fields)
-                or any(not isinstance(answer[k], str) or not answer[k]
-                       or len(answer[k]) > fields[k] for k in fields)):
-            raise ExecutionBlocked('planner answer outside bounded schema')
-        return self.request_builder(answer, evidence, now)
-
+        return grant
 
 class PlanningCallJournal:
     """Broker-lock-protected, root-owned call budget; uncertainty is no-retry."""
