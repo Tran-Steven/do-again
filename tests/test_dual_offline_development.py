@@ -25,6 +25,9 @@ class DualOfflineGrantTests(unittest.TestCase):
             self.projects.append({"account":account,"repo":str(repo),
                                   "key":key,"source_sha":"c"*40})
             self.statuses[account]={"intent":"maintenance","goal_revision":"review-v1",
+                                    "production_ready":False,"source_sha":"b"*40,
+                                    "enforcement_verified":True,"enforcement_blocker":None,
+                                    "authority":{"repo_head":"c"*40},
                                     "unresolved_executions":[],"inflight_request_ids":[]}
             if account!="_doagain_so":
                 scopes.append({"account":account,"project_key":key,
@@ -99,6 +102,19 @@ class DualOfflineGrantTests(unittest.TestCase):
         sonary=self.projects[-1]
         caller=SimpleNamespace(account=sonary["account"],repo=Path(sonary["repo"]),key=sonary["key"])
         with self.assertRaises(ExecutionBlocked):self.check(caller)
+
+    def test_unverified_or_stale_native_broker_status_is_rejected(self):
+        status=self.statuses["_doagain_da"]
+        for field,bad in (("source_sha","f"*40),
+                          ("enforcement_verified",False),
+                          ("enforcement_blocker",{"reason":"test"}),
+                          ("production_ready",True),
+                          ("authority",{"repo_head":"0"*40})):
+            with self.subTest(field=field):
+                old=status[field]
+                status[field]=bad
+                with self.assertRaises(ExecutionBlocked):self.check()
+                status[field]=old
 
     def test_lease_expiry_goal_revisions_and_pending_effects(self):
         scope=self.config["development_scope"]
