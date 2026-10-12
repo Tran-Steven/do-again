@@ -33,6 +33,33 @@ class OneGestureDeliveryTests(unittest.TestCase):
                         browser.notify_receipts(repo,[{'request_id':'synthetic','state':'succeeded'}],binding_guard=guard)
                 rollover.assert_not_called()
 
+    def test_context_limit_rollover_rechecks_high_before_fallback_send(self):
+        from do_again.browser.errors import BrowserPreDispatchBlocked
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'DO_AGAIN_HOME': tmp+'/home'}):
+            repo=Path(tmp)/'repo'
+            repo.mkdir()
+            browser.register_project(repo,chat_url=self.target.url)
+            replacement=cdp.Target('successor','https://chatgpt.com/c/next','','ws://127.0.0.1/next')
+            with patch.object(browser,'ensure_browser_running',return_value={'port':9224}), \\
+                 patch.object(browser,'_find_chatgpt_target',return_value=self.target), \\
+                 patch.object(browser,'wait_for_authenticated',return_value=(self.target,{})), \\
+                 patch.object(browser,'_assistant_snapshot',return_value={'busy':False}), \\
+                 patch.object(browser,'_page_contains',return_value=False), \\
+                 patch.object(browser,'_rollover_needed',return_value=False), \\
+                 patch.object(browser,'_context_limit_warning',return_value='context limit'), \\
+                 patch.object(browser,'_rollover_project_chat',return_value=(replacement,{})) as rollover, \\
+                 patch.object(browser,'_ensure_high_reasoning',side_effect=[None,
+                        BrowserPreDispatchBlocked('High missing from successor')]) as high, \\
+                 patch.object(browser,'send_message',
+                        side_effect=BrowserError('context limit')) as send:
+                with self.assertRaisesRegex(BrowserPreDispatchBlocked,'successor'):
+                    browser.notify_receipts(repo,[{'request_id':'one','state':'succeeded'}])
+                self.assertEqual(high.call_count,2)
+                self.assertEqual(high.call_args_list[-1].args,(replacement,))
+                rollover.assert_called_once()
+                send.assert_called_once()
+                self.assertTrue(send.call_args.kwargs['background_focus'])
+
     def test_explicit_send_uses_one_trusted_mouse_click_and_never_enter(self):
         point={'x':85.5,'y':32.0}
         with patch.object(cdp,'evaluate',return_value=point) as evaluate, \
