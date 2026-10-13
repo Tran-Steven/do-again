@@ -7,12 +7,14 @@ No automatic invocation by installation, controller startup or recovery.
 """
 from __future__ import annotations
 import hashlib
+import fcntl
 import json
 import os
 import sqlite3
 import stat
 import sys
 from datetime import datetime, timezone
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 OLD_SOURCE = "7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191"
@@ -134,6 +136,22 @@ def retain_blocked_controller(controller_path):
     return archived
 
 
+@contextmanager
+def installation_fences(config):
+    """Serialize classification against installer cutover/admission fences."""
+    with ExitStack() as stack:
+        for project in sorted(config["projects"], key=lambda p:p["key"]):
+            lock = ROOT / "state" / project["key"] / "admission.lock"
+            if lock.is_symlink() or not lock.is_file() or lock.stat().st_uid != 0:
+                refused("installed admission fence missing or aliased")
+            stream = stack.enter_context(lock.open("r"))
+            try:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                refused("existing root installation or admission owns an execution fence")
+        yield
+
+
 def run(*, dry_run=True):
     if sys.platform != "darwin" or os.geteuid() != 0:
         refused("only approved macOS administrator can inspect or quarantine root ledger")
@@ -148,41 +166,42 @@ def run(*, dry_run=True):
     verify_installation(config)
     if DATABASE != Path(config["authority_path"]):
         refused("installed root authority database path changed")
-    project = next(p for p in config["projects"] if p["account"] == "_doagain_jp")
-    rootstate = ROOT / "state" / project["key"]
-    status = AuthorityRegistry(DATABASE,owner_uid=0).status(Path(project["repo"]))
-    controller_path = rootstate / "controller.json"
-    if not controller_path.is_file() or controller_path.is_symlink():
-        refused("original blocked controller journal missing")
-    if controller_path.stat().st_uid != 0 or controller_path.stat().st_mode & 0o022:
-        refused("controller journal ownership differs")
-    state = json.loads(controller_path.read_text())
-    planning_files = any((rootstate / n).exists() for n in (
-        "browser-planning-calls.json", "planning-calls.json"))
-    own = MacOSProcesses()
-    no_workers = not any(own.owned(p["uid"]) for p in config["projects"])
-    original_head = worktree_authority(Path(project["worktree"]))["repo_head"]
-    with sqlite3.connect(DATABASE,timeout=15,isolation_level=None) as db:
-        record = db.execute(
-            "SELECT e.state,e.fingerprint,e.result,i.payload FROM execution e "
-            "LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request "
-            "WHERE e.project=? AND e.request=?", (project["key"],REQUEST)).fetchone()
-        if record is None:
-            refused("original request missing")
-        observed = {"state":record[0], "fingerprint":record[1],
-                    "result":record[2], "intent":json.loads(record[3]) if record[3] else None}
-        validate(config,status,observed,no_workers=no_workers,
-                 worktree_head=original_head,state=state,planning_files=planning_files)
-        for sibling in config["projects"]:
-            if sibling["account"] != "_doagain_jp":
-                sibling_status=AuthorityRegistry(DATABASE,owner_uid=0).status(Path(sibling["repo"]))
-                if sibling_status["intent"] != "maintenance":
-                    refused("sibling project not in maintenance")
-        result=classify(db,project["key"],observed["intent"],dry_run=dry_run)
-    if not dry_run:
-        archive = retain_blocked_controller(controller_path)
-        result["controller_journal_retained"] = archive.name
-    return result
+    with installation_fences(config):
+        project = next(p for p in config["projects"] if p["account"] == "_doagain_jp")
+        rootstate = ROOT / "state" / project["key"]
+        status = AuthorityRegistry(DATABASE,owner_uid=0).status(Path(project["repo"]))
+        controller_path = rootstate / "controller.json"
+        if not controller_path.is_file() or controller_path.is_symlink():
+            refused("original blocked controller journal missing")
+        if controller_path.stat().st_uid != 0 or controller_path.stat().st_mode & 0o022:
+            refused("controller journal ownership differs")
+        state = json.loads(controller_path.read_text())
+        planning_files = any((rootstate / n).exists() for n in (
+            "browser-planning-calls.json", "planning-calls.json"))
+        own = MacOSProcesses()
+        no_workers = not any(own.owned(p["uid"]) for p in config["projects"])
+        original_head = worktree_authority(Path(project["worktree"]))["repo_head"]
+        with sqlite3.connect(DATABASE,timeout=15,isolation_level=None) as db:
+            record = db.execute(
+                "SELECT e.state,e.fingerprint,e.result,i.payload FROM execution e "
+                "LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request "
+                "WHERE e.project=? AND e.request=?", (project["key"],REQUEST)).fetchone()
+            if record is None:
+                refused("original request missing")
+            observed = {"state":record[0], "fingerprint":record[1],
+                        "result":record[2], "intent":json.loads(record[3]) if record[3] else None}
+            validate(config,status,observed,no_workers=no_workers,
+                     worktree_head=original_head,state=state,planning_files=planning_files)
+            for sibling in config["projects"]:
+                if sibling["account"] != "_doagain_jp":
+                    sibling_status=AuthorityRegistry(DATABASE,owner_uid=0).status(Path(sibling["repo"]))
+                    if sibling_status["intent"] != "maintenance":
+                        refused("sibling project not in maintenance")
+            result=classify(db,project["key"],observed["intent"],dry_run=dry_run)
+        if not dry_run:
+            archive = retain_blocked_controller(controller_path)
+            result["controller_journal_retained"] = archive.name
+        return result
 
 
 def main():
