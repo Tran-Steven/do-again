@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 
-OLD_SOURCE = "dbcec8acbea790793287945c0f9339f32624797b"
+OLD_SOURCE = "7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191"
 JOBPIPE_SOURCE = "71fcf63791385799972638aa10b66cdea049134e"
 BASELINE_TEST = "tests/test_ats_question_triage.py"
 ROOT = Path("/Library/Application Support/DoAgainSupervisor")
@@ -127,7 +127,7 @@ def main():
         fail("protected jobpipe source differs")
     current = operator_packet(project["key"], "status")
     if (current.get("operator_intent") != "maintenance"
-            or current.get("epoch") != 13
+            or current.get("epoch") != 15
             or current.get("unresolved_executions")
             or current.get("inflight_request_ids")):
         fail("jobpipe is not quiescent in maintenance at epoch 13")
@@ -184,7 +184,7 @@ def main():
                             "No automatic merge", "Verify commits, tests and receipts"]}
     scope = {"kind":"jobpipe-offline-controller-v1", "repository":"Tran-Steven/jobpipe",
              "branch":"operator-control","goal_sha256":digest(goal),"source_sha":source_sha,
-             "epoch":13,"issued_at_utc":now.isoformat(),"expires_at_utc":expires.isoformat(),
+             "epoch":15,"issued_at_utc":now.isoformat(),"expires_at_utc":expires.isoformat(),
              "max_requests":3,"max_cycles":3,"max_outstanding":1,"max_retries":0,
              "planner":"chatgpt-browser-cdp","integration":"proposal-only",
              "network_access":False,"application_submissions":False,"browser_messages":False}
@@ -199,7 +199,7 @@ def main():
                "public_evidence":True,"offline_tasks":[]}
     browser = {"kind":"browser-planning-v1","transport":"chatgpt-browser-cdp",
                "repository":"Tran-Steven/jobpipe","branch":"operator-control",
-               "source_sha":source_sha,"goal_sha256":digest(goal),"epoch":13,
+               "source_sha":source_sha,"goal_sha256":digest(goal),"epoch":15,
                "issued_at_utc":now.isoformat(),"expires_at_utc":expires.isoformat(),
                "conversation_id":conversation,"profile_sha256":fingerprint,
                "max_calls":3,"max_prompt_bytes":32768,"max_answer_bytes":65536,
@@ -293,7 +293,7 @@ def main():
     live_status = operator_packet(project["key"], "status")
     if live_status.get("enforcement_verified") is not True:
         fail("root supervisor did not retain native enforcement proof")
-    if live_status.get("operator_intent") != "maintenance" or live_status.get("epoch") != 13:
+    if live_status.get("operator_intent") != "maintenance" or live_status.get("epoch") != 15:
         fail("native proof changed operator intent or epoch")
     print("NATIVE_ENFORCEMENT_VERIFIED", flush=True)
     print("Installed source:", source_sha)

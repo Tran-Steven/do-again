@@ -15,7 +15,7 @@ class RepairEntrypointTests(unittest.TestCase):
         self.assertIn('qualify_browser_planner', source)
         self.assertIn('qualify_native_enforcement', source)
         self.assertIn('NATIVE_ENFORCEMENT_VERIFIED', source)
-        self.assertIn("OLD_SOURCE = \"dbcec8acbea790793287945c0f9339f32624797b\"", source)
+        self.assertIn("OLD_SOURCE = \"7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191\"", source)
         self.assertIn('v1a-browser-repair-grants-', source)
 
         self.assertIn('browser_calls") != 0', source)

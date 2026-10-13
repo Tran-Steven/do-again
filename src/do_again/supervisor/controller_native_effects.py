@@ -51,23 +51,24 @@ class NativeControllerEffects:
             copy_git_data(broker.project.worktree/'.git',metadata)
             if head!=self.head():
                 raise ExecutionBlocked('manifest source head changed during protected Git export')
-            # Read-only to the dedicated worker and never writable by its
-            # descendants, even though the surrounding cache is writable.
+            # Root-owned, world-readable inert Git snapshot. Worker UID cannot
+            # chmod or write individual metadata files, while the parent cache
+            # remains an untrusted per-request workspace.
             for directory,dirs,files in os.walk(metadata,followlinks=False):
                 for name in files:
                     item=Path(directory)/name
                     if item.is_symlink() or item.stat().st_nlink!=1:
                         raise ExecutionBlocked('exported Git metadata contains an alias')
-                    os.chown(item,broker.project.uid,broker.project.gid)
-                    item.chmod(0o400)
+                    os.chown(item,0,0)
+                    item.chmod(0o444)
                 for name in dirs:
                     item=Path(directory)/name
                     if item.is_symlink():
                         raise ExecutionBlocked('exported Git metadata directory is aliased')
-                    os.chown(item,broker.project.uid,broker.project.gid)
-                    item.chmod(0o500)
-            os.chown(metadata,broker.project.uid,broker.project.gid)
-            metadata.chmod(0o500)
+                    os.chown(item,0,0)
+                    item.chmod(0o555)
+            os.chown(metadata,0,0)
+            metadata.chmod(0o555)
         return metadata
 
     def manifest(self,sid,head):
