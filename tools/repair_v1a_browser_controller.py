@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 
-OLD_SOURCE = "9ea8d9306354c3a6b44da57a1caf57e0019abd8e"
+OLD_SOURCE = "dbcec8acbea790793287945c0f9339f32624797b"
 JOBPIPE_SOURCE = "71fcf63791385799972638aa10b66cdea049134e"
 BASELINE_TEST = "tests/test_ats_question_triage.py"
 ROOT = Path("/Library/Application Support/DoAgainSupervisor")
