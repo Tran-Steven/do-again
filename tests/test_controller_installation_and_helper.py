@@ -42,6 +42,54 @@ class GrantTests(unittest.TestCase):
             with self.subTest(key=key),self.assertRaises(ExecutionBlocked):validate_controller_configuration(self.config,now=self.now)
         self.config=copy.deepcopy(original);self.config['controller_goal']={'goal':'changed'}
         with self.assertRaises(ExecutionBlocked):validate_controller_configuration(self.config,now=self.now)
+    def test_v1a_hosted_authority_missing_fails_before_any_stage_or_git_probe(self):
+        import importlib.util
+        entry=Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py'
+        spec=importlib.util.spec_from_file_location('v1a_preflight_fixture',entry)
+        bundler=importlib.util.module_from_spec(spec);spec.loader.exec_module(bundler)
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);proposal=root/'controller.json';output=root/'output'
+            proposal.write_text(json.dumps(self.package | {'scope':dict(self.scope,planner='codex-cli')}))
+            proposal.chmod(0o600)
+            with patch.object(bundler,'git') as git:
+                with self.assertRaisesRegex(ValueError,'hosted-planner-grant'):
+                    bundler.prepare(root/'source',root/'jobpipe',root/'do-again',output,
+                                    controller_grant=proposal)
+            git.assert_not_called()
+            self.assertFalse(output.exists())
+
+    def test_v1a_hosted_preflight_rejects_unapproved_network_before_stage(self):
+        import importlib.util
+        entry=Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py'
+        spec=importlib.util.spec_from_file_location('v1a_preflight_network_fixture',entry)
+        bundler=importlib.util.module_from_spec(spec);spec.loader.exec_module(bundler)
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);proposal=root/'controller.json';hosted=root/'hosted.json'
+            proposal.write_text(json.dumps(self.package | {'scope':dict(self.scope,planner='codex-cli')}))
+            proposal.chmod(0o600)
+            hosted.write_text(json.dumps({'network_endpoints':[],'dns_resolvers':[]}))
+            hosted.chmod(0o600)
+            with self.assertRaisesRegex(ValueError,'endpoint and DNS resolver'):
+                bundler.preflight_controller_grants(proposal,hosted,uid=os.getuid())
+            hosted.write_text(json.dumps({'network_endpoints':['8.8.8.8'],'dns_resolvers':['1.1.1.1']}))
+            self.assertEqual(bundler.preflight_controller_grants(proposal,hosted,uid=os.getuid())[1]['network_endpoints'],['8.8.8.8'])
+            hosted.chmod(0o644)
+            with self.assertRaisesRegex(ValueError,'private and unaliased'):
+                bundler.preflight_controller_grants(proposal,hosted,uid=os.getuid())
+
+    def test_v1a_offline_controller_rejects_hosted_grant_without_stage(self):
+        import importlib.util
+        entry=Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py'
+        spec=importlib.util.spec_from_file_location('v1a_preflight_offline_fixture',entry)
+        bundler=importlib.util.module_from_spec(spec);spec.loader.exec_module(bundler)
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);proposal=root/'controller.json';hosted=root/'hosted.json'
+            proposal.write_text(json.dumps(self.package));proposal.chmod(0o600)
+            hosted.write_text('{}');hosted.chmod(0o600)
+            with self.assertRaisesRegex(ValueError,'sealed-offline'):
+                bundler.preflight_controller_grants(proposal,hosted,uid=os.getuid())
+            self.assertEqual(bundler.preflight_controller_grants(proposal,None,uid=os.getuid())[1],None)
+
     def test_separate_hosted_authority_required(self):
         self.scope['planner']='codex-cli';self.profile['offline_tasks']=[]
         with self.assertRaises(ExecutionBlocked):self.apply()
