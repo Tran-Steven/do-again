@@ -1383,6 +1383,14 @@ def main() -> int:
     )
     enrolled_status_parser.add_argument("--source", type=Path, default=Path("."))
 
+    for service_action in (
+        "isolated-install", "isolated-start", "isolated-stop",
+        "isolated-service-status", "isolated-service-run",
+    ):
+        isolated_service_parser = sub.add_parser(service_action)
+        isolated_service_parser.add_argument(
+            "--source", type=Path, default=Path("."))
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
@@ -1502,6 +1510,30 @@ def main() -> int:
             print(f"do-again: isolated status blocked: {exc}", file=sys.stderr)
             return 1
         print(json.dumps(enrollment_state, indent=2, sort_keys=True))
+        return 0
+    if args.command in {
+        "isolated-install", "isolated-start", "isolated-stop",
+        "isolated-service-status", "isolated-service-run",
+    }:
+        from .service.isolated_launchd import (
+            install_isolated_service, start_isolated_service,
+            stop_isolated_service, isolated_service_status,
+            serve_isolated_enrollment,
+        )
+        functions = {
+            "isolated-install": install_isolated_service,
+            "isolated-start": start_isolated_service,
+            "isolated-stop": stop_isolated_service,
+            "isolated-service-status": isolated_service_status,
+            "isolated-service-run": serve_isolated_enrollment,
+        }
+        try:
+            value = functions[args.command](args.source)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated service blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(value, indent=2, sort_keys=True))
         return 0
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
