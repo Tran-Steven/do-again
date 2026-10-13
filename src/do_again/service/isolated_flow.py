@@ -11,7 +11,7 @@ from .isolated_worker import create_isolated_worker
 
 
 def _published_identity(*, repo: Path, state_dir: Path, goal: str,
-                        files: list[str], test_command: list[str]) -> str | None:
+                        files: list[str], test_command: list[str]) -> tuple[str, str] | None:
     head, sources = _read_source(repo, files)
     basis = {
         "project": str(repo),
@@ -35,11 +35,11 @@ def _published_identity(*, repo: Path, state_dir: Path, goal: str,
     except (ValueError, OSError) as exc:
         raise OperatorError("existing planning identity is unreadable") from exc
     if (not isinstance(record, dict) or record.get("request_id") != request_id
-            or record.get("state") != "published"
+            or record.get("state") not in {"published", "goal_complete"}
             or record.get("source_head") != head
             or record.get("goal_sha256") != digest):
         raise OperatorError("existing planning attempt is incomplete or uncertain")
-    return request_id
+    return request_id, record["state"]
 
 
 def run_isolated_once(*, repo: Path, control_worktree: Path,
@@ -56,6 +56,12 @@ def run_isolated_once(*, repo: Path, control_worktree: Path,
     existing = _published_identity(
         repo=repo, state_dir=state_dir, goal=goal,
         files=files, test_command=test_command)
+    if existing is not None and existing[1] == "goal_complete":
+        return {
+            "state": "model_declared_complete", "request_id": existing[0],
+            "chatgpt_acknowledged": False, "production_deployed": False,
+            "automatic_merge": False,
+        }
     if existing is None:
         planned = plan_isolated_request(
             repo=repo, control_worktree=control_worktree,
@@ -63,8 +69,14 @@ def run_isolated_once(*, repo: Path, control_worktree: Path,
             goal=goal, files=files, test_command=test_command,
             chat_repo=chat_repo)
         request_id = planned["request_id"]
+        if planned["state"] == "model_declared_complete":
+            return {
+                "state": "model_declared_complete", "request_id": request_id,
+                "chatgpt_acknowledged": False, "production_deployed": False,
+                "automatic_merge": False,
+            }
     else:
-        request_id = existing
+        request_id = existing[0]
     agent = create_isolated_worker(
         repo=repo, control_worktree=control_worktree,
         state_dir=state_dir, branch=branch, image=image)

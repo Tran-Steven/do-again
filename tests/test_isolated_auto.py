@@ -165,6 +165,40 @@ class BoundedAutoTests(unittest.TestCase):
             (self.source / "app.py").read_text(),
             "def value():\n    return 1\n")
 
+    def test_goal_complete_stops_without_unnecessary_second_patch(self):
+        ordinary = self.sender()
+        def complete_after_first_change(target, message, *, before_dispatch, **kwargs):
+            body = json.loads(message)
+            if "goal" in body and "return 2" in body["files"][0]["content"]:
+                before_dispatch()
+                return {
+                    "chat_url": self.chat,
+                    "response": json.dumps({
+                        "call_id": body["call_id"],
+                        "status": "goal_complete",
+                    }),
+                }
+            return ordinary(target, message, before_dispatch=before_dispatch, **kwargs)
+
+        sent, tested = self.browser(complete_after_first_change)
+        result = run_isolated_auto(**self.task)
+        self.assertEqual(result["state"], "model_declared_complete")
+        self.assertEqual(result["completed_cycles"], 1)
+        self.assertEqual(sent.call_count, 3)
+        tested.assert_called_once()
+        self.assertEqual(
+            (self.state / "isolated-source" / "app.py").read_text(),
+            "def value():\n    return 2\n")
+        self.assertEqual(
+            (self.source / "app.py").read_text(),
+            "def value():\n    return 1\n")
+        ledger = json.loads((self.state / "isolated-auto.json").read_text())
+        self.assertEqual(ledger["state"], "model_declared_complete")
+        repeat = run_isolated_auto(**self.task)
+        self.assertEqual(repeat["state"], "model_declared_complete")
+        self.assertEqual(sent.call_count, 3)
+        tested.assert_called_once()
+
     def test_invalid_cycle_budget_rejected_before_source_changes(self):
         for count in (0, 11, True):
             with self.subTest(cycles=count):

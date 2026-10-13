@@ -82,6 +82,15 @@ def _run_locked(*, source_repo: Path, control_worktree: Path,
             "started_at_utc": utc_now().isoformat(),
         }
         atomic_json(ledger_path, ledger)
+    if ledger["state"] == "model_declared_complete" and ledger.get("active_request_id") is None:
+        return {
+            "state": "model_declared_complete",
+            "completed_cycles": ledger["completed_cycles"],
+            "request_id": ledger.get("last_request_id"),
+            "original_repo_modified": False,
+            "production_deployed": False,
+            "automatic_merge": False,
+        }
     while ledger["completed_cycles"] < cycles:
         request_id = ledger.get("active_request_id")
         if request_id is None:
@@ -92,6 +101,19 @@ def _run_locked(*, source_repo: Path, control_worktree: Path,
                 control_worktree=control_worktree,
                 state_dir=state_dir, branch=branch, image=image,
                 goal=goal, files=files, test_command=test_command)
+            if result["state"] == "model_declared_complete":
+                ledger["state"] = "model_declared_complete"
+                ledger["last_request_id"] = result["request_id"]
+                ledger["finished_at_utc"] = utc_now().isoformat()
+                atomic_json(ledger_path, ledger)
+                return {
+                    "state": "model_declared_complete",
+                    "completed_cycles": ledger["completed_cycles"],
+                    "request_id": result["request_id"],
+                    "original_repo_modified": False,
+                    "production_deployed": False,
+                    "automatic_merge": False,
+                }
             if result["state"] != "completed":
                 ledger["state"] = result["state"]
                 ledger["last_request_id"] = result["request_id"]
