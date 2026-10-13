@@ -35,7 +35,11 @@ class ChatGPTPlannerDriver:
         status = runtime.ensure_browser_running(verify_auth=True)
         target = runtime._find_chatgpt_target(int(status['port']), bound)
         if target is None:
-            raise ExecutionBlocked('bound ChatGPT tab absent; no new tab or chat created')
+            # Restoring a saved conversation is navigation, never message
+            # dispatch. User-level receipt delivery already does the same.
+            # Do not reserve a second call or generate a new conversation.
+            target = runtime.cdp.create_target(
+                int(status['port']), bound, background=True)
         target, _ = runtime.wait_for_authenticated(
             int(status['port']), chat_url=bound, target=target, timeout=30.0)
         if runtime._chat_id(target.url) != conversation_id:
