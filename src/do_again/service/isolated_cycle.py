@@ -21,12 +21,17 @@ from ..core.schema import OperatorError, atomic_json
 IMAGE_RE = re.compile(r"[a-z0-9._/-]+@sha256:[a-f0-9]{64}\Z")
 HEAD_RE = re.compile(r"[a-f0-9]{40,64}\Z")
 SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".css", ".html"}
+FIXED_TEST_SUITES = {
+    "python": ("python", "-m", "unittest", "discover", "-s", "tests"),
+    "npm": ("npm", "test", "--", "--run"),
+    "pytest": ("python", "-m", "pytest", "-q", "-p", "no:cacheprovider"),
+    "bun": ("bun", "test"),
+}
 TEST_COMMANDS = {
     ("python", "-m", "unittest", "discover"),
     ("python3", "-m", "unittest", "discover"),
-    ("python", "-m", "unittest", "discover", "-s", "tests"),
     ("python3", "-m", "unittest", "discover", "-s", "tests"),
-    ("npm", "test", "--", "--run"),
+    *FIXED_TEST_SUITES.values(),
 }
 
 
@@ -113,9 +118,13 @@ def _docker_test(workspace: Path, image: str, argv: list[str]) -> bool:
         return False
     # unittest exits zero even when it discovers zero tests. Such a run must
     # never be counted as a successful verified coding cycle.
-    if argv[0] in {"python", "python3"}:
-        report = (result.stdout + result.stderr).decode("utf-8", "replace")
+    report = (result.stdout + result.stderr).decode("utf-8", "replace")
+    if argv[0] in {"python", "python3"} and "unittest" in argv:
         return bool(re.search(r"Ran [1-9][0-9]* tests?\b", report))
+    if tuple(argv) == FIXED_TEST_SUITES["pytest"]:
+        return bool(re.search(r"\b[1-9][0-9]* passed\b", report))
+    if tuple(argv) == FIXED_TEST_SUITES["bun"]:
+        return bool(re.search(r"(?m)^\s*[1-9][0-9]* pass(?:ed)?\b", report))
     return True
 
 
