@@ -22,6 +22,10 @@ def run_isolated_auto(*, source_repo: Path, control_worktree: Path,
     if (not isinstance(cycles, int) or isinstance(cycles, bool)
             or not 1 <= cycles <= 10):
         raise OperatorError("isolated autonomous trial allows 1 to 10 bounded cycles")
+    if not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 2000:
+        raise OperatorError("isolated autonomous goal is invalid")
+    if Path(source_repo).is_symlink() or Path(state_dir).is_symlink():
+        raise OperatorError("isolated autonomous paths must not be aliases")
     source_repo = Path(source_repo).resolve()
     state_dir = Path(state_dir).resolve()
     _private_state(state_dir)
@@ -64,6 +68,9 @@ def _run_locked(*, source_repo: Path, control_worktree: Path,
                 or not isinstance(ledger.get("commits"), list)
                 or len(ledger["commits"]) != ledger["completed_cycles"]):
             raise OperatorError("isolated auto configuration differs from durable progress")
+        if (ledger["completed_cycles"] and not ledger.get("active_request_id")
+                and _git(sandbox, "rev-parse", "HEAD").stdout.decode().strip() != ledger["commits"][-1]):
+            raise OperatorError("private source moved after durable auto progress")
     else:
         ledger = {
             "schema_version": 1,
