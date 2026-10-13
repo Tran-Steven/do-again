@@ -77,6 +77,32 @@ class GrantTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'private and unaliased'):
                 bundler.preflight_controller_grants(proposal,hosted,uid=os.getuid())
 
+    def test_v1a_scope_and_expiration_checked_before_any_bundle_copy(self):
+        import importlib.util
+        entry=Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py'
+        spec=importlib.util.spec_from_file_location('v1a_preflight_scope_fixture',entry)
+        bundler=importlib.util.module_from_spec(spec);spec.loader.exec_module(bundler)
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);proposal=root/'controller.json'
+            for head,expired in [('c'*40,False),('a'*40,True)]:
+                with self.subTest(head=head,expired=expired):
+                    scope=dict(self.scope)
+                    if expired:
+                        scope['expires_at_utc']=(self.now-timedelta(seconds=1)).isoformat()
+                    proposal.write_text(json.dumps(self.package | {'scope':scope}))
+                    proposal.chmod(0o600)
+                    output=root/('expired' if expired else 'source-mismatch')
+                    def committed(repo,*args):
+                        if args==('status','--porcelain'):return ''
+                        if args==('rev-parse','HEAD'):return head
+                        raise AssertionError('bundle proceeded to unapproved Git operation')
+                    with patch.object(bundler,'git',side_effect=committed):
+                        with self.assertRaises(ExecutionBlocked):
+                            bundler.prepare(root/'source',root/'jobpipe',
+                                            root/'do-again',output,
+                                            controller_grant=proposal)
+                    self.assertFalse(output.exists())
+
     def test_v1a_offline_controller_rejects_hosted_grant_without_stage(self):
         import importlib.util
         entry=Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py'
