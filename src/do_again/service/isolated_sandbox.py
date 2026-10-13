@@ -76,7 +76,7 @@ def create_isolated_sandbox(*, source_repo: Path, state_dir: Path) -> dict:
     workspace.mkdir(mode=0o700)
     _export(source_repo, workspace, head)
     _git(workspace, "init", "-q", "-b", "isolated-development")
-    _git(workspace, "add", "--all")
+    _git(workspace, "add", "-f", "--all")
     _git(
         workspace, "-c", "user.name=Do Again Sandbox",
         "-c", "user.email=do-again@invalid.example",
