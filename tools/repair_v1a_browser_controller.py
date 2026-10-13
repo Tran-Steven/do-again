@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 
-OLD_SOURCE = "753647b8579728492e5298c2e5f89cd156217c6f"
+OLD_SOURCE = "9ea8d9306354c3a6b44da57a1caf57e0019abd8e"
 JOBPIPE_SOURCE = "71fcf63791385799972638aa10b66cdea049134e"
 BASELINE_TEST = "tests/test_ats_question_triage.py"
 ROOT = Path("/Library/Application Support/DoAgainSupervisor")
@@ -113,7 +113,10 @@ def main():
     candidate = home / "do-again-v1a-setup/v1a-candidate"
     jobpipe = home / "jobpipe"
     setup = home / "do-again-v1a-setup/controller-pytest"
-    old_grant = home / "do-again-v1a-setup/v1a-controller-grants/browser.json"
+    old_grant = home / "do-again-v1a-setup/v1a-browser-repair-grants-" / "browser.json"
+    old_grant = old_grant.parent.with_name("v1a-browser-repair-grants-" + OLD_SOURCE[:12]) / "browser.json"
+    if not old_grant.is_file():
+        fail("existing installed browser grant file missing; do not stop previous bridge")
     installed = json.loads((ROOT / "current/config.json").read_text())
     if installed.get("source_sha") != OLD_SOURCE or installed.get("production_ready") is not False:
         fail("installed supervisor source or authority differs")
@@ -145,7 +148,7 @@ def main():
     if source_sha != fetched:
         fail("recovery branch source changed during fast-forward")
     run("git", "merge-base", "--is-ancestor",
-        "01d6207fdc921cf890136a48340f44da12dde51c", source_sha, cwd=candidate)
+        OLD_SOURCE, source_sha, cwd=candidate)
     if source_sha == OLD_SOURCE:
         fail("new Mac identity fix not available")
     if not (candidate / "src/do_again/service/browser_bridge.py").is_file():
