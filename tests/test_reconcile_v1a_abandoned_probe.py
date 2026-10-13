@@ -13,6 +13,11 @@ spec.loader.exec_module(recovery)
 
 
 class ReconcileV1AProbeTests(unittest.TestCase):
+    def test_admin_reconciliation_imports_only_installed_sealed_runtime(self):
+        source=MODULE.read_text()
+        self.assertIn('str(ROOT / "current/package")', source)
+        self.assertNotIn('str(Path(__file__).resolve().parents[1] / "src")', source)
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
