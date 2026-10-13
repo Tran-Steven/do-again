@@ -65,6 +65,20 @@ def _read_object(path: Path) -> dict:
     return value
 
 
+def _remote_git(repo: Path, *args: str) -> subprocess.CompletedProcess:
+    environment = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    try:
+        result = subprocess.run(
+            ["git", "-c", "core.hooksPath=/dev/null",
+             "-C", str(repo), *args],
+            capture_output=True, timeout=90, env=environment)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise OperatorError("isolated Git remote operation is unavailable") from exc
+    if result.returncode:
+        raise OperatorError("isolated Git remote operation failed: " + args[0])
+    return result
+
+
 def _check_image(image: str) -> None:
     if not isinstance(image, str) or not IMAGE_RE.fullmatch(image):
         raise OperatorError("an immutable pinned container image is required")
@@ -147,10 +161,10 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
             raise OperatorError("existing isolated enrollment differs; no overwrite")
         return {"state": "already_configured", "branch": config["branch"],
                 "source_repo": str(repo), "ready": True}
-    remote = _git(repo, "remote", "get-url", "origin").stdout.decode().strip()
+    remote = _remote_git(repo, "remote", "get-url", "origin").stdout.decode().strip()
     if not remote:
         raise OperatorError("origin remote is not configured")
-    _git(repo, "ls-remote", "origin", "HEAD")
+    _remote_git(repo, "ls-remote", "origin", "HEAD")
     branch = layout["branch"]
     remote_ref = "refs/heads/" + branch
     _require_private_root(layout["root"])
@@ -175,13 +189,13 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
             raise OperatorError("prior isolated setup attempt is incomplete or inconsistent")
     else:
         atomic_json(journal_path, intended)
-    result = _git(repo, "ls-remote", "--heads", "origin", branch).stdout.decode().strip()
+    result = _remote_git(repo, "ls-remote", "--heads", "origin", branch).stdout.decode().strip()
     if result:
         remote_head = result.split("\t", 1)[0]
         if remote_head != head:
             raise OperatorError("dedicated control branch exists with unexpected history")
     else:
-        _git(repo, "push", "origin", "HEAD:" + remote_ref)
+        _remote_git(repo, "push", "origin", "HEAD:" + remote_ref)
     control = layout["control_worktree"]
     if control.is_symlink():
         raise OperatorError("isolated control worktree cannot be an alias")
@@ -189,7 +203,7 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
         if _git(control, "status", "--porcelain").stdout.strip():
             raise OperatorError("existing isolated control worktree is dirty")
     else:
-        _git(repo, "fetch", "--quiet", "origin", branch)
+        _remote_git(repo, "fetch", "--quiet", "origin", branch)
         _git(repo, "worktree", "add", "--detach", str(control), "FETCH_HEAD")
     if _git(control, "rev-parse", "HEAD").stdout.decode().strip() != head:
         raise OperatorError("isolated control worktree starts from an unexpected commit")
