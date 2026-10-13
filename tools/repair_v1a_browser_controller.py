@@ -130,7 +130,7 @@ def main():
             or current.get("epoch") != 15
             or current.get("unresolved_executions")
             or current.get("inflight_request_ids")):
-        fail("jobpipe is not quiescent in maintenance at epoch 13")
+        fail("jobpipe is not quiescent in maintenance at epoch 15")
     if output("git", "-C", str(candidate), "status", "--porcelain"):
         fail("candidate repository is dirty")
     if output("git", "-C", str(candidate), "branch", "--show-current") != "fix/v1a-safe-recovery":
