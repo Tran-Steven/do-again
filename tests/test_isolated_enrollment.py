@@ -118,6 +118,16 @@ class IsolatedEnrollmentTests(unittest.TestCase):
             self.enroll(goal="Different source-wide goal")
         self.assertEqual(self.git("rev-parse", "HEAD"), self.head)
 
+    def test_modified_enrollment_configuration_cannot_expand_scope(self):
+        self.enroll()
+        layout, config = enrolled_config(self.repo)
+        config_path = layout["config_path"]
+        stored = json.loads(config_path.read_text(encoding="utf-8"))
+        stored["goal"] = "Unapproved unrelated change"
+        config_path.write_text(json.dumps(stored))
+        with self.assertRaisesRegex(OperatorError, "incomplete"):
+            enrolled_config(self.repo)
+
     def test_enrolled_runtime_requires_exact_original_conversation(self):
         self.enroll()
         with patch(
