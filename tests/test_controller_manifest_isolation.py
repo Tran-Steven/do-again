@@ -14,10 +14,10 @@ class ManifestBoundaryTests(unittest.TestCase):
         self.assertIn('str(metadata),head', inspect.getsource(NativeControllerEffects.manifest))
         self.assertNotIn("str(broker.project.worktree/'.git'),head", inspect.getsource(NativeControllerEffects.manifest))
         self.assertIn('with self.admission()',source)
-        self.assertIn('stderr_sha256',source)
+        self.assertIn('stderr_sha256',inspect.getsource(NativeControllerEffects.manifest))
 
     def test_protected_source_access_is_broker_only(self):
-        source=inspect.getsource(NativeControllerEffects.manifest)
+        source=inspect.getsource(NativeControllerEffects.prepare_manifest_metadata)
         self.assertIn("copy_git_data(broker.project.worktree/'.git',metadata)",source)
         self.assertIn("head!=self.head()",source)
         self.assertIn('os.chown(metadata,broker.project.uid,broker.project.gid)',source)
