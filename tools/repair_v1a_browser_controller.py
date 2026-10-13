@@ -40,7 +40,7 @@ def output(*argv, cwd=None):
 def operator_packet(project, operation):
     endpoint = "/private/var/run/do-again-supervisor/operator.sock"
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-        connection.settimeout(20)
+        connection.settimeout(180 if operation == "qualify_native_enforcement" else 20)
         connection.connect(endpoint)
         connection.sendall(json.dumps({"operation": operation, "project": project}).encode() + b"\n")
         data = bytearray()
@@ -286,6 +286,16 @@ def main():
             or proof.get("source_sha") != source_sha):
         fail("root bridge proof differs")
     print("BROWSER_BRIDGE_QUALIFIED", flush=True)
+    print("=== QUALIFYING NATIVE EXECUTION BOUNDARY ===", flush=True)
+    enforcement = operator_packet(project["key"], "qualify_native_enforcement")
+    if enforcement.get("verified") is not True:
+        fail("native enforcement proof did not verify")
+    live_status = operator_packet(project["key"], "status")
+    if live_status.get("enforcement_verified") is not True:
+        fail("root supervisor did not retain native enforcement proof")
+    if live_status.get("operator_intent") != "maintenance" or live_status.get("epoch") != 13:
+        fail("native proof changed operator intent or epoch")
+    print("NATIVE_ENFORCEMENT_VERIFIED", flush=True)
     print("Installed source:", source_sha)
     print("Bridge PID:", process.pid)
     print("Grant expires:", expires.isoformat())
