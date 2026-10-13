@@ -148,6 +148,38 @@ def seal_git(payload: Path) -> str:
     return '/Library/Application Support/DoAgainSupervisor/current/runtimes/git/bin/git'
 
 
+def _private_controller_proposal(path, uid):
+    path=Path(path)
+    if (path.is_symlink() or not path.is_file() or path.stat().st_uid!=uid
+            or path.stat().st_mode&0o077 or path.stat().st_nlink!=1):
+        raise ValueError('controller authorization proposal must be private and unaliased')
+    value=json.loads(path.read_text())
+    if not isinstance(value,dict):
+        raise ValueError('controller authorization proposal must be a JSON object')
+    return value
+
+
+def preflight_controller_grants(controller_grant, hosted_planner_grant, *, uid):
+    if controller_grant is None:
+        return None
+    grant=_private_controller_proposal(controller_grant,uid)
+    scope=grant.get('scope')
+    planner=scope.get('planner') if isinstance(scope,dict) else None
+    if planner=='codex-cli':
+        if hosted_planner_grant is None:
+            raise ValueError('V1A hosted controller blocked before staging: separate --hosted-planner-grant authorization is required')
+        hosted=_private_controller_proposal(hosted_planner_grant,uid)
+        if (not isinstance(hosted.get('network_endpoints'),list) or not hosted['network_endpoints']
+                or not isinstance(hosted.get('dns_resolvers'),list) or not hosted['dns_resolvers']):
+            raise ValueError('V1A hosted controller blocked before staging: exact approved endpoint and DNS resolver lists are required')
+        return grant,hosted
+    if planner=='sealed-offline':
+        if hosted_planner_grant is not None:
+            raise ValueError('sealed-offline controller cannot inherit a hosted planner grant')
+        return grant,None
+    raise ValueError('controller planner must be explicitly sealed-offline or codex-cli')
+
+
 def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None):
     if controller_grant is None and (hosted_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
         raise ValueError('hosted capabilities require a separate controller package')
@@ -165,6 +197,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         raise ValueError('Codex canary cannot inherit browser partial-publication disposition')
     if classify_canary_partial and canary_grant is None:
         raise ValueError('explicit partial disposition requires a fresh sealed canary grant')
+    approved_controller_proposals=preflight_controller_grants(controller_grant,hosted_planner_grant,uid=os.getuid())
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if sonary_repo is not None:
@@ -353,19 +386,16 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         require_jobpipe_grant(config,project_from_dict(jobpipe_project),now=issued)
     if controller_grant is not None:
         from do_again.supervisor.controller_installation import apply_controller_grant
-        def private_proposal(path):
-            path=Path(path)
-            if path.is_symlink() or path.stat().st_uid!=uid or path.stat().st_mode&0o077 or path.stat().st_nlink!=1:
-                raise ValueError('controller authorization proposal must be private and unaliased')
-            return json.loads(path.read_text())
         if 'development_scope' not in config:
             if installed is None or installed.get('development_scope',{}).get('kind')!='jobpipe-offline-v1':
                 raise ValueError('controller requires existing or explicitly prepared offline execution authority')
             # Rebind only source identity through the administrator-approved stage;
             # do not silently renew or broaden the existing offline grant.
             config['development_scope']=dict(installed['development_scope'],source_sha=source_sha)
-        grant=private_proposal(controller_grant)
-        hosted=private_proposal(hosted_planner_grant) if hosted_planner_grant is not None else None
+        grant=_private_controller_proposal(controller_grant,uid)
+        hosted=_private_controller_proposal(hosted_planner_grant,uid) if hosted_planner_grant is not None else None
+        if (grant,hosted)!=approved_controller_proposals:
+            raise ValueError('controller authorization proposal changed after preflight')
         apply_controller_grant(config,grant,hosted)
         jp=next(p for p in projects if p['account']=='_doagain_jp')
         from do_again.supervisor.jobpipe_development import require_jobpipe_grant
