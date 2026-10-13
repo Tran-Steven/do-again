@@ -9,7 +9,7 @@ import subprocess
 from ..browser import runtime
 from ..core.schema import OperatorError, atomic_json, utc_now
 from .isolated_auto import run_isolated_auto
-from .isolated_cycle import IMAGE_RE, _git
+from .isolated_cycle import FIXED_TEST_SUITES, IMAGE_RE, _git
 from .isolated_planner import _read_source
 
 
@@ -107,7 +107,7 @@ def enrolled_config(source_repo: Path) -> tuple[dict, dict]:
             or not isinstance(config.get("goal"), str)
             or not isinstance(config.get("cycles"), int)
             or not 1 <= config["cycles"] <= 10
-            or config.get("test_suite") not in {"python", "npm"}):
+            or config.get("test_suite") not in set(FIXED_TEST_SUITES)):
         raise OperatorError("isolated enrollment has invalid bounded policy")
     journal = _read_object(layout["journal_path"])
     digest = hashlib.sha256(
@@ -130,7 +130,7 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
         raise OperatorError("bounded isolated goal is required")
     if not isinstance(cycles, int) or isinstance(cycles, bool) or not 1 <= cycles <= 10:
         raise OperatorError("isolated cycle budget must be 1 to 10")
-    if test_suite not in {"python", "npm"}:
+    if test_suite not in set(FIXED_TEST_SUITES):
         raise OperatorError("isolated tests must use a fixed supported suite")
     _check_image(image)
     head, _ = _read_source(repo, files)
@@ -225,10 +225,7 @@ def run_enrolled_isolated(source_repo: Path) -> dict:
         raise OperatorError("bound project ChatGPT conversation changed after isolated enrollment")
     if _git(repo, "rev-parse", "HEAD").stdout.decode().strip() != config["original_head"]:
         raise OperatorError("original checkout moved after isolated enrollment")
-    test_command = (
-        ["python", "-m", "unittest", "discover", "-s", "tests"]
-        if config["test_suite"] == "python" else ["npm", "test", "--", "--run"]
-    )
+    test_command = list(FIXED_TEST_SUITES[config["test_suite"]])
     return run_isolated_auto(
         source_repo=repo,
         control_worktree=layout["control_worktree"],
