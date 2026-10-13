@@ -36,6 +36,41 @@ class BrowserDriverTests(unittest.TestCase):
                                       profile_sha256='0'*64)
             project.assert_not_called()
 
+    def test_missing_bound_tab_is_restored_without_a_new_chat_or_duplicate_send(self):
+        cid=self.cid
+        target=Mock(url=self.url)
+        def send_once(target_arg, message, *, before_dispatch, **kwargs):
+            self.assertIs(target_arg,target)
+            before_dispatch()
+            return {'chat_url':self.url,'response':'{"call_id":"ok"}'}
+        with patch('do_again.browser.planner_driver.os.geteuid',return_value=501), \
+             patch('do_again.browser.runtime.project_record',return_value={'chat_url':self.url}), \
+             patch('do_again.browser.runtime.ensure_browser_running',return_value={'port':9224}), \
+             patch('do_again.browser.runtime._find_chatgpt_target',return_value=None), \
+             patch('do_again.browser.runtime.cdp.create_target',return_value=target) as create, \
+             patch('do_again.browser.runtime.wait_for_authenticated',return_value=(target,{})), \
+             patch('do_again.browser.runtime.send_message',side_effect=send_once) as send:
+            result=self.driver.send_once('hello',conversation_id=cid,
+                call_id='planner-'+'a'*20+'-1',profile_sha256='d'*64)
+        create.assert_called_once_with(9224,self.url,background=True)
+        send.assert_called_once()
+        self.assertEqual(len(self.calls),1)
+        self.assertEqual(self.calls[0]['state'],'dispatch_started')
+        self.assertEqual(result['conversation_id'],cid)
+
+    def test_tab_restoration_failure_does_not_record_dispatch_or_send(self):
+        with patch('do_again.browser.planner_driver.os.geteuid',return_value=501), \
+             patch('do_again.browser.runtime.project_record',return_value={'chat_url':self.url}), \
+             patch('do_again.browser.runtime.ensure_browser_running',return_value={'port':9224}), \
+             patch('do_again.browser.runtime._find_chatgpt_target',return_value=None), \
+             patch('do_again.browser.runtime.cdp.create_target',side_effect=RuntimeError('tab refused')), \
+             patch('do_again.browser.runtime.send_message') as send:
+            with self.assertRaisesRegex(RuntimeError,'tab refused'):
+                self.driver.send_once('hello',conversation_id=self.cid,
+                    call_id='planner-'+'a'*20+'-1',profile_sha256='d'*64)
+        self.assertEqual(self.calls,[])
+        send.assert_not_called()
+
     def test_existing_chat_single_send_and_dispatch_receipt(self):
         target = Mock(url=self.url)
         def send(target_arg, message, *, before_dispatch, **kwargs):
