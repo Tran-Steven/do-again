@@ -1,5 +1,6 @@
 """Native bridge qualification is offline, exclusive, and maintenance-only."""
 import json
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -80,7 +81,7 @@ class NativeBrowserQualificationTests(unittest.TestCase):
         (state/('controller-blocked-'+previous_source[:12]+'-retained.json')).write_text(
             json.dumps({'state':'blocked','requests':[],'outstanding':None,'acknowledged':[]}))
         dbpath=state/'audit.sqlite'
-        with sqlite3.connect(dbpath) as db:
+        with closing(sqlite3.connect(dbpath)) as db, db:
             db.execute('CREATE TABLE v1a_abandoned_probe_audit '
                        '(project TEXT,request TEXT,fingerprint TEXT,source_sha TEXT,'
                        'prior_state TEXT,disposition TEXT)')
@@ -96,9 +97,45 @@ class NativeBrowserQualificationTests(unittest.TestCase):
         with patch('do_again.supervisor.macos_execution.private_root_file'):
             self.assertTrue(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
             self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':16},previous_source))
-            with sqlite3.connect(dbpath) as db:
+            archive = state / ('controller-blocked-'+previous_source[:12]+'-retained.json')
+            valid_archive = archive.read_text()
+            for invalid in ('{', json.dumps({'state':'blocked','requests':['used'],
+                                            'outstanding':None,'acknowledged':[]})):
+                archive.write_text(invalid)
+                self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+            archive.write_text(valid_archive)
+            with patch.object(Path, 'read_text', side_effect=PermissionError('private archive')):
+                self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+            with patch('sqlite3.connect', side_effect=sqlite3.OperationalError('unable to open database file')):
+                self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+            for column, value in (('fingerprint','wrong'), ('source_sha','wrong'),
+                                  ('prior_state','wrong'), ('disposition','wrong')):
+                with closing(sqlite3.connect(dbpath)) as db, db:
+                    original_value = db.execute('SELECT '+column+' FROM v1a_abandoned_probe_audit').fetchone()[0]
+                    db.execute('UPDATE v1a_abandoned_probe_audit SET '+column+'=?', (value,))
+                self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+                with closing(sqlite3.connect(dbpath)) as db, db:
+                    db.execute('UPDATE v1a_abandoned_probe_audit SET '+column+'=?', (original_value,))
+            with closing(sqlite3.connect(dbpath)) as db, db:
                 db.execute("UPDATE execution SET state='started'")
             self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+
+    def test_root_epoch_upgrade_rejects_invalid_audit_without_replacing_proof(self):
+        previous_source = '7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191'
+        self.scope['epoch'] = 15
+        path = self.broker.state / 'browser-planner-qualification.json'
+        prior = json.dumps({'state':'qualified_operator_bridge',
+                            'source_sha':previous_source, 'epoch':13,
+                            'goal_sha256':self.scope['goal_sha256'],
+                            'operator_uid':501,'peer_uid':501,'browser_calls':0})
+        path.write_text(prior)
+        with patch('do_again.supervisor.controller_browser_helper._audited_epoch_13_to_15',
+                   return_value=False) as audit:
+            with self.assertRaisesRegex(ExecutionBlocked, 'not eligible'):
+                self.qualify()
+        audit.assert_called_once()
+        self.assertEqual(path.read_text(), prior)
+        self.assertFalse(path.with_name('browser-planner-qualification-'+previous_source[:12]+'-retained.json').exists())
 
     def test_success_seals_exact_zero_call_proof_once(self):
         result = self.qualify()
