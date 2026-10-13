@@ -100,7 +100,7 @@ class IsolatedCycleTests(unittest.TestCase):
         calls = []
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, 0, b"", b"")
+            return subprocess.CompletedProcess(cmd, 0, b"", b"Ran 1 test in 0.001s\\nOK")
         with patch("do_again.service.isolated_cycle.subprocess.run",
                    side_effect=fake_run):
             self.assertTrue(_docker_test(self.repo, image,
