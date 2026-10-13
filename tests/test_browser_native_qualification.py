@@ -41,6 +41,18 @@ class NativeBrowserQualificationTests(unittest.TestCase):
             result = qualify_operator_browser_bridge(self.broker)
         return result
 
+    def test_operator_broker_exposes_qualification_without_model_call(self):
+        # The operator socket must route only this exact one-shot packet to
+        # the pre-existing root gate; a typo or missing route strands activation.
+        import inspect
+        from do_again.supervisor import macos_server
+        source = inspect.getsource(macos_server.serve_operator)
+        dispatch = inspect.getsource(macos_server.ProjectBroker._dispatch)
+        self.assertIn("packet['operation']=='qualify_browser_planner'", source)
+        self.assertIn("broker.dispatch({'operation':'qualify_browser_planner'}", source)
+        self.assertIn("packet == {'operation':'qualify_browser_planner'}", dispatch)
+        self.assertIn("qualify_operator_browser_bridge(self)", dispatch)
+
     def test_success_seals_exact_zero_call_proof_once(self):
         result = self.qualify()
         self.assertEqual(result['browser_calls'],0)

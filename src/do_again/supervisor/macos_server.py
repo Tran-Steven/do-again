@@ -185,6 +185,9 @@ class ProjectBroker:
         if packet == {'operation':'qualify_capabilities'}:
             from .capability_probe import qualify_capabilities
             return qualify_capabilities(self)
+        if packet == {'operation':'qualify_browser_planner'}:
+            from .controller_browser_helper import qualify_operator_browser_bridge
+            return qualify_operator_browser_bridge(self)
         if packet.get('operation') == 'worker_register':
             from .worker_service import register_worker
             return register_worker(self,packet)
@@ -449,6 +452,8 @@ def serve_operator(config: dict, brokers: dict) -> None:
                         result=broker.operator_intent(packet['intent'])
                     elif set(packet)=={'operation','project','token'} and packet['operation']=='set_github_token':
                         result=broker.operator_github_token(packet['token'])
+                    elif set(packet)=={'operation','project'} and packet['operation']=='qualify_browser_planner':
+                        result=broker.dispatch({'operation':'qualify_browser_planner'},config['operator_uid'])
                     elif set(packet)=={'operation','project'} and packet['operation']=='restart_canary':
                         from .worker_service import restart_canary
                         result=restart_canary(broker)
