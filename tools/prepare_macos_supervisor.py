@@ -206,6 +206,13 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     source_sha=git(source,'rev-parse','HEAD')
     uid=os.getuid();gid=os.getgid();identity=pwd.getpwuid(uid)
     if uid==0:raise ValueError('prepare the bundle as the operator, not root')
+    if approved_controller_proposals is not None:
+        sys.path.insert(0,str(source/'src'))
+        from do_again.supervisor.controller_installation import apply_controller_grant
+        proposed_grant,proposed_hosted=approved_controller_proposals
+        preview={'source_sha':source_sha,'development_scope':{'kind':'jobpipe-offline-v1'},
+                 'production_ready':False,'operator_uid':uid,'operator_gid':gid}
+        apply_controller_grant(preview,proposed_grant,proposed_hosted)
     installed=None
     installed_path=Path('/Library/Application Support/DoAgainSupervisor/current/config.json')
     if sonary_repo is not None and sonary_repo != Path(identity.pw_dir)/'Sonary':
