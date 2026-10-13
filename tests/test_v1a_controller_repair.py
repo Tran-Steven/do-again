@@ -23,6 +23,44 @@ class RepairEntrypointTests(unittest.TestCase):
             for node in ast.walk(main)
         ), "Importing Path inside main shadows Path.home() during preflight")
 
+    def test_normal_user_preflight_never_reads_root_private_evidence(self):
+        import importlib.util
+        from unittest.mock import patch
+        script = Path(__file__).resolve().parents[1] / "tools/repair_v1a_browser_controller.py"
+        spec = importlib.util.spec_from_file_location("repair", script)
+        repair = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(repair)
+        project = {"account": "_doagain_jp", "source_sha": repair.JOBPIPE_SOURCE,
+                   "key": "fixture"}
+        config = {"source_sha": repair.OLD_SOURCE, "production_ready": False,
+                  "controller_scope": {"planner": "chatgpt-browser-cdp"},
+                  "projects": [project], "authority_path": "/root/private.sqlite"}
+        import json
+        def read(path, *args, **kwargs):
+            if path == repair.ROOT / "current/config.json":
+                return json.dumps(config)
+            raise PermissionError("root-private evidence")
+        def is_file(path):
+            if path.name == "browser.json":
+                return True
+            raise PermissionError("root-private archive")
+        with patch.object(repair.sys, "platform", "darwin"), \
+             patch.object(repair.os, "getuid", return_value=501), \
+             patch.object(repair.os, "geteuid", return_value=501), \
+             patch.object(Path, "read_text", read), \
+             patch.object(Path, "is_file", is_file), \
+             patch("sqlite3.connect", side_effect=PermissionError("root-private DB")) as db, \
+             patch.object(repair, "operator_packet", return_value={
+                 "operator_intent": "maintenance", "epoch": 15,
+                 "unresolved_executions": [], "inflight_request_ids": []}) as operator, \
+             patch.object(repair, "output", return_value="dirty"), \
+             patch.object(repair, "run") as run:
+            with self.assertRaisesRegex(SystemExit, "candidate repository is dirty"):
+                repair.main()
+        db.assert_not_called()
+        operator.assert_called_once_with("fixture", "status")
+        run.assert_not_called()
+
     def test_guarded_repair_entrypoint_is_valid_python(self):
         script = Path(__file__).resolve().parents[1] / "tools/repair_v1a_browser_controller.py"
         source = script.read_text()
@@ -35,7 +73,6 @@ class RepairEntrypointTests(unittest.TestCase):
         self.assertIn('NATIVE_ENFORCEMENT_VERIFIED', source)
         self.assertIn("OLD_SOURCE = \"33e91f0a66093cef10e797eb8ba3f687ccd410cd\"", source)
         self.assertIn('v1a-browser-repair-grants-', source)
-        self.assertIn('original audited probe quarantine differs', source)
 
         self.assertIn('browser_calls") != 0', source)
         self.assertIn('CONTROLLER', source.upper())

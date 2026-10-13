@@ -6,6 +6,7 @@ on:
       - fix/v1a-safe-recovery
     paths:
       - "tools/prepare_macos_supervisor.py"
+      - "tools/repair_v1a_browser_controller.py"
       - "src/do_again/supervisor/controller_*.py"
       - "src/do_again/service/offline_continuation.py"
       - "tests/**"
@@ -50,6 +51,7 @@ jobs:
           python -m unittest discover -s tests -p test_browser_planner_driver.py -v
           python -m unittest discover -s tests -p test_browser_planner_preflight.py -v
           python -m unittest discover -s tests -p test_browser_native_qualification.py -v
+          python -m unittest discover -s tests -p test_v1a_controller_repair.py -v
           python -m unittest discover -s tests -p test_operator_browser_bridge.py -v
           python -m unittest discover -s tests -p test_planner_service.py -v
           python -m unittest discover -s tests -p test_sealed_browser_helper.py -v
