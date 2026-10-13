@@ -69,6 +69,37 @@ class NativeBrowserQualificationTests(unittest.TestCase):
         self.assertIn("'qualify_native_enforcement'", source)
         self.assertIn("broker.dispatch({'operation':'probe'}", source)
 
+    def test_audited_epoch_upgrade_requires_exact_quarantine_and_retained_controller(self):
+        import sqlite3
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from do_again.supervisor.controller_browser_helper import _audited_epoch_13_to_15
+        previous_source='7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191'
+        fingerprint='ec7355ba8ca0c9270c00a8386c3c9c3eb376fc289ec6ee416fc8bcd84f63d747'
+        state=self.broker.state
+        (state/('controller-blocked-'+previous_source[:12]+'-retained.json')).write_text(
+            json.dumps({'state':'blocked','requests':[],'outstanding':None,'acknowledged':[]}))
+        dbpath=state/'audit.sqlite'
+        with sqlite3.connect(dbpath) as db:
+            db.execute('CREATE TABLE v1a_abandoned_probe_audit '
+                       '(project TEXT,request TEXT,fingerprint TEXT,source_sha TEXT,'
+                       'prior_state TEXT,disposition TEXT)')
+            db.execute('CREATE TABLE execution (project TEXT,request TEXT,fingerprint TEXT,state TEXT,result TEXT)')
+            db.execute('INSERT INTO v1a_abandoned_probe_audit VALUES(?,?,?,?,?,?)',
+                ('fixture','offline-5d95b82d0952982adda5-1-probe',fingerprint,
+                 previous_source,'started','quarantined_unresolved_not_replayable'))
+            db.execute('INSERT INTO execution VALUES(?,?,?,?,NULL)',
+                ('fixture','offline-5d95b82d0952982adda5-1-probe',fingerprint,'abandoned'))
+        broker=SimpleNamespace(state=state,config={'authority_path':str(dbpath)},
+                               project=SimpleNamespace(key='fixture'))
+        proof={'source_sha':previous_source,'epoch':13,'browser_calls':0}
+        with patch('do_again.supervisor.macos_execution.private_root_file'):
+            self.assertTrue(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+            self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':16},previous_source))
+            with sqlite3.connect(dbpath) as db:
+                db.execute("UPDATE execution SET state='started'")
+            self.assertFalse(_audited_epoch_13_to_15(broker,proof,{'epoch':15},previous_source))
+
     def test_success_seals_exact_zero_call_proof_once(self):
         result = self.qualify()
         self.assertEqual(result['browser_calls'],0)

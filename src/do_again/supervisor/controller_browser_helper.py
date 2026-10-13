@@ -62,6 +62,46 @@ class SealedBrowserPlannerHelper:
             prompt, schema, call=call, grant=grant)
 
 
+def _audited_epoch_13_to_15(broker, previous, scope, previous_source):
+    """Allow only the known audit-backed maintenance epoch advance.
+
+    The old browser proof's zero-call assertion must agree with the original
+    quarantined native probe; this is not a generic epoch rollover.
+    """
+    from .macos_execution import private_root_file
+    from .authority import AuthorityRegistry
+    import sqlite3
+    from contextlib import closing
+    from pathlib import Path
+    prior = 'offline-5d95b82d0952982adda5-1-probe'
+    fingerprint = 'ec7355ba8ca0c9270c00a8386c3c9c3eb376fc289ec6ee416fc8bcd84f63d747'
+    if (previous.get('source_sha') != previous_source
+            or previous.get('epoch') != 13 or scope['epoch'] != 15
+            or previous.get('browser_calls') != 0):
+        return False
+    archive = Path(broker.state) / ('controller-blocked-'+previous_source[:12]+'-retained.json')
+    audit_db = Path(broker.config['authority_path'])
+    private_root_file(archive)
+    private_root_file(audit_db)
+    try:
+        state = json.loads(archive.read_text())
+        if (state.get('state') != 'blocked' or state.get('requests') != []
+                or state.get('outstanding') is not None or state.get('acknowledged') != []):
+            return False
+        with closing(sqlite3.connect(audit_db.as_uri()+'?mode=ro',uri=True)) as db:
+            audit = db.execute(
+                'SELECT fingerprint,source_sha,prior_state,disposition '
+                'FROM v1a_abandoned_probe_audit WHERE project=? AND request=?',
+                (broker.project.key,prior)).fetchone()
+            original = db.execute(
+                'SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
+                (broker.project.key,prior)).fetchone()
+        return (audit == (fingerprint,previous_source,'started','quarantined_unresolved_not_replayable')
+                and original == (fingerprint,'abandoned',None))
+    except (OSError,ValueError,sqlite3.Error):
+        return False
+
+
 def qualify_operator_browser_bridge(broker):
     """Administrator maintenance-only, zero-model-call native peer proof.
 
@@ -122,7 +162,8 @@ def qualify_operator_browser_bridge(broker):
                 or previous.get('state') != 'qualified_operator_bridge'
                 or previous.get('source_sha') != previous_source
                 or broker.config['source_sha'] == previous_source
-                or previous.get('epoch') != scope['epoch']
+                or not (previous.get('epoch') == scope['epoch']
+                        or _audited_epoch_13_to_15(broker,previous,scope,previous_source))
                 or previous.get('goal_sha256') != scope['goal_sha256']
                 or previous.get('browser_calls') != 0
                 or previous.get('operator_uid') != 501

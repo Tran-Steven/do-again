@@ -15,8 +15,9 @@ class RepairEntrypointTests(unittest.TestCase):
         self.assertIn('qualify_browser_planner', source)
         self.assertIn('qualify_native_enforcement', source)
         self.assertIn('NATIVE_ENFORCEMENT_VERIFIED', source)
-        self.assertIn("OLD_SOURCE = \"7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191\"", source)
+        self.assertIn("OLD_SOURCE = \"33e91f0a66093cef10e797eb8ba3f687ccd410cd\"", source)
         self.assertIn('v1a-browser-repair-grants-', source)
+        self.assertIn('original audited probe quarantine differs', source)
 
         self.assertIn('browser_calls") != 0', source)
         self.assertIn('CONTROLLER', source.upper())

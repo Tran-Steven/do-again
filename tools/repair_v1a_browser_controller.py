@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 
-OLD_SOURCE = "7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191"
+OLD_SOURCE = "33e91f0a66093cef10e797eb8ba3f687ccd410cd"
 JOBPIPE_SOURCE = "71fcf63791385799972638aa10b66cdea049134e"
 BASELINE_TEST = "tests/test_ats_question_triage.py"
 ROOT = Path("/Library/Application Support/DoAgainSupervisor")
@@ -125,6 +125,21 @@ def main():
     project = next(p for p in installed["projects"] if p["account"] == "_doagain_jp")
     if project["source_sha"] != JOBPIPE_SOURCE:
         fail("protected jobpipe source differs")
+    # The irreversible quarantine happened in the previous attended operation.
+    # This repair MUST neither classify the old request again nor reset it.
+    import sqlite3
+    from pathlib import Path
+    audit_db = Path(installed["authority_path"])
+    with sqlite3.connect(audit_db.as_uri()+"?mode=ro",uri=True) as db:
+        entry=db.execute("SELECT e.state,e.result,a.disposition FROM execution e "
+            "JOIN v1a_abandoned_probe_audit a ON a.project=e.project AND a.request=e.request "
+            "WHERE e.project=? AND e.request=?",
+            (project["key"],"offline-5d95b82d0952982adda5-1-probe")).fetchone()
+    if entry != ("abandoned",None,"quarantined_unresolved_not_replayable"):
+        fail("original audited probe quarantine differs")
+    retained = ROOT/"state"/project["key"]/("controller-blocked-7d0af8e1a5a0-retained.json")
+    if not retained.is_file() or retained.is_symlink():
+        fail("old blocked controller journal is not retained")
     current = operator_packet(project["key"], "status")
     if (current.get("operator_intent") != "maintenance"
             or current.get("epoch") != 15
