@@ -176,6 +176,33 @@ class IsolatedEnrollmentTests(unittest.TestCase):
             ["python", "-m", "unittest", "discover", "-s", "tests"])
         self.assertTrue(str(parameters["state_dir"].resolve()).startswith(str(self.home.resolve())))
 
+    def test_enrollment_restricts_sonary_bun_and_jobpipe_pytest_to_fixed_commands(self):
+        cases = (
+            ("bun", ["bun", "test"]),
+            ("pytest", ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]),
+        )
+        for suite, command in cases:
+            with self.subTest(suite=suite):
+                if (self.home / "isolated-projects").exists():
+                    import shutil
+                    shutil.rmtree(self.home / "isolated-projects")
+                if suite == "pytest":
+                    branch = self.git("branch", "--list", "do-again-isolated-*")
+                    if branch:
+                        for name in branch.splitlines():
+                            self.git("branch", "-D", name.strip())
+                result = self.enroll(test_suite=suite)
+                self.assertEqual(result["state"], "configured")
+                with patch(
+                    "do_again.service.isolated_enrollment.runtime.project_record",
+                    return_value={"chat_url": self.chat}
+                ), patch(
+                    "do_again.service.isolated_enrollment.run_isolated_auto",
+                    return_value={"state": "model_declared_complete"}
+                ) as execute:
+                    run_enrolled_isolated(self.repo)
+                self.assertEqual(execute.call_args.kwargs["test_command"], command)
+
     def test_enrollment_rejects_invalid_budget_before_mutation(self):
         with self.assertRaisesRegex(OperatorError, "cycle budget"):
             self.enroll(cycles=0)
