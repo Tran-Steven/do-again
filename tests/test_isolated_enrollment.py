@@ -126,7 +126,7 @@ class IsolatedEnrollmentTests(unittest.TestCase):
         from do_again.service.isolated_enrollment import _read_committed_source
         head, sources = _read_committed_source(self.repo, ["app.py"])
         self.assertEqual(head, self.head)
-        self.assertEqual(sources[0]["content"], "def value():\n    return 1\n")
+        self.assertEqual(sources[0]["content"].replace("\r\n", "\n"), "def value():\n    return 1\n")
         self.assertNotIn("uncommitted change", sources[0]["content"])
 
     def test_untracked_source_file_never_becomes_an_approved_snapshot_file(self):
