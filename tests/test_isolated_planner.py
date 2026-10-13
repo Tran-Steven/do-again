@@ -119,6 +119,47 @@ class IsolatedPlannerTests(unittest.TestCase):
             plan_isolated_request(**self.task)
         sender.assert_called_once()
 
+    def test_goal_complete_is_terminal_without_dispatching_git_request(self):
+        def completed(target, prompt, *, before_dispatch, **kwargs):
+            before_dispatch()
+            envelope = json.loads(prompt)
+            return {
+                "chat_url": self.bound,
+                "response": json.dumps({
+                    "call_id": envelope["call_id"],
+                    "status": "goal_complete",
+                }),
+            }
+
+        sender, _ = self.mocks(completed)
+        result = plan_isolated_request(**self.task)
+        self.assertEqual(result["state"], "model_declared_complete")
+        self.assertFalse(result["executed"])
+        self.worker.publish_json.assert_not_called()
+        path = self.state / "planning-intents" / (result["request_id"] + ".json")
+        self.assertEqual(json.loads(path.read_text())["state"], "goal_complete")
+        with self.assertRaisesRegex(OperatorError, "outcome uncertain"):
+            plan_isolated_request(**dict(self.task, goal="another goal"))
+        sender.assert_called_once()
+
+    def test_invalid_completion_shape_cannot_bypass_request_validation(self):
+        def malformed(target, prompt, *, before_dispatch, **kwargs):
+            before_dispatch()
+            envelope = json.loads(prompt)
+            return {
+                "chat_url": self.bound,
+                "response": json.dumps({
+                    "call_id": envelope["call_id"],
+                    "status": "goal_complete",
+                    "manifest": {"changes": []},
+                }),
+            }
+
+        self.mocks(malformed)
+        with self.assertRaisesRegex(OperatorError, "not a bounded change"):
+            plan_isolated_request(**self.task)
+        self.worker.publish_json.assert_not_called()
+
     def test_uncertain_dispatch_blocks_even_a_new_goal(self):
         def uncertain(target, prompt, *, before_dispatch, **kwargs):
             before_dispatch()
