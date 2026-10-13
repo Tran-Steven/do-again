@@ -1436,7 +1436,7 @@ def main() -> int:
             print(f"do-again: isolated auto blocked: {exc}", file=sys.stderr)
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
-        return 0 if result["state"] == "completed_bounded_cycles" else 2
+        return 0 if result["state"] in {"completed_bounded_cycles", "model_declared_complete"} else 2
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
         command = (["python", "-m", "unittest", "discover", "-s", "tests"]
