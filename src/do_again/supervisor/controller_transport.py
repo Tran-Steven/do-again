@@ -14,8 +14,9 @@ from .macos_execution import ExecutionBlocked
 
 
 class ControllerHistory:
-    def __init__(self, controller, api, admission):
+    def __init__(self, controller, api, admission, *, profile=None):
         self.controller, self.api, self.admission = controller, api, admission
+        self.profile=profile
 
     @contextmanager
     def effect(self):
@@ -100,7 +101,14 @@ class ControllerHistory:
             failure=native_verify.failed(record,receipt)
             return self.controller.failed(receipt,failure=failure,now=now)
         evidence = native_verify(record, receipt)
-        return self.controller.accept(receipt, evidence=evidence, now=now)
+        accepted=self.controller.accept(receipt, evidence=evidence, now=now)
+        if self.profile is not None and self.profile.get('kind')=='native-development-local-v2':
+            # This profile authorizes precisely one original amended task. Extra
+            # budget may cover proven invalid replies/failures, never unrelated
+            # follow-on work. A successful receipt closes admission automatically.
+            accepted.update(state='completed',completion_reason='approved original task completed')
+            return self.controller._save(accepted)
+        return accepted
 
     def acknowledgments(self,now):
         """Audit acknowledgment through existing agent_status, without a fourth request."""
@@ -108,7 +116,7 @@ class ControllerHistory:
         state=self.controller.status(now)
         if not state['acknowledged'] or state['state'] in {'stopped','blocked'}:return
         value={'scope_sha256':digest(self.controller.scope),'source_sha':self.controller.scope['source_sha'],
-            'acknowledged_receipts':state['acknowledged'],'state':'completed' if len(state['acknowledged'])>=self.controller.scope['max_cycles'] else 'in_progress'}
+            'acknowledged_receipts':state['acknowledged'],'state':'completed' if state['state']=='completed' else 'in_progress'}
         original=state.get('ack_publication',{})
         if original.get('value')==value and original.get('phase')=='committed':return
         path='automation/do_again/agent_status.json'

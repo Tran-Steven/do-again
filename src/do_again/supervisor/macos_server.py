@@ -277,7 +277,12 @@ class ProjectBroker:
                 os.chown(path, self.project.uid, self.project.gid)
             for ancestor in (request_root, request_root.parent):
                 os.chmod(ancestor, 0o711)
-            spec = launch_spec(self.project, packet, scratch, cache)
+            from .source_transaction import LOCAL_KIND
+            sealed_profile = self.config.get('controller_profile', {})
+            write_paths = (tuple(sealed_profile['allowed_paths'])
+                           if sealed_profile.get('kind') == LOCAL_KIND else None)
+            spec = launch_spec(self.project, packet, scratch, cache,
+                               source_write_paths=write_paths)
             fingerprint = hashlib.sha256(canonical_json(packet)).hexdigest()
             # Pause and spawn share the same project admission fence.
             # Existing execution may drain; the lock is not held during capture.
@@ -309,6 +314,8 @@ class ProjectBroker:
                 proc = subprocess.Popen(**spec)
             result = capture(spec, packet['timeout'], processes=processes, process=proc)
             result.update({'execution_uid': self.project.uid, 'source_sha': self.config['source_sha']})
+            if write_paths is not None:
+                result.update(network_denied=True, source_write_paths=list(write_paths))
             self.ledger.finish(self.project.key, request_id, result)
             return result
 

@@ -36,6 +36,8 @@ def observe_tests(*, expected_head, cases, measure, execute, allow_failures=Fals
             if not isinstance(value, str) or result.get(stream+'_truncated', False):
                 raise ExecutionBlocked('native test output absent or truncated')
             outcome[stream+'_sha256'] = hashlib.sha256(value.encode()).hexdigest()
+        if 'native_test_counts' in result:
+            outcome['native_test_counts']=result['native_test_counts']
         outcomes.append(outcome)
         if result['returncode'] != 0 and not allow_failures:
             raise ExecutionBlocked('independently observed test process failed')

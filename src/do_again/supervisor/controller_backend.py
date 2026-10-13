@@ -29,7 +29,7 @@ class ControllerBackend:
         self.effects=NativeControllerEffects(broker,self.profile,self.admission,self.select_tests)
         self.pipeline=DevelopmentPipeline(controller=self.controller,ledger=broker.ledger,
             attestations=self.attestations,project=broker.project.key,source_sha=broker.config['source_sha'],
-            directory=broker.state,admission=self.admission,effects=self.effects)
+            directory=broker.state,admission=self.admission,effects=self.effects,profile=self.profile,execution_uid=getattr(broker.project,'uid',None))
         self.verifier=NativeDevelopmentVerifier(source_sha=broker.config['source_sha'],
             observe_execution=lambda rid,fp:broker.ledger.observe_request(broker.project.key,rid,fp),
             observe_development=lambda rid,fp:self.attestations.observe(broker.project.key,rid,fp))
@@ -112,7 +112,7 @@ class ControllerBackend:
     def tick(self,now):
         from .control_history import api_for
         with self.admission():api=api_for(self.broker)
-        history=ControllerHistory(self.controller,api,self.admission)
+        history=ControllerHistory(self.controller,api,self.admission,profile=self.profile)
         return ControllerLoop(self.controller,history,self.planner,planning_goal(self.broker.config['controller_goal'], self.profile),
             self.collect,self.verifier).tick(now)
 
@@ -152,5 +152,15 @@ def planning_goal(goal, profile=None):
                 'Never modify immutable tests. Create missing editable regression files. '
                 'The isolated worker commits and runs every mandatory test independently. '
                 'Use public fixtures only. No network, applications, deployments or merges.'}
+    if profile is not None and profile.get('kind') == 'native-development-local-v2':
+        value['execution_contract'].update(original_task=profile['original_task'],
+            source_contract=profile['source_contract'], code_publication=False,
+            instructions='Return a Python script that edits only editable_paths to the exact approved output hashes. '
+                'Write the exact UTF-8 after_content strings in source_contract using write_bytes. '
+                'The broker first appends the approved test bytes and records a failing regression baseline; '
+                'your script must accept an already-approved test file. '
+                'Keep original baseline tests as an exact byte prefix. No missing regression file is required. '
+                'The protected native worker runs all tests BEFORE the local-only commit and owns durable rollback. '
+                'No network, applications, deployments, pushes or merges. This amends original_task; never replay its old request.')
     value['sealed_goal_sha256']=digest(goal)
     return value

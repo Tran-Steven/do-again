@@ -16,10 +16,12 @@ AUDIT_KEYS=('implementation_commit','test_commit','base_commit','branch',
 
 class DevelopmentPipeline:
     def __init__(self, *, controller, ledger, attestations, project, source_sha,
-                 directory, admission, effects):
+                 directory, admission, effects, profile=None, execution_uid=None):
         self.controller,self.ledger,self.attestations=controller,ledger,attestations
         self.project,self.source_sha,self.directory=project,source_sha,directory
         self.admission,self.effects=admission,effects
+        self.profile=profile
+        self.execution_uid=execution_uid
 
     @contextmanager
     def serialized(self):
@@ -29,7 +31,12 @@ class DevelopmentPipeline:
             finally:fcntl.flock(fence,fcntl.LOCK_UN)
 
     def execute(self, request, now):
-        with self.serialized():return self._execute(request,now)
+        with self.serialized():
+            from .source_transaction import LOCAL_KIND
+            if self.profile is not None and self.profile.get('kind') == LOCAL_KIND:
+                from .local_development_pipeline import LocalDevelopmentPipeline
+                return LocalDevelopmentPipeline(self, self.profile).execute(request, now)
+            return self._execute(request,now)
 
     def _execute(self,request,now):
         state=self.controller.status(now)

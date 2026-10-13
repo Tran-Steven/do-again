@@ -30,7 +30,10 @@ def validate_controller_configuration(config, *, now=None, epoch=None):
         'source_sha':config.get('source_sha'),'goal_sha256':digest(goal),
         'epoch':scope.get('epoch') if epoch is None else epoch}, now=now)
     fields={'kind','allowed_paths','test_cases','test_files','test_runner','public_evidence','offline_tasks'}
-    if not isinstance(profile, dict) or set(profile) != fields or profile['kind'] != 'native-development-v1':
+    from .source_transaction import LOCAL_KIND, validate_source_contract
+    local = isinstance(profile, dict) and profile.get('kind') == LOCAL_KIND
+    if local: fields |= {'source_contract', 'original_task'}
+    if not isinstance(profile, dict) or set(profile) != fields or profile['kind'] not in {'native-development-v1', LOCAL_KIND}:
         raise ExecutionBlocked('sealed development profile absent or unknown capabilities')
     if profile['test_runner'] not in {'unittest','pytest'}:
         raise ExecutionBlocked('test runner not explicitly approved')
@@ -48,10 +51,13 @@ def validate_controller_configuration(config, *, now=None, epoch=None):
                 or set(part.casefold() for part in path.parts)&{'candidate_data','profiles','resumes','private','secrets','credentials'}
                 or '\\' in p):
             raise ExecutionBlocked('development path outside exact file scope')
-    if set(paths)&set(tests) or any(not re.fullmatch('[0-9a-f]{40}', str(v)) for v in tests.values()):
+    if (not local and set(paths)&set(tests)) or any(not re.fullmatch('[0-9a-f]{40}', str(v)) for v in tests.values()):
         raise ExecutionBlocked('approved baseline tests must remain immutable')
     if any(not isinstance(c,str) or not re.fullmatch(r'(?:[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*|tests/(?:[A-Za-z_][A-Za-z_0-9]*/)*test_[A-Za-z_0-9]+\.py(?:::[A-Za-z_][A-Za-z_0-9]*)*)',c) for c in cases):
         raise ExecutionBlocked('test case profile contains command syntax')
+    if local:
+        if not persistent: raise ExecutionBlocked('local source contract requires persistent native authority')
+        validate_source_contract(profile)
     tasks=profile['offline_tasks']
     if scope['planner']=='sealed-offline':
         if config.get('browser_planning_scope') is not None:

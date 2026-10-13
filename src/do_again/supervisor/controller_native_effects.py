@@ -24,7 +24,9 @@ class NativeControllerEffects:
             p.mkdir(parents=True,exist_ok=True,mode=0o700);os.chown(p,broker.project.uid,broker.project.gid)
         for p in (root,root.parent):p.chmod(0o711)
         packet={'operation':'execute','request_id':sid,'argv':argv,'cwd':'.','timeout':timeout}
-        spec=launch_spec(broker.project,packet,scratch,cache)
+        from .source_transaction import LOCAL_KIND
+        source_writes=() if read_only_source or self.profile.get('kind') == LOCAL_KIND else None
+        spec=launch_spec(broker.project,packet,scratch,cache,source_write_paths=source_writes)
         if read_only_source:
             spec['args'][2]+='(deny file-write* (subpath '+json.dumps(str(broker.project.worktree))+'))'
         for path in extra_read_paths:
@@ -91,6 +93,7 @@ class NativeControllerEffects:
             raise ExecutionBlocked('sealed Git manifest capture failed: '+json.dumps(diagnostic,sort_keys=True))
         manifest=json.loads(result['stdout'])
         for path,blob in self.profile['test_files'].items():
+            if self.profile.get('kind') == 'native-development-local-v2' and path in self.profile['source_contract']: continue
             if manifest.get(path,{}).get('blob_sha')!=blob:
                 raise ExecutionBlocked('approved baseline tests changed')
         return manifest
@@ -110,16 +113,28 @@ class NativeControllerEffects:
                 'sys.exit(0 if count>0 and result.testsRun==count and result.wasSuccessful() and '
                 'not result.skipped else 1)')
         else:
-            code=('import sys,os;os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"]="1";'
+            code=('import sys,os,json;os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"]="1";'
                 'sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/runtimes/test-packages'))+');'
                 'import pytest;sys.path.insert(0,os.getcwd());'
-                'counts={"passed":0,"skipped":0};'
-                'observer=type("NativeObserver",(),{"pytest_runtest_logreport":lambda self,report: '
+                'counts={"passed":0,"failed":0,"skipped":0,"collected":0};'
+                'observer=type("NativeObserver",(),{"pytest_collection_finish":lambda self,session: counts.__setitem__("collected",len(session.items)),"pytest_runtest_logreport":lambda self,report: '
                 'counts.__setitem__(report.outcome,counts.get(report.outcome,0)+1) '
                 'if report.when=="call" or report.outcome=="skipped" else None})();'
                 'status=pytest.main(["-q","-p","no:cacheprovider","--strict-markers",sys.argv[1]],plugins=[observer]);'
+                'print("DO_AGAIN_NATIVE_TEST_COUNTS "+json.dumps(dict(counts,pytest_exit_code=int(status)),sort_keys=True));'
                 'sys.exit(0 if status==0 and counts["passed"]>0 and counts["skipped"]==0 else 1)')
-        return self.capture(sid,[self.broker.config['python'],'-I','-S','-B','-c',code,case],60)
+        result=self.capture(sid,[self.broker.config['python'],'-I','-S','-B','-c',code,case],60)
+        if self.profile['test_runner']=='pytest':
+            lines=result.get('stdout','').splitlines()
+            if lines and lines[-1].startswith('DO_AGAIN_NATIVE_TEST_COUNTS '):
+                counts=json.loads(lines[-1].removeprefix('DO_AGAIN_NATIVE_TEST_COUNTS '))
+                if (set(counts)!={'passed','failed','skipped','collected','pytest_exit_code'}
+                        or any(type(v) is not int or v<0 for v in counts.values())):
+                    raise ExecutionBlocked('sealed pytest capture counts malformed')
+                result['native_test_counts']=counts
+            elif self.profile.get('kind')=='native-development-local-v2':
+                raise ExecutionBlocked('sealed pytest capture counts absent')
+        return result
 
     def collect(self,sid,fp):
         """Durable, independently captured failure probes for planning only."""
@@ -140,7 +155,8 @@ class NativeControllerEffects:
             cases.append({'case':case,'returncode':outcome['returncode'],
                 'file_present': (broker.project.worktree / case.split('::', 1)[0]).is_file(),
                 'pytest_exit_category': {0:'passed',1:'failed',2:'interrupted',3:'internal_error',
-                    4:'collection_or_usage_error',5:'no_tests_collected'}.get(outcome['returncode'],'other'),
+                    4:'collection_or_usage_error',5:'no_tests_collected'}.get(outcome.get('native_test_counts',{}).get('pytest_exit_code',outcome['returncode']),'other'),
+                'native_test_counts':outcome.get('native_test_counts'),
                 'stdout_sha256':hashlib.sha256(outcome['stdout'].encode()).hexdigest(),
                 'stderr_sha256':hashlib.sha256(outcome['stderr'].encode()).hexdigest()})
         if before!=self.measure(head,manifest):raise ExecutionBlocked('planning probes changed source')
@@ -155,12 +171,95 @@ class NativeControllerEffects:
         result={'returncode':0,'timed_out':False,'source_sha':broker.config['source_sha'],'evidence':evidence}
         broker.ledger.finish(project,sid,result);return evidence
 
+    def source_transaction(self, rid, request):
+        from .source_transaction import SourceTransaction
+        from .macos_execution import private_root_file
+        directory=self.broker.state / (rid+'-rollback')
+        if not directory.exists(): directory.mkdir(mode=0o700)
+        snapshot=directory/'source-rollback.json'
+        if snapshot.exists() or snapshot.is_symlink():
+            private_root_file(snapshot)
+            manifest=json.loads(snapshot.read_text())['manifest']
+        else:
+            manifest=self.manifest(rid+'-baseline',request['expected']['repo_head'])
+        return SourceTransaction(self.broker.project.worktree,directory,self.profile,
+            head=request['expected']['repo_head'],manifest=manifest,read_authority=self.head)
+
     def __call__(self,stage,sid,request,stages):
         broker=self.broker;fp=request_fingerprint(request);base=request['expected']['repo_head']
         from ..service.offline_continuation import persistent_scope
         epoch=broker.config['controller_scope']['epoch']+1
         if persistent_scope(broker.config['controller_scope']):
             epoch=broker.registry.status(broker.project.repo)['epoch']
+        if self.profile.get('kind') == 'native-development-local-v2':
+            rid = sid.rsplit('-',1)[0] if stage in {'regression_baseline','implementation','test','commit'} else sid
+            if stage=='source_snapshot':
+                # Original native failure identity is read-only provenance. No
+                # past stage, reservation, or browser call is reopened.
+                original=self.profile['original_task']
+                observed=broker.ledger.observe_request(broker.project.key,
+                    original['request_id']+'-implementation',original['request_fingerprint'])
+                if (observed.get('state')!='terminal' or observed.get('result',{}).get('returncode')==0
+                        or observed.get('result',{}).get('timed_out') is not False):
+                    raise ExecutionBlocked('original task failure is not positively terminal')
+                return self.source_transaction(rid,request).prepare()
+            if stage=='regression_baseline':
+                # Apply only already reviewed test bytes through the SAME
+                # confined executor; implementation bytes stay pinned.
+                code='from pathlib import Path\n'+''.join('Path('+repr(name)+').write_bytes('+repr(v['after_content'].encode())+')\n'
+                    for name,v in self.profile['source_contract'].items() if v['preserve_prefix'])
+                prepared=broker._dispatch({'operation':'execute','request_id':sid+'-edit',
+                    'argv':[broker.config['python'],'-B','-c',code], 'cwd':'.','timeout':60,
+                    'expected_head':base,'request_fingerprint':fp},broker.config['operator_uid'])
+                if prepared.get('returncode')!=0 or prepared.get('timed_out',False):
+                    raise ExecutionBlocked('native regression baseline preparation failed')
+                with self.admission():
+                    broker.ledger.reserve(broker.project.key,sid,fp,intent={'operation':'execute',
+                        'source_sha':broker.config['source_sha'],'request_fingerprint':fp})
+                txn=self.source_transaction(rid,request)
+                try:
+                    run=observe_tests(expected_head=base,cases=tuple(self.select_tests(request)),
+                        measure=txn.regression_baseline,execute=lambda case:self.run_case(sid,case),allow_failures=True)
+                    failed=[c for c in run['cases'] if c['exit_code']!=0]
+                    actual_assertion_failure=bool(failed) and all(
+                        c.get('native_test_counts',{}).get('pytest_exit_code')==1
+                        and c.get('native_test_counts',{}).get('failed',0)>0 for c in failed)
+                    result={'returncode':0 if actual_assertion_failure else 1,'timed_out':False,
+                        'source_sha':broker.config['source_sha'],'native_regression_baseline':run}
+                except Exception as exc:
+                    from .macos_execution import MacOSProcesses
+                    with broker.admission(): MacOSProcesses().drain(broker.project.uid)
+                    result={'returncode':1,'timed_out':True,'source_sha':broker.config['source_sha'],
+                        'error':'regression baseline capture failed: '+str(exc)}
+                broker.ledger.finish(broker.project.key,sid,result);return result
+            if stage=='source_rollback':
+                from .macos_execution import MacOSProcesses
+                with broker.admission():
+                    MacOSProcesses().drain(broker.project.uid)
+                    return self.source_transaction(rid,request).rollback()
+            if stage=='source_committed':
+                head=stages['commit']['authority']['repo_head']
+                return dict(self.source_transaction(rid,request).committed(head,self.manifest(rid+'-final',head)),
+                    epoch=broker.registry.status(broker.project.repo)['epoch'])
+            if stage=='test':
+                with self.admission():
+                    broker.ledger.reserve(broker.project.key,sid,fp,intent={'operation':'execute',
+                        'source_sha':broker.config['source_sha'],'request_fingerprint':fp})
+                txn=self.source_transaction(rid,request)
+                try:
+                    run=observe_tests(expected_head=base,cases=tuple(self.select_tests(request)),
+                        measure=txn.candidate,execute=lambda case:self.run_case(sid,case),allow_failures=True)
+                    result={'returncode':int(any(c['exit_code']!=0 for c in run['cases'])),
+                        'timed_out':False,'source_sha':broker.config['source_sha'],'native_test_run':run}
+                except Exception as exc:
+                    from .macos_execution import MacOSProcesses
+                    with broker.admission(): MacOSProcesses().drain(broker.project.uid)
+                    result={'returncode':1,'timed_out':True,'source_sha':broker.config['source_sha'],
+                        'error':'native test capture or measurement failed: '+str(exc)}
+                broker.ledger.finish(broker.project.key,sid,result);return result
+            if stage=='commit':
+                self.source_transaction(rid,request).candidate()
+            if stage=='publication': raise ExecutionBlocked('sealed local-only contract prohibits publication')
         if stage=='failure_observation':
             # No mutation: prove that a known failed local stage left an exact
             # committed tree, including the unchanged immutable baseline tests.

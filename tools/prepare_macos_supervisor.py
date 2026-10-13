@@ -450,6 +450,13 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         for path,blob in config['controller_profile']['test_files'].items():
             if git(jobpipe,'rev-parse',jp['source_sha']+':'+path)!=blob:
                 raise ValueError('controller baseline test hash differs from sealed jobpipe snapshot')
+        if config['controller_profile']['kind'] == 'native-development-local-v2':
+            profile = config['controller_profile']
+            if jp['source_sha'] != profile['original_task']['base_commit']:
+                raise ValueError('local contract must preserve original pinned jobpipe commit')
+            for name, bound in profile['source_contract'].items():
+                if git(jobpipe,'rev-parse',jp['source_sha']+':'+name) != bound['before_blob']:
+                    raise ValueError('local contract original file differs from pinned snapshot')
         if hosted is not None:
             if codex_native_payload is None:raise ValueError('hosted planner requires exact native CLI payload')
             native=Path(codex_native_payload)
