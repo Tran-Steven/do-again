@@ -88,17 +88,19 @@ def _read_source(repo: Path, paths: list[str]) -> tuple[str, list[dict]]:
 
 
 def _validate_plan(answer: str, *, call_id: str, head: str,
-                   source: list[dict], command: list[str]) -> dict:
+                   source: list[dict], command: list[str]) -> dict | None:
     if not isinstance(answer, str) or len(answer.encode()) > 65536:
         raise OperatorError("ChatGPT planner response is missing or oversized")
     try:
         result = json.loads(answer)
     except (ValueError, TypeError) as exc:
         raise OperatorError("ChatGPT planner response is not exactly one JSON object") from exc
-    if (not isinstance(result, dict)
-            or set(result) != {"call_id", "manifest"}
-            or result["call_id"] != call_id):
+    if not isinstance(result, dict) or result.get("call_id") != call_id:
         raise OperatorError("planner response is not bound to the reserved call identity")
+    if set(result) == {"call_id", "status"} and result["status"] == "goal_complete":
+        return None
+    if set(result) != {"call_id", "manifest"}:
+        raise OperatorError("planner response is not a bounded change or completion")
     manifest = result["manifest"]
     if (not isinstance(manifest, dict)
             or set(manifest) != {"expected_head", "changes", "test_command"}
@@ -192,7 +194,8 @@ def _plan_with_agent(agent, *, repo: Path, branch: str, goal: str,
         raise OperatorError("authenticated tab differs from bound project conversation")
 
     envelope = {
-        "call_id": call_id, "task": "Return exactly one JSON object with keys call_id and manifest",
+        "call_id": call_id,
+        "task": "Return one JSON object: either {call_id,manifest} for needed changes or {call_id,status:'goal_complete'} only if the goal is already satisfied by the provided sources.",
         "goal": goal.strip(), "source_head": head, "files": context,
         "manifest_contract": {
             "expected_head": head, "allowed_paths": [row["path"] for row in context],
@@ -228,9 +231,19 @@ def _plan_with_agent(agent, *, repo: Path, branch: str, goal: str,
     manifest = _validate_plan(
         result.get("response"), call_id=call_id,
         head=head, source=context, command=test_command)
-    intent_info["state"] = "reply_received"
     intent_info["response_sha256"] = hashlib.sha256(
         result["response"].encode()).hexdigest()
+    if manifest is None:
+        intent_info["state"] = "goal_complete"
+        intent_info["completed_at_utc"] = utc_now().isoformat()
+        atomic_json(intent, intent_info)
+        return {
+            "state": "model_declared_complete", "request_id": call_id,
+            "source_head": head, "branch": branch,
+            "application_submissions": False, "production_deployed": False,
+            "executed": False,
+        }
+    intent_info["state"] = "reply_received"
     atomic_json(intent, intent_info)
 
     now = utc_now()
