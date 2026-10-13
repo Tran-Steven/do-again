@@ -135,6 +135,17 @@ def plan_isolated_request(*, repo: Path, control_worktree: Path, state_dir: Path
     agent = create_isolated_worker(
         repo=repo, control_worktree=control_worktree, state_dir=state_dir,
         branch=branch, image=image)
+    # Serialize planning for this one project. Another project has its own
+    # private lock and can proceed independently; the lock does not grant
+    # permission to replay a prior uncertain browser send.
+    with runtime._file_lock(agent.state_dir / "isolated-planner.lock", timeout=5.0):
+        return _plan_with_agent(
+            agent, repo=repo, branch=branch, goal=goal,
+            files=files, test_command=test_command)
+
+
+def _plan_with_agent(agent, *, repo: Path, branch: str, goal: str,
+                     files: list[str], test_command: list[str]) -> dict:
     head, context = _read_source(repo, files)
     basis = {
         "project": str(repo), "head": head, "goal": goal.strip(),
