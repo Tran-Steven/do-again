@@ -159,7 +159,7 @@ class IsolatedEnrollmentTests(unittest.TestCase):
         self.assertEqual(
             parameters["test_command"],
             ["python", "-m", "unittest", "discover", "-s", "tests"])
-        self.assertTrue(str(parameters["state_dir"]).startswith(str(self.home)))
+        self.assertTrue(str(parameters["state_dir"].resolve()).startswith(str(self.home.resolve())))
 
     def test_enrollment_rejects_invalid_budget_before_mutation(self):
         with self.assertRaisesRegex(OperatorError, "cycle budget"):
