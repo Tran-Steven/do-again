@@ -986,7 +986,15 @@ def list_projects() -> int:
                 record = project_record(repo)
                 shared = browser_status(verify_session=False)
                 if record.get("chat_url") and shared.get("running"):
-                    browser = str(shared.get("mode") or "running")
+                    # A running, authenticated browser is NOT proof that this
+                    # project's bound conversation exists. This check is
+                    # read-only and never creates a tab or sends a message.
+                    try:
+                        target = _find_chatgpt_target(
+                            int(shared["port"]), str(record["chat_url"]))
+                        browser = str(shared.get("mode") or "running") if target else "tab-missing"
+                    except (BrowserError, KeyError, OSError, TypeError, ValueError):
+                        browser = "unavailable"
                 elif record.get("chat_url"):
                     browser = "stopped"
                 else:

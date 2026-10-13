@@ -123,8 +123,11 @@ class LocalSessionRecapTests(unittest.TestCase):
         (self.repo/"app.txt").write_text("a")
         git("add", "app.txt")
         git("commit", "-m", "Fix audio playback")
-        report = build_summary(self.layout, since=self.now-timedelta(days=2),
-                               now=self.now+timedelta(days=2))
+        # Git stamps real wall-clock commit dates. Use a matching window,
+        # not the frozen October 8 request-fixture clock.
+        commit_now = datetime.now(timezone.utc)
+        report = build_summary(self.layout, since=commit_now-timedelta(days=2),
+                               now=commit_now+timedelta(days=2))
         self.assertIn("Fix audio playback", report["recent_project_commits"])
         self.assertIn("may include non-Do Again changes", render_summary(report))
 

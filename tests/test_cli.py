@@ -574,7 +574,11 @@ class CliOnboardingTests(unittest.TestCase):
                 ),
                 patch(
                     "do_again.cli.browser_status",
-                    return_value={"running": True, "mode": "headless"},
+                    return_value={"running": True, "mode": "headless", "port": 9223},
+                ),
+                patch(
+                    "do_again.cli._find_chatgpt_target",
+                    return_value=object(),
                 ),
                 redirect_stdout(output),
             ):
