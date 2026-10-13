@@ -66,7 +66,8 @@ def _load_verified_receipt(agent, request_id: str) -> dict | None:
 
 def report_isolated_receipt(*, repo: Path, control_worktree: Path,
                             state_dir: Path, branch: str, image: str,
-                            request_id: str) -> dict:
+                            request_id: str,
+                            chat_repo: Path | None = None) -> dict:
     if not isinstance(request_id, str) or not _REQUEST_RE.fullmatch(request_id):
         raise OperatorError("receipt delivery requires a bounded isolated request ID")
     repo = Path(repo).resolve()
@@ -74,10 +75,13 @@ def report_isolated_receipt(*, repo: Path, control_worktree: Path,
         repo=repo, control_worktree=control_worktree,
         state_dir=state_dir, branch=branch, image=image)
     with runtime._file_lock(agent.state_dir / "isolated-planner.lock", timeout=5.0):
-        return _report_with_agent(agent, repo=repo, request_id=request_id)
+        return _report_with_agent(agent, repo=repo,
+                                  chat_repo=Path(chat_repo).resolve() if chat_repo is not None else repo,
+                                  request_id=request_id)
 
 
-def _report_with_agent(agent, *, repo: Path, request_id: str) -> dict:
+def _report_with_agent(agent, *, repo: Path, chat_repo: Path,
+                       request_id: str) -> dict:
     intent = agent.state_dir / "planning-intents" / (request_id + ".json")
     if not intent.is_file() or intent.is_symlink():
         raise OperatorError("receipt has no durable ChatGPT planning identity")
@@ -105,7 +109,7 @@ def _report_with_agent(agent, *, repo: Path, request_id: str) -> dict:
     receipt = _load_verified_receipt(agent, request_id)
     if receipt is None:
         return {"state": "awaiting_receipt", "request_id": request_id, "sent": False}
-    record = runtime.project_record(repo)
+    record = runtime.project_record(chat_repo)
     bound = str(record.get("chat_url") or "")
     conversation = runtime._chat_id(bound)
     if (not bound.startswith("https://chatgpt.com/c/")
