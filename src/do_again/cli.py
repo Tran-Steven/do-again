@@ -1269,9 +1269,30 @@ def main() -> int:
     )
     browser_login.add_argument("--skip-test", action="store_true")
 
+    cycle_parser = sub.add_parser(
+        "isolated-cycle",
+        help="Explicit offline patch+test experiment (not autonomous planning)",
+    )
+    cycle_parser.add_argument("manifest", type=Path)
+    cycle_parser.add_argument("--repo", type=Path, default=Path("."))
+    cycle_parser.add_argument("--image", required=True,
+                              help="Preinstalled container image pinned to @sha256 digest")
+    cycle_parser.add_argument("--output", type=Path, required=True)
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
+        return 0
+    if args.command == "isolated-cycle":
+        from .service.isolated_cycle import run_isolated_cycle
+        try:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            result = run_isolated_cycle(
+                args.repo, manifest, image=args.image, output_dir=args.output)
+        except (OSError, ValueError, OperatorError, subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated cycle blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "doctor":
         return doctor(args.path, fix=args.fix)
