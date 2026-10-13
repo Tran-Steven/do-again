@@ -176,6 +176,26 @@ class IsolatedEnrollmentTests(unittest.TestCase):
             ["python", "-m", "unittest", "discover", "-s", "tests"])
         self.assertTrue(str(parameters["state_dir"].resolve()).startswith(str(self.home.resolve())))
 
+    def assert_suite_executes_only_fixed_command(self, suite, command):
+        result = self.enroll(test_suite=suite)
+        self.assertEqual(result["state"], "configured")
+        with patch(
+            "do_again.service.isolated_enrollment.runtime.project_record",
+            return_value={"chat_url": self.chat}
+        ), patch(
+            "do_again.service.isolated_enrollment.run_isolated_auto",
+            return_value={"state": "model_declared_complete"}
+        ) as execute:
+            run_enrolled_isolated(self.repo)
+        self.assertEqual(execute.call_args.kwargs["test_command"], command)
+
+    def test_sonary_bun_suite_is_predefined(self):
+        self.assert_suite_executes_only_fixed_command("bun", ["bun", "test"])
+
+    def test_jobpipe_pytest_suite_is_predefined(self):
+        self.assert_suite_executes_only_fixed_command(
+            "pytest", ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"])
+
     def test_enrollment_rejects_invalid_budget_before_mutation(self):
         with self.assertRaisesRegex(OperatorError, "cycle budget"):
             self.enroll(cycles=0)
