@@ -39,6 +39,9 @@ class ControllerLoop:
             proposal = self.planner.select(goal=self.goal, evidence=self.collect_evidence(),
                                            state=state, now=now)
         except Exception as exc:
+            from .browser_planner import PlanningNotReady
+            if isinstance(exc, PlanningNotReady):
+                return dict(self.controller.status(now), waiting_reason=str(exc))
             self.controller.block('planner failed or uncertain: '+type(exc).__name__, now)
             raise
         self.controller.reserve(proposal, pending_ids=pending, now=now)

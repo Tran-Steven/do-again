@@ -16,6 +16,14 @@ from .planner_contract import AuthorizedTransportPlanner
 from .offline_continuation import MAX_PERSISTENT_CYCLES
 
 
+class BrowserPlanningNotDispatched(ExecutionBlocked):
+    """Authenticated helper positively refused before its Send boundary."""
+
+
+class PlanningNotReady(ExecutionBlocked):
+    """A proven pre-dispatch wait, never uncertainty or task completion."""
+
+
 def browser_grant_digest(grant):
     return hashlib.sha256(canonical_json(grant)).hexdigest()
 

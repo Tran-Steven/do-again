@@ -1044,6 +1044,16 @@ def _require_send_target_focus(target: cdp.Target) -> None:
     })()"""
     observed = cdp.evaluate(target, probe, timeout=10.0)
     if virtual:
+        # A completed document can precede composer hydration. Wait read-only
+        # before preparation/dispatch, without activating a GUI window.
+        deadline = time.monotonic() + 10.0
+        while (isinstance(observed, dict)
+               and isinstance(observed.get('url'), str)
+               and observed['url'].startswith('https://chatgpt.com/')
+               and (observed.get('ready') != 'complete' or observed.get('editor_visible') is not True)
+               and time.monotonic() < deadline):
+            time.sleep(0.2)
+            observed = cdp.evaluate(target, probe, timeout=10.0)
         if not (state.get("mode") == "background"
                 and config.get("preferred_mode") in {"auto", "background"}
                 and config.get("allow_visible_fallback") is not True

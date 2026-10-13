@@ -116,9 +116,19 @@ class OperatorBrowserBridge:
         if not callable(self.reserve_delivery):
             raise ExecutionBlocked('browser bridge has no durable delivery reservation')
         self.reserve_delivery(identity)
-        result = self.driver.send_once(
-            request['message'], conversation_id=request['conversation_id'],
-            call_id=request['call_id'], profile_sha256=request['profile_sha256'])
+        from .errors import BrowserPreDispatchBlocked
+        try:
+            result = self.driver.send_once(
+                request['message'], conversation_id=request['conversation_id'],
+                call_id=request['call_id'], profile_sha256=request['profile_sha256'])
+        except BrowserPreDispatchBlocked as exc:
+            # Only a typed refusal before the durable Send boundary permits
+            # this disposition. Timeouts and generic errors never do.
+            write_frame(connection, {'call_id':request['call_id'],
+                'conversation_id':request['conversation_id'],
+                'grant_sha256':browser_grant_digest(self.grant),
+                'state':'pre_dispatch_blocked','error':str(exc)[:1000]})
+            return dict(identity, state='pre_dispatch_blocked')
         if (not isinstance(result, dict)
                 or result.get('conversation_id') != request['conversation_id']
                 or not isinstance(result.get('response'), str)

@@ -146,6 +146,14 @@ class BrokerBrowserBridge:
                 raise ExecutionBlocked('browser bridge peer is not the approved operator')
             write_frame(client, request)
             reply = read_frame(client)
+        if (set(reply) == {'call_id', 'conversation_id', 'grant_sha256', 'state', 'error'}
+                and reply['call_id'] == call_id
+                and reply['conversation_id'] == conversation_id
+                and reply['grant_sha256'] == grant_sha256
+                and reply['state'] == 'pre_dispatch_blocked'
+                and isinstance(reply['error'], str) and len(reply['error']) <= 1000):
+            from .browser_planner import BrowserPlanningNotDispatched
+            raise BrowserPlanningNotDispatched(reply['error'])
         if (set(reply) != {'call_id', 'conversation_id', 'grant_sha256', 'response'}
                 or reply['call_id'] != call_id
                 or reply['conversation_id'] != conversation_id

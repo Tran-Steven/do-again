@@ -135,7 +135,8 @@ def run_persistent(repo, *, source, epoch, poll_seconds=20):
                     return _write_status(root, phase, source, epoch, cycles, state.get('blocker'))
                 if phase not in {'planning', 'waiting'}:
                     raise ExecutionBlocked('native controller lifecycle is unknown')
-                _write_status(root, phase, source, epoch, cycles)
+                _write_status(root, 'waiting_for_browser' if state.get('waiting_reason') else phase,
+                              source, epoch, cycles, state.get('waiting_reason'))
                 atomic_json(intent, {'source_sha': source, 'epoch': epoch,
                                      'acknowledged_cycles': cycles, 'state': 'tick_started'})
                 try:

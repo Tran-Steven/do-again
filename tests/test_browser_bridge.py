@@ -110,6 +110,28 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(fake.timeout, 120.0)
         self.assertEqual(len(fake.sent), 1)
 
+    def test_non_dispatch_refusal_must_match_the_original_call_and_grant(self):
+        from do_again.service.browser_planner import BrowserPlanningNotDispatched
+        call='planner-'+'a'*20+'-1';conversation='01234567-89ab-4cde-8012-0123456789ab'
+        reply={'call_id':call,'conversation_id':conversation,'grant_sha256':'e'*64,
+               'state':'pre_dispatch_blocked','error':'composer not ready'}
+        metadata=SimpleNamespace(st_mode=stat.S_IFSOCK|0o600,st_uid=501,st_nlink=1)
+        for mismatched in (False,True):
+            value=dict(reply,grant_sha256='f'*64) if mismatched else reply
+            fake=BufferedSocket(json.dumps(value).encode()+bytes([10]))
+            with patch('pathlib.Path.lstat',return_value=metadata), \
+                 patch('do_again.service.browser_bridge.sys.platform','darwin'), \
+                 patch('do_again.service.browser_bridge.socket.socket',return_value=fake):
+                try:
+                    BrokerBrowserBridge('/tmp/browser-planner-test.sock').send_once('{}',
+                        conversation_id=conversation,call_id=call,profile_sha256='f'*64,grant_sha256='e'*64)
+                except BrowserPlanningNotDispatched:
+                    self.assertFalse(mismatched)
+                except ExecutionBlocked:
+                    self.assertTrue(mismatched)
+                else:self.fail('refusal accepted as an answer')
+            self.assertEqual(len(fake.sent),1)
+
     def test_zero_model_call_probe_requires_exact_session(self):
         identity = {
             'operation':'probe-result', 'nonce':'a'*32,

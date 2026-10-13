@@ -81,6 +81,26 @@ class PersistentAuthorityTests(unittest.TestCase):
             with self.assertRaises(ExecutionBlocked):
                 validate_reserved_browser_call('planner-'+'a'*20+'-1',grant)
 
+    def test_only_positive_non_dispatch_can_admit_a_new_call_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal=PlanningCallJournal(Path(tmp)/'calls.json')
+            grant=self.config['browser_planning_scope']
+            first=journal.reserve(grant,1,'prompt',{})
+            with self.assertRaises(ExecutionBlocked): journal.reserve(grant,1,'prompt',{})
+            journal.not_dispatched(first,'composer not ready before Send')
+            second=journal.reserve(grant,1,'prompt',{})
+            self.assertNotEqual(first['call_id'],second['call_id'])
+            self.assertEqual(len(json.loads(journal.path.read_text())['calls']),2)
+            with self.assertRaises(ExecutionBlocked): journal.reserve(grant,1,'prompt',{})
+            with self.assertRaises(ExecutionBlocked): journal.not_dispatched(first,'overwrite old disposition')
+
+    def test_original_incomplete_persistent_journal_cannot_be_reinterpreted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'calls.json';grant=self.config['browser_planning_scope']
+            path.write_text(json.dumps({'scope_sha256':digest(grant),'calls':{'1':{'state':'reserved'}}}))
+            with self.assertRaisesRegex(ExecutionBlocked,'provenance'):
+                PlanningCallJournal(path).reserve(grant,1,'prompt',{})
+
     def test_model_must_acknowledge_original_verified_receipt(self):
         state={'acknowledged':['original'], 'requests':[{
             'phase':'acknowledged','request':{'request_id':'original'},

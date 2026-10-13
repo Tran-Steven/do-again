@@ -9,8 +9,8 @@ MAX_PROMPT_BYTES = 32768
 
 def completed_changes(state):
     acknowledged = set(state.get('acknowledged', [])[-8:])
-    return [{k:record.get(k) for k in ('receipt_sha256', 'implementation_commit',
-                                      'test_commit', 'gap', 'acceptance')}
+    return [{k:(record.get(k, '')[:256] if k in {'gap','acceptance'} and isinstance(record.get(k),str) else record.get(k))
+             for k in ('receipt_sha256', 'implementation_commit', 'test_commit', 'gap', 'acceptance')}
             | {'request_id': record['request']['request_id']}
             for record in state.get('requests', [])
             if record.get('phase') == 'acknowledged'
@@ -80,7 +80,17 @@ class AuthorizedTransportPlanner:
             schema['required'].append('acknowledged_receipts')
         cycle = len(state['requests']) + 1
         call = self.reserve_call(grant, cycle, prompt, schema)
-        answer = self.transport(prompt, schema, call=call, grant=grant)
+        try:
+            answer = self.transport(prompt, schema, call=call, grant=grant)
+        except ExecutionBlocked as exc:
+            from .browser_planner import BrowserPlanningNotDispatched, PlanningNotReady
+            if persistent and isinstance(exc, BrowserPlanningNotDispatched):
+                journal = getattr(self.reserve_call, '__self__', None)
+                if journal is None or not hasattr(journal, 'not_dispatched'):
+                    raise ExecutionBlocked('persistent planner lacks durable refusal journal') from exc
+                journal.not_dispatched(call, exc)
+                raise PlanningNotReady(str(exc)) from exc
+            raise
         if persistent:
             if (not isinstance(answer, dict)
                     or set(answer) != set(ANSWER_LIMITS) | {'acknowledged_receipts'}

@@ -86,6 +86,32 @@ These are source capabilities awaiting installed live validation. This
 candidate has **zero verified useful autonomous coding cycles**. Persistent
 mode does not yet establish clean installation, rollover or V1 readiness.
 
+### Installed persistent attempt — 2026-10-13 (not accepted)
+
+The installed native candidate `026523bdb863000a89283a8dabb1ef3af9dfaa95`
+passed 22 boundary checks for each of the three protected identities and a
+zero-model-call operator bridge proof. The actual wheel-installed background
+runner activated jobpipe at epoch 18; it handled an expired historical status
+request through the existing worker's original blocked receipt. No genuine
+coding cycle completed.
+
+The first planning attempt failed a composer-readiness guard before Send. The
+operator helper dropped its connection without an authenticated terminal
+refusal frame, leaving original call `planner-162e8f8c1f19fe24289a-1`
+reserved. Its delivery reservation is retained, no dispatch marker was found,
+and no model answer, request, code commit or receipt is claimed. The controller
+was stopped and jobpipe withdrawn to maintenance epoch 19; the original worker
+was subsequently observed gone. Sonary remained in maintenance epoch 1.
+The old reservation must not be replayed or retrospectively labeled a success.
+
+The source recovery update waits read-only for composer hydration and returns
+an exact call/grant-bound typed refusal before Send. Only that authenticated
+positive refusal can durably mark a future call not dispatched and permit a
+fresh call ID, consuming total budget. Closed connections, timeouts, generic
+errors and ambiguous dispatch remain non-replayable. Old persistent journals
+without original cycle provenance are rejected, never implicitly upgraded.
+This update cannot retrospectively adjudicate the installed failed call.
+
 ## Mandatory V1A qualification evidence (necessary, never sufficient)
 
 1. The final release candidate SHA passes all cross-platform CI jobs with

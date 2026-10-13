@@ -62,11 +62,31 @@ class PlanningCallJournal:
         if value['scope_sha256'] != scope_hash:
             raise ExecutionBlocked('hosted planning journal belongs to another grant')
         key = str(cycle)
+        if persistent:
+            if any(type(record.get('cycle')) is not int for record in value['calls'].values()):
+                raise ExecutionBlocked('persistent call journal lacks original cycle provenance')
+            # Refusals consume call budget. Never reuse an ID or retry a
+            # reserved/uncertain call; only proven non-dispatch admits a new ID.
+            previous = [record for record in value['calls'].values()
+                        if record.get('cycle') == cycle]
+            if any(record.get('state') != 'not_dispatched' for record in previous):
+                raise ExecutionBlocked('hosted call already reserved or call budget exhausted')
+            key = str(len(value['calls']) + 1)
         if key in value['calls'] or len(value['calls']) >= limit:
             raise ExecutionBlocked('hosted call already reserved or call budget exhausted')
         record = {'call_id': 'planner-'+scope_hash[:20]+'-'+key, 'state': 'reserved',
             'prompt_sha256': hashlib.sha256(prompt.encode()).hexdigest(),
             'schema_sha256': hashlib.sha256(canonical_json(schema)).hexdigest()}
+        if persistent: record['cycle'] = cycle
         value['calls'][key] = record
         atomic_json(self.path, value)
         return record
+
+    def not_dispatched(self, call, error):
+        value = json.loads(self.path.read_text())
+        key = call['call_id'].rsplit('-', 1)[1]
+        original = value['calls'].get(key)
+        if original != call or original.get('state') != 'reserved':
+            raise ExecutionBlocked('non-dispatch disposition differs from original reservation')
+        original.update(state='not_dispatched', error=str(error)[:1000])
+        atomic_json(self.path, value)

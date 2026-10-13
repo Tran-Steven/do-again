@@ -93,6 +93,30 @@ class OperatorBridgeTests(unittest.TestCase):
             'response': '{"result":"test"}',
         })
 
+    def test_typed_pre_dispatch_refusal_returns_exact_identity_without_success(self):
+        from do_again.browser.errors import BrowserPreDispatchBlocked
+        self.handler.driver.send_once=Mock(side_effect=BrowserPreDispatchBlocked('composer is not ready'))
+        conn=FakeConnection(self.request)
+        with patch('do_again.browser.planner_bridge_server.os.geteuid',return_value=501), \
+             patch('do_again.browser.planner_bridge_server.authenticated_peer_uid',return_value=0):
+            outcome=self.handler.handle_once(conn)
+        reply=json.loads(conn.outgoing[0])
+        self.assertEqual(reply['state'],'pre_dispatch_blocked')
+        self.assertEqual(reply['call_id'],self.call)
+        self.assertEqual(reply['grant_sha256'],self.request['grant_sha256'])
+        self.assertNotIn('response',reply)
+        self.assertEqual(outcome['state'],'pre_dispatch_blocked')
+        self.assertEqual(self.events,['reserve'])
+
+    def test_uncertain_driver_failure_is_never_labeled_non_dispatch(self):
+        from do_again.browser.errors import BrowserSubmissionUncertain
+        self.handler.driver.send_once=Mock(side_effect=BrowserSubmissionUncertain('Send outcome unknown'))
+        conn=FakeConnection(self.request)
+        with patch('do_again.browser.planner_bridge_server.os.geteuid',return_value=501), \
+             patch('do_again.browser.planner_bridge_server.authenticated_peer_uid',return_value=0):
+            with self.assertRaises(BrowserSubmissionUncertain):self.handler.handle_once(conn)
+        self.assertEqual(conn.outgoing,[])
+
     def test_untrusted_peer_cannot_reserve_or_send(self):
         conn = FakeConnection(self.request)
         with patch('do_again.browser.planner_bridge_server.os.geteuid', return_value=501), \

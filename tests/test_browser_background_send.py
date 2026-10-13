@@ -1,3 +1,4 @@
+import itertools
 import unittest
 from unittest.mock import Mock, patch
 
@@ -133,6 +134,22 @@ class BackgroundChatSendTests(unittest.TestCase):
         insert.assert_not_called()
         click.assert_not_called()
 
+    def test_composer_hydration_wait_does_not_focus_window_or_send(self):
+        initial={'focused':False,'visibility':'hidden','url':self.target.url,
+                 'ready':'complete','editor_visible':False}
+        hydrated=dict(initial,editor_visible=True)
+        with patch.object(runtime,'load_config',return_value=self.config), \
+             patch.object(runtime,'load_state',return_value=self.state), \
+             patch.object(runtime._background_send_session,'target_id',self.target.id,create=True), \
+             patch.object(runtime.time,'sleep') as sleep, \
+             patch.object(cdp,'evaluate',side_effect=[initial,hydrated]) as observe, \
+             patch.object(cdp,'target_call') as effects, \
+             patch.object(cdp,'click_send') as send:
+            runtime._require_send_target_focus(self.target)
+        self.assertEqual(observe.call_count,2)
+        sleep.assert_called_once_with(0.2)
+        effects.assert_not_called();send.assert_not_called()
+
     def test_virtual_focus_rejects_other_origins_or_unready_composer(self):
         for invalid in (
             {"focused": False, "visibility": "hidden",
@@ -154,6 +171,7 @@ class BackgroundChatSendTests(unittest.TestCase):
                  patch.object(runtime, "load_config", return_value=self.config), \
                  patch.object(runtime, "load_state", return_value=self.state), \
                  patch.object(cdp, "evaluate", return_value=invalid), \
+                 patch.object(runtime.time, "monotonic", side_effect=itertools.count(0, 11)), \
                  patch.object(cdp, "target_call") as calls, \
                  patch.object(cdp, "click_send") as gesture, \
                  patch.object(cdp, "insert_text") as insert:
