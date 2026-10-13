@@ -18,7 +18,7 @@ from ..supervisor.macos_execution import ExecutionBlocked
 
 
 LABEL = "io.github.tran-steven.do-again.v1a-jobpipe-runner"
-SOURCE = re.compile(r"[a-f0-9]{40}\\Z")
+SOURCE = re.compile(r"[a-f0-9]{40}\Z")
 POLL_SECONDS = 20
 MAX_SECONDS = 6600
 
@@ -153,6 +153,7 @@ def background_start(repo):
         "ProcessType": "Background",
         "WorkingDirectory": str(root),
         "EnvironmentVariables": {"HOME": str(Path.home()),
+                                 "PYTHONPATH": str(Path(__file__).resolve().parents[2]),
                                  "PATH": os.environ.get("PATH", "/usr/bin:/bin")},
         "StandardOutPath": str(root / "runner.out.log"),
         "StandardErrorPath": str(root / "runner.err.log"),
