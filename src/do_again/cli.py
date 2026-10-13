@@ -1277,9 +1277,52 @@ def main() -> int:
     )
     browser_login.add_argument("--skip-test", action="store_true")
 
+    cycle_parser = sub.add_parser(
+        "isolated-cycle",
+        help="Explicit offline patch+test experiment (not autonomous planning)",
+    )
+    cycle_parser.add_argument("manifest", type=Path)
+    cycle_parser.add_argument("--repo", type=Path, default=Path("."))
+    cycle_parser.add_argument("--image", required=True,
+                              help="Preinstalled container image pinned to @sha256 digest")
+    cycle_parser.add_argument("--output", type=Path, required=True)
+
+    worker_parser = sub.add_parser(
+        "isolated-worker",
+        help="Run isolated patch-only requests from a dedicated Git control branch",
+    )
+    worker_parser.add_argument("--repo", type=Path, required=True)
+    worker_parser.add_argument("--control-worktree", type=Path, required=True)
+    worker_parser.add_argument("--state-dir", type=Path, required=True)
+    worker_parser.add_argument("--branch", required=True)
+    worker_parser.add_argument("--image", required=True)
+    worker_parser.add_argument("--once", action="store_true",
+                               help="Run one queue scan and exit (default: keep polling)")
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
+        return 0
+    if args.command == "isolated-worker":
+        from .service.isolated_worker import create_isolated_worker
+        try:
+            agent = create_isolated_worker(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image)
+            return agent.run(once=args.once)
+        except (OSError, ValueError, OperatorError, subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated worker blocked: {exc}", file=sys.stderr)
+            return 1
+    if args.command == "isolated-cycle":
+        from .service.isolated_cycle import run_isolated_cycle
+        try:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            result = run_isolated_cycle(
+                args.repo, manifest, image=args.image, output_dir=args.output)
+        except (OSError, ValueError, OperatorError, subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated cycle blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "doctor":
         return doctor(args.path, fix=args.fix)
