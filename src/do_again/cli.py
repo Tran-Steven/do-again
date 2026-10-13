@@ -1299,9 +1299,37 @@ def main() -> int:
     worker_parser.add_argument("--once", action="store_true",
                                help="Run one queue scan and exit (default: keep polling)")
 
+    plan_parser = sub.add_parser(
+        "isolated-plan", help="Plan one fenced patch in the existing ChatGPT project conversation",
+    )
+    plan_parser.add_argument("--repo", type=Path, required=True)
+    plan_parser.add_argument("--control-worktree", type=Path, required=True)
+    plan_parser.add_argument("--state-dir", type=Path, required=True)
+    plan_parser.add_argument("--branch", required=True)
+    plan_parser.add_argument("--image", required=True)
+    plan_parser.add_argument("--goal", required=True)
+    plan_parser.add_argument("--file", action="append", required=True,
+                             help="Explicit approved source path (1-5)")
+    plan_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
+        return 0
+    if args.command == "isolated-plan":
+        from .service.isolated_planner import plan_isolated_request
+        command = (["python", "-m", "unittest", "discover", "-s", "tests"]
+                   if args.test_suite == "python" else ["npm", "test", "--", "--run"])
+        try:
+            result = plan_isolated_request(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                goal=args.goal, files=args.file, test_command=command)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated plan blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "isolated-worker":
         from .service.isolated_worker import create_isolated_worker

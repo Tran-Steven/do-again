@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..platforms.process import pid_alive
 from . import cdp
@@ -812,6 +812,7 @@ def send_message(
     *,
     timeout: float = 180.0,
     wait_for_response: bool = True,
+    before_dispatch: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     baseline = _assistant_snapshot(target)
     if baseline.get("busy"):
@@ -848,6 +849,11 @@ return 'ready';
     try:
         cdp.insert_text(target, text)
         time.sleep(0.15)
+        # Persist the caller's durable, fail-closed send intent immediately
+        # before the sole browser gesture. Failure here means no Enter was
+        # attempted; the caller may still conservatively retain its intent.
+        if before_dispatch is not None:
+            before_dispatch()
         # Exactly one gesture. From this point every exception is uncertain;
         # absence of composer clearing never permits a fallback submission.
         dispatch_started = True
