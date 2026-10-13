@@ -67,7 +67,7 @@ class CliOnboardingTests(unittest.TestCase):
                  redirect_stderr(errors), redirect_stdout(output):
                 result = setup_project(str(repo), install_background=True, browser=True)
             self.assertEqual(result, 1)
-            admission.assert_called_once_with(repo.resolve()
+            admission.assert_called_once_with(repo.resolve())
             browser.assert_not_called()
             install.assert_not_called()
             self.assertFalse((repo / "do-again.toml").exists())
