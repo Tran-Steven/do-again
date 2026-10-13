@@ -80,7 +80,7 @@ class NativeBrowserQualificationTests(unittest.TestCase):
             self.qualify()
 
     def test_guarded_source_upgrade_retains_zero_call_qualification(self):
-        previous_source = '9ea8d9306354c3a6b44da57a1caf57e0019abd8e'
+        previous_source = 'dbcec8acbea790793287945c0f9339f32624797b'
         self.broker.config['source_sha'] = 'c' * 40
         prior = {'state':'qualified_operator_bridge',
                  'source_sha':previous_source,
@@ -98,7 +98,7 @@ class NativeBrowserQualificationTests(unittest.TestCase):
         self.assertEqual(json.loads(path.read_text()), updated)
 
     def test_guarded_source_upgrade_denies_prior_planning_activity(self):
-        previous_source = '9ea8d9306354c3a6b44da57a1caf57e0019abd8e'
+        previous_source = 'dbcec8acbea790793287945c0f9339f32624797b'
         self.broker.config['source_sha'] = 'c'*40
         path = self.broker.state / 'browser-planner-qualification.json'
         path.write_text(json.dumps({
