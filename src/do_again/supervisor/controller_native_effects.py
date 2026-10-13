@@ -29,7 +29,7 @@ class NativeControllerEffects:
         result['network_denied']=True
         return result
 
-    def manifest(self,sid,head):
+    def prepare_manifest_metadata(self,sid,head):
         broker=self.broker
         # Git metadata belongs to the operator, not the sandboxed execution UID.
         # Export only allowlisted inert Git objects under root admission, using
@@ -68,6 +68,11 @@ class NativeControllerEffects:
                     item.chmod(0o500)
             os.chown(metadata,broker.project.uid,broker.project.gid)
             metadata.chmod(0o500)
+        return metadata
+
+    def manifest(self,sid,head):
+        broker=self.broker
+        metadata=self.prepare_manifest_metadata(sid,head)
         code=('import sys;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
             'from do_again.supervisor.git_manifest import tree_manifest;import json;'
             'print(json.dumps(tree_manifest(sys.argv[1],sys.argv[2],sys.argv[3])))')
