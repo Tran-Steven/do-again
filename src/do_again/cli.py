@@ -1229,6 +1229,13 @@ def main() -> int:
     controller_sub = controller_parser.add_subparsers(dest="controller_command", required=True)
     for action in ("start", "stop", "status"):
         controller_sub.add_parser(action).add_argument("path", nargs="?", default=".")
+    runner = controller_sub.add_parser(
+        "run", help="Continue the already authorized jobpipe controller until completion or blocker")
+    runner.add_argument("path")
+    runner.add_argument("--source-sha", required=True)
+    runner.add_argument("--epoch", type=int, required=True)
+    for action in ("background", "background-status", "background-stop"):
+        controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
     summary_parser = sub.add_parser(
@@ -1413,7 +1420,21 @@ def main() -> int:
         from .supervisor.macos_client import broker_request
         from .supervisor.macos_execution import ExecutionBlocked
         try:
-            value = broker_request(find_repo(args.path), {'operation': 'controller_'+args.controller_command})
+            if args.controller_command in ("run", "background", "background-status", "background-stop"):
+                from .service.controller_background import (
+                    run_bounded, background_start, background_status, background_stop,
+                )
+                repo = Path(args.path).expanduser().resolve()
+                if args.controller_command == "run":
+                    value = run_bounded(repo, source=args.source_sha, epoch=args.epoch)
+                elif args.controller_command == "background":
+                    value = background_start(repo)
+                elif args.controller_command == "background-status":
+                    value = background_status(repo)
+                else:
+                    value = background_stop(repo)
+            else:
+                value = broker_request(find_repo(args.path), {'operation': 'controller_'+args.controller_command})
         except (ExecutionBlocked, ServiceError, OSError, ValueError) as exc:
             print(f"do-again: controller: {exc}", file=sys.stderr)
             return 1
