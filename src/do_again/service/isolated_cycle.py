@@ -107,6 +107,9 @@ def _docker_test(workspace: Path, image: str, argv: list[str]) -> bool:
         "--user=65534:65534",
         "--tmpfs=/tmp:rw,nosuid,nodev,size=64m,mode=1777",
         "--env=PYTHONDONTWRITEBYTECODE=1",
+        "--env=HOME=/tmp",
+        "--env=XDG_CACHE_HOME=/tmp/.cache",
+        "--env=BUN_INSTALL_CACHE_DIR=/tmp/bun-cache",
         "--mount=type=bind,source=" + str(workspace) + ",target=/workspace,readonly",
         "--workdir=/workspace", image, *argv,
     ]
