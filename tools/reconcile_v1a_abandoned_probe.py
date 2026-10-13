@@ -103,6 +103,33 @@ def classify(db, project_key, expected, *, dry_run=True):
             "terminal_success":False,"replay_permitted":False}
 
 
+def retain_blocked_controller(controller_path):
+    """Durably archive the consumed old-scope controller, without resetting it.
+
+    Runs only after the original execution is atomically quarantined and audited.
+    An interruption between quarantine and archive is recoverable by explicitly
+    inspecting the DB and requesting a separate archive action; no auto-retry.
+    """
+    archived = controller_path.with_name(
+        "controller-blocked-" + OLD_SOURCE[:12] + "-retained.json")
+    if archived.exists() or archived.is_symlink():
+        refused("original controller journal was already retained")
+    if not controller_path.is_file() or controller_path.is_symlink():
+        refused("original controller journal missing after quarantine")
+    current = json.loads(controller_path.read_text())
+    if (current.get("state") != "blocked" or current.get("requests") != []
+            or current.get("acknowledged") != []
+            or current.get("outstanding") is not None):
+        refused("controller progress changed after quarantine")
+    os.rename(controller_path, archived)
+    fd = os.open(archived.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return archived
+
+
 def run(*, dry_run=True):
     if sys.platform != "darwin" or os.geteuid() != 0:
         refused("only approved macOS administrator can inspect or quarantine root ledger")
@@ -145,6 +172,9 @@ def run(*, dry_run=True):
                 if sibling_status["intent"] != "maintenance":
                     refused("sibling project not in maintenance")
         result=classify(db,project["key"],observed["intent"],dry_run=dry_run)
+    if not dry_run:
+        archive = retain_blocked_controller(controller_path)
+        result["controller_journal_retained"] = archive.name
     return result
 
 
