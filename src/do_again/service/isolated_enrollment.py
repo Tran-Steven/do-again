@@ -242,7 +242,7 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
         if remote_head != head:
             raise OperatorError("dedicated control branch exists with unexpected history")
     else:
-        _remote_git(repo, "push", "origin", "HEAD:" + remote_ref)
+        _remote_git(repo, "push", "origin", head + ":" + remote_ref)
     control = layout["control_worktree"]
     if control.is_symlink():
         raise OperatorError("isolated control worktree cannot be an alias")
