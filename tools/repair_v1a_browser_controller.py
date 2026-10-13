@@ -134,12 +134,18 @@ def main():
         fail("unexpected candidate branch")
     if output("git", "-C", str(jobpipe), "rev-parse", "refs/remotes/origin/main") != JOBPIPE_SOURCE:
         fail("jobpipe origin/main changed")
-    if output("git", "-C", str(candidate), "rev-parse", "HEAD") != OLD_SOURCE:
-        fail("candidate already differs; no automatic recovery")
     print("=== UPDATING VERIFIED SOURCE ===", flush=True)
     run("git", "fetch", "origin", "fix/v1a-safe-recovery", cwd=candidate)
+    fetched = output("git", "rev-parse", "FETCH_HEAD", cwd=candidate)
+    current_sha = output("git", "rev-parse", "HEAD", cwd=candidate)
+    if current_sha != OLD_SOURCE and current_sha != fetched:
+        fail("candidate differs from installed baseline and verified recovery head")
     run("git", "merge", "--ff-only", "FETCH_HEAD", cwd=candidate)
     source_sha = output("git", "rev-parse", "HEAD", cwd=candidate)
+    if source_sha != fetched:
+        fail("recovery branch source changed during fast-forward")
+    run("git", "merge-base", "--is-ancestor",
+        "01d6207fdc921cf890136a48340f44da12dde51c", source_sha, cwd=candidate)
     if source_sha == OLD_SOURCE:
         fail("new Mac identity fix not available")
     if not (candidate / "src/do_again/service/browser_bridge.py").is_file():
