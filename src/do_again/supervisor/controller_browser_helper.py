@@ -116,6 +116,8 @@ def qualify_operator_browser_bridge(broker):
             previous = json.loads(path.read_text())
         except (ValueError, OSError) as exc:
             raise ExecutionBlocked('previous bridge qualification is unreadable') from exc
+        if isinstance(previous, dict) and previous.get('source_sha') == broker.config['source_sha']:
+            raise ExecutionBlocked('bridge qualification already exists')
         if (not isinstance(previous, dict)
                 or previous.get('state') != 'qualified_operator_bridge'
                 or previous.get('source_sha') != previous_source
