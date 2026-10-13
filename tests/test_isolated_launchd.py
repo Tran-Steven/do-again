@@ -37,6 +37,11 @@ class IsolatedLaunchdTests(unittest.TestCase):
             return_value=(self.layout, self.config, self.label, self.plist))
         layout.start()
         self.addCleanup(layout.stop)
+        domain = patch(
+            "do_again.service.isolated_launchd._domain",
+            return_value="gui/501")
+        domain.start()
+        self.addCleanup(domain.stop)
 
     def test_install_uses_only_separate_user_label_and_bounded_python_entry(self):
         states = [False, True]
