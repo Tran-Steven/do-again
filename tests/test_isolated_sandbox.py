@@ -107,6 +107,29 @@ class IsolatedSandboxTests(unittest.TestCase):
             "receipt_sha256": digest,
         }))
 
+    def test_dirty_original_is_never_read_or_modified_in_committed_snapshot(self):
+        (self.source / "app.py").write_text("uncommitted private revision\n")
+        self.git(self.source, "add", "app.py")
+        (self.source / "untracked.py").write_text("untracked private data\n")
+        dirty_before = self.git(self.source, "status", "--porcelain", "--untracked-files=all")
+        state = self.root / "another-private-state"
+        state.mkdir(mode=0o700)
+        result = create_isolated_sandbox(
+            source_repo=self.source, state_dir=state)
+        workspace = Path(result["workspace"])
+        self.assertEqual(result["original_head"], self.source_head)
+        self.assertEqual(
+            (workspace / "app.py").read_text(),
+            "def value():\n    return 1\n")
+        self.assertFalse((workspace / "untracked.py").exists())
+        self.assertEqual(
+            self.git(self.source, "status", "--porcelain", "--untracked-files=all"),
+            dirty_before)
+        self.assertEqual(
+            (self.source / "app.py").read_text(),
+            "uncommitted private revision\n")
+        self.assertEqual(self.git(self.source, "rev-parse", "HEAD"), self.source_head)
+
     def test_create_private_snapshot_retains_tracked_ignored_files(self):
         self.assertEqual(self.sandbox["state"], "created")
         self.assertTrue((self.workspace / "app.py").is_file())
