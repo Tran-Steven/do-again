@@ -53,6 +53,15 @@ class NativeBrowserQualificationTests(unittest.TestCase):
         self.assertIn("packet == {'operation':'qualify_browser_planner'}", dispatch)
         self.assertIn("qualify_operator_browser_bridge(self)", dispatch)
 
+    def test_controller_lifecycle_reachable_only_by_exact_operator_packets(self):
+        import inspect
+        from do_again.supervisor import macos_server
+        source = inspect.getsource(macos_server.serve_operator)
+        for operation in ('controller_start', 'controller_stop',
+                          'controller_status', 'controller_tick'):
+            self.assertIn("'"+operation+"'", source)
+        self.assertIn("broker.dispatch({'operation':packet['operation']}", source)
+
     def test_success_seals_exact_zero_call_proof_once(self):
         result = self.qualify()
         self.assertEqual(result['browser_calls'],0)
