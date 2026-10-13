@@ -114,3 +114,11 @@ class NativeLifecycleRecoveryTests(unittest.TestCase):
         unload.assert_called_once()
         self.assertEqual(result['state'],'worker_withdrawal_uncertain')
         self.assertTrue(result['journals_retained']);self.assertTrue(result['service_unloaded'])
+
+class ScriptBytesTests(unittest.TestCase):
+    def test_syntax_error_rejected_before_native_request_builder(self):
+        from do_again.service.planner_contract import validate_planning_answer
+        with self.assertRaisesRegex(ExecutionBlocked,'valid Python before dispatch'):
+            validate_planning_answer({'gap':'gap','acceptance':'test','script':'if True:\nprint(1)'})
+        valid='if True:\n    print(1)'
+        self.assertEqual(validate_planning_answer({'gap':'gap','acceptance':'test','script':valid})['script'],valid)

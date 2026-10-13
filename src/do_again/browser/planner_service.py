@@ -78,8 +78,8 @@ def serve_forever(*, repo, grant_path):
     grant = load_private_browser_grant(grant_path)
     if profile_fingerprint() != grant['profile_sha256']:
         raise ExecutionBlocked('browser grant does not identify the live operator profile')
-    record = runtime.project_record(Path(repo).resolve())
-    url = str(record.get('chat_url') or '')
+    from .native_planner_binding import bound_planner_url
+    url = bound_planner_url(repo,grant)
     if runtime._chat_id(url) != grant['conversation_id']:
         raise ExecutionBlocked('operator browser project chat differs from sealed grant')
     root = private_operator_directory(runtime.browser_paths().root)
@@ -88,7 +88,7 @@ def serve_forever(*, repo, grant_path):
     replies = private_operator_directory(root / 'planner-replies', create=True)
     driver = ChatGPTPlannerDriver(
         repo=Path(repo).resolve(), profile_attestor=profile_fingerprint,
-        record_dispatch=DurableDeliveryReservation(dispatched))
+        record_dispatch=DurableDeliveryReservation(dispatched), conversation_url=url)
     handler = OperatorBrowserBridge(
         grant=grant, driver=driver,
         reserve_delivery=DurableDeliveryReservation(delivery), replies=DurableReplyJournal(replies))

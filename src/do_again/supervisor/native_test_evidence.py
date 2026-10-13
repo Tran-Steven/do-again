@@ -9,9 +9,9 @@ import re
 from .macos_execution import ExecutionBlocked
 
 
-def observe_tests(*, expected_head, cases, measure, execute):
+def observe_tests(*, expected_head, cases, measure, execute, allow_failures=False):
     if (not re.fullmatch('[0-9a-f]{40}', expected_head)
-            or not isinstance(cases, tuple) or not cases or len(cases) > 64
+            or not isinstance(cases, tuple) or not cases or len(cases) > 128
             or len(set(cases)) != len(cases)
             or any(not isinstance(c, str) or not re.fullmatch(r'(?:[A-Za-z_][A-Za-z_0-9]*(\.[A-Za-z_][A-Za-z_0-9]*)*|tests/(?:[A-Za-z_][A-Za-z_0-9]*/)*test_[A-Za-z_0-9]+\.py(?:::[A-Za-z_][A-Za-z_0-9]*)*)', c) for c in cases)):
         raise ExecutionBlocked('sealed native test profile is invalid')
@@ -36,8 +36,10 @@ def observe_tests(*, expected_head, cases, measure, execute):
             if not isinstance(value, str) or result.get(stream+'_truncated', False):
                 raise ExecutionBlocked('native test output absent or truncated')
             outcome[stream+'_sha256'] = hashlib.sha256(value.encode()).hexdigest()
+        if 'native_test_counts' in result:
+            outcome['native_test_counts']=result['native_test_counts']
         outcomes.append(outcome)
-        if result['returncode'] != 0:
+        if result['returncode'] != 0 and not allow_failures:
             raise ExecutionBlocked('independently observed test process failed')
     after = measure()
     if not valid(after) or before != after:

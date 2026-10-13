@@ -25,6 +25,9 @@ def planning_prompt(goal, evidence, state):
         'goal': goal, 'evidence': evidence,
         'completed_request_ids': state['acknowledged'][-8:],
         'completed_changes': completed_changes(state),
+        'failed_changes': [{'request_id': r['request']['request_id'],
+            'failure': r['verified_failure'], 'receipt_sha256': r['receipt_sha256']}
+            for r in state.get('requests', [])[-8:] if r.get('phase') == 'failed'],
     }).decode()
     if len(prompt.encode()) > MAX_PROMPT_BYTES:
         raise ExecutionBlocked('planning prompt exceeds authorized exposure budget')
@@ -49,6 +52,10 @@ def validate_planning_answer(answer):
                    or len(answer[key]) > limit
                    for key, limit in ANSWER_LIMITS.items())):
         raise ExecutionBlocked('planner answer outside bounded schema')
+    try:
+        compile(answer['script'], '<authorized-planner-script>', 'exec')
+    except (SyntaxError, ValueError, TypeError) as exc:
+        raise ExecutionBlocked('planner script is not valid Python before dispatch') from exc
     return answer
 
 

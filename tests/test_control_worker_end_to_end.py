@@ -82,3 +82,25 @@ class SealedWorkerProtocolTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+@unittest.skipUnless(hasattr(os,'getuid'),'private cache requires POSIX owner identity')
+class RestartCacheTests(unittest.TestCase):
+    def test_restart_hashes_actual_private_mirror_and_remote_refreshes_changed_record(self):
+        from do_again.core.schema import canonical_json
+        from do_again.supervisor.control_history import blob_sha
+        with tempfile.TemporaryDirectory() as directory:
+            control=Path(directory);relative='automation/do_again/receipts/original-123.json'
+            target=control/relative;target.parent.mkdir(parents=True)
+            atomic_json(target,{'state':'failed','request_id':'original-123'})
+            sent=[]
+            def rpc(repo,packet):
+                sent.append(json.loads(json.dumps(packet)))
+                return {'removed':[],'files':{relative:{'sha':'f'*40,
+                    'value':{'state':'succeeded','request_id':'original-123'}}},'complete':True}
+            transport=BrokerControlHistory(Path('/tmp/fixture'),control,3,rpc=rpc)
+            expected=blob_sha(canonical_json({'state':'failed','request_id':'original-123'})+b'\n')
+            self.assertEqual(transport.known[relative],expected)
+            transport.sync()
+            self.assertEqual(sent[0]['known'][relative],expected)
+            self.assertEqual(json.loads(target.read_text())['state'],'succeeded')
+            self.assertEqual(transport.known[relative],'f'*40)

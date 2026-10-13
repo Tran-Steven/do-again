@@ -16,10 +16,11 @@ from . import runtime
 
 
 class ChatGPTPlannerDriver:
-    def __init__(self, *, repo: Path, profile_attestor, record_dispatch):
+    def __init__(self, *, repo: Path, profile_attestor, record_dispatch, conversation_url=None):
         self.repo = repo
         self.profile_attestor = profile_attestor
         self.record_dispatch = record_dispatch
+        self.conversation_url = conversation_url
 
     def send_once(self, message, *, conversation_id, call_id, profile_sha256):
         if os.name != 'posix' or os.geteuid() == 0:
@@ -29,7 +30,7 @@ class ChatGPTPlannerDriver:
         if self.profile_attestor() != profile_sha256:
             raise ExecutionBlocked('browser profile identity changed')
         record = runtime.project_record(self.repo)
-        bound = str(record.get('chat_url') or '')
+        bound = self.conversation_url or str(record.get('chat_url') or '')
         if (not bound.startswith('https://chatgpt.com/c/')
                 or runtime._chat_id(bound) != conversation_id):
             raise ExecutionBlocked('project browser conversation does not match planner grant')
@@ -81,7 +82,7 @@ class ChatGPTPlannerDriver:
         if os.geteuid() != 501 or self.profile_attestor() != profile_sha256:
             raise ExecutionBlocked('original reply observer profile differs')
         record = runtime.project_record(self.repo)
-        url = str(record.get('chat_url') or '')
+        url = self.conversation_url or str(record.get('chat_url') or '')
         if runtime._chat_id(url) != conversation_id:
             raise ExecutionBlocked('original reply observer conversation differs')
         state = runtime.load_state()

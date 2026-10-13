@@ -132,7 +132,7 @@ def project_from_dict(item: dict[str, Any]) -> ProjectExecution:
                             tuple(Path(p) for p in item['executables']))
 
 
-def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
+def profile(project: ProjectExecution, scratch: Path, cache: Path, *, source_write_paths=None) -> str:
     # Imported OS rules supply loader/secinit support. Restrict their IPC and
     # network grants explicitly. UID separation protects the operator's launchd
     # domain even where Seatbelt alone does not check existing service mutations.
@@ -155,6 +155,21 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
              Path('/bin'), Path('/usr/bin'), INSTALL_ROOT / 'current/runtimes',
              INSTALL_ROOT / 'current/package')
     subpaths = lambda paths: ' '.join(f'(subpath {json.dumps(str(p))})' for p in paths)
+    writes = subpaths(roots)
+    if source_write_paths is not None:
+        if not isinstance(source_write_paths, tuple) or len(source_write_paths) > 16:
+            raise ExecutionBlocked('invalid sealed source write scope')
+        exact = []
+        for name in source_write_paths:
+            path = Path(name)
+            if (not isinstance(name, str) or path.is_absolute() or str(path) != name
+                    or '..' in path.parts or not path.parts or path.parts[0] == '.git'):
+                raise ExecutionBlocked('source write scope escapes assigned worktree')
+            target = project.worktree / path
+            if any(p.is_symlink() for p in (target, *target.parents)):
+                raise ExecutionBlocked('source write scope contains an alias')
+            exact.append('(literal ' + json.dumps(str(target)) + ')')
+        writes = subpaths((scratch.resolve(), cache.resolve())) + ' ' + ' '.join(exact)
     runner = INSTALL_ROOT / 'current/package/do_again/supervisor/execution_runner.py'
     protected_git = json.dumps(str(project.worktree / '.git'))
     return (
@@ -165,12 +180,12 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
         '(allow process-fork)(allow process-exec)(allow file-read-metadata)'
         f'(allow file-read* {subpaths(reads)} (literal {json.dumps(str(runner))}) (literal "/dev/null")(literal "/dev/urandom"))'
         f'(allow file-map-executable {subpaths(reads)})'
-        f'(allow file-write* {subpaths(roots)} (literal "/dev/null"))'
+        f'(allow file-write* {writes} (literal "/dev/null"))'
         f'(deny file-write* (subpath {protected_git}))'
     )
 
 
-def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path, cache: Path) -> dict[str, Any]:
+def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path, cache: Path, *, source_write_paths=None) -> dict[str, Any]:
     fields = {'operation', 'request_id', 'argv', 'cwd', 'timeout'}
     optional = {'request_fingerprint', 'expected_head', 'expected_authority'}
     if not fields <= set(packet) or set(packet) - fields - optional or packet['operation'] != 'execute':
@@ -196,7 +211,7 @@ def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= 3600:
         raise ExecutionBlocked('invalid execution timeout')
     return {
-        'args': ['/usr/bin/sandbox-exec', '-p', profile(project, scratch, cache), sys.executable, '-I', '-S', '-B',
+        'args': ['/usr/bin/sandbox-exec', '-p', profile(project, scratch, cache, source_write_paths=source_write_paths), sys.executable, '-I', '-S', '-B',
                  str(INSTALL_ROOT / 'current/package/do_again/supervisor/execution_runner.py'),
                  str(project.uid), str(math.ceil(timeout)), *argv],
         'cwd': str(cwd), 'user': project.uid, 'group': project.gid, 'extra_groups': [],

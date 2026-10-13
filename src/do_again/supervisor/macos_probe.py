@@ -135,6 +135,8 @@ print(json.dumps(result),flush=True)
             raise ExecutionBlocked('detached execution descendants survived proof')
         git_scratch, git_cache = git_proof_directories(root, project.uid, project.gid)
         git_evidence = verify_native_git(config, project, git_scratch, git_cache, nonce, start_guard=start_guard)
+        verify_literal_source_scope(config, project, root, scratch, cache, start_guard=start_guard)
+        result['literal_source_scope'] = True
         result['git_transaction'] = True
         result['git_broker_promotion'] = True
         return {'verified': True, 'git': git_evidence, 'checks': sorted(result), 'detached_descendants_drained': True,
@@ -269,3 +271,59 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     return {'verified':True,'promoted_sha':promoted['repo_head'], 'base_sha':base,
             'metadata_root_owned':True,'terminal_receipt_replayed':True,
             'live_authority_unchanged':True,'production_configuration_unchanged':True}
+
+
+def verify_literal_source_scope(config, project, root, scratch, cache, *, start_guard):
+    """Actual Seatbelt positive/negative proof on root-created synthetic source.
+
+    The real engineering worktree and its Git metadata are never modified.
+    The synthetic worktree is outside scratch/cache so their general write
+    permissions cannot accidentally make the negative test pass.
+    """
+    from dataclasses import replace
+    scratch, cache = root / 'literal-scope-scratch', root / 'literal-scope-cache'
+    for directory in (scratch,cache):
+        directory.mkdir(mode=0o700); os.chown(directory,project.uid,project.gid)
+    fixture = root / 'literal-source-fixture'
+    fixture.mkdir(mode=0o700)
+    os.chown(fixture, project.uid, project.gid)
+    allowed, blocked = fixture / 'allowed.py', fixture / 'blocked.py'
+    for path in (allowed, blocked):
+        path.write_text('BEFORE'); path.chmod(0o600); os.chown(path, project.uid, project.gid)
+    synthetic = replace(project, worktree=fixture)
+    script = ('import errno,json;from pathlib import Path;'
+        'a=Path('+repr(str(allowed))+');b=Path('+repr(str(blocked))+');'
+        'a.write_text("AFTER");ok=a.read_text()=="AFTER";'
+        '\ntry: b.write_text("ESCAPE")'
+        '\nexcept OSError as e: denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: denied=False'
+        '\ntry: __import__("os").link(b,'+repr(str(cache/'blocked-link'))+')'
+        '\nexcept OSError as e: link_denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: link_denied=False'
+        '\ntry:'
+        '\n Path('+repr(str(cache/'blocked-symlink'))+').symlink_to(b)'
+        '\n Path('+repr(str(cache/'blocked-symlink'))+').write_text("ESCAPE")'
+        '\nexcept OSError as e: symlink_denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: symlink_denied=False'
+        '\nprint(json.dumps({"allowed":ok,"other_denied":denied,"hardlink_denied":link_denied,"symlink_denied":symlink_denied}))')
+    packet={'operation':'execute','request_id':'literal-scope-'+root.name,
+        'argv':[config['python'],'-I','-S','-B','-c',script], 'cwd':'.','timeout':15}
+    result=capture(launch_spec(synthetic,packet,scratch,cache,source_write_paths=('allowed.py',)),
+                   15,start_guard=start_guard)
+    if (result['returncode'] or result['timed_out']
+            or json.loads(result['stdout'])!={'allowed':True,'other_denied':True,'hardlink_denied':True,'symlink_denied':True}
+            or allowed.read_text()!='AFTER' or blocked.read_text()!='BEFORE'):
+        raise BoundaryProbeBlocked('literal source write scope failed',{'phase':'literal_source_scope','outcome':result})
+    script=('import errno,json;from pathlib import Path;'
+        '\ntry: Path('+repr(str(allowed))+').write_text("ESCAPE")'
+        '\nexcept OSError as e: denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: denied=False'
+        '\nprint(json.dumps({"readonly_denied":denied}))')
+    packet=dict(packet, request_id='readonly-scope-'+root.name,
+                argv=[config['python'],'-I','-S','-B','-c',script])
+    result=capture(launch_spec(synthetic,packet,scratch,cache,source_write_paths=()),
+                   15,start_guard=start_guard)
+    if (result['returncode'] or result['timed_out']
+            or json.loads(result['stdout'])!={'readonly_denied':True}
+            or allowed.read_text()!='AFTER' or blocked.read_text()!='BEFORE'):
+        raise BoundaryProbeBlocked('read-only native test source scope failed',{'phase':'readonly_source_scope','outcome':result})
