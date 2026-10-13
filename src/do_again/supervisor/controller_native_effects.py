@@ -102,7 +102,7 @@ class NativeControllerEffects:
 
     def __call__(self,stage,sid,request,stages):
         broker=self.broker;fp=request_fingerprint(request);base=request['expected']['repo_head']
-        epoch=broker.config['controller_scope']['epoch']
+        epoch=broker.config['controller_scope']['epoch']+1
         if stage=='implementation':
             return broker._dispatch({'operation':'execute','request_id':sid,
                 'argv':[broker.config['python'],'-B','-c',request['args']['content']],
