@@ -35,6 +35,7 @@ from .browser import cdp
 from .platforms.detect import detect_platform
 from .browser.runtime import send_message, use_background_fallback, _find_chatgpt_target, _assistant_snapshot
 from .core.schema import OperatorError, REQUEST_ID_RE, request_fingerprint
+from .service.isolated_cycle import FIXED_TEST_SUITES
 from .service.rollout import staged_upgrade
 from .service.session_summary import build_summary, render_summary, save_summary, session_start
 from .service.runtime import (
@@ -1310,7 +1311,7 @@ def main() -> int:
     plan_parser.add_argument("--goal", required=True)
     plan_parser.add_argument("--file", action="append", required=True,
                              help="Explicit approved source path (1-5)")
-    plan_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+    plan_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
 
     receipt_parser = sub.add_parser(
         "isolated-report", help="Deliver one verified Git execution receipt to its bound ChatGPT conversation",
@@ -1332,7 +1333,7 @@ def main() -> int:
     once_parser.add_argument("--image", required=True)
     once_parser.add_argument("--goal", required=True)
     once_parser.add_argument("--file", action="append", required=True)
-    once_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+    once_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
 
     sandbox_parser = sub.add_parser(
         "isolated-sandbox", help="Create a private isolated source snapshot without changing the original",
@@ -1360,7 +1361,7 @@ def main() -> int:
     auto_parser.add_argument("--image", required=True)
     auto_parser.add_argument("--goal", required=True)
     auto_parser.add_argument("--file", action="append", required=True)
-    auto_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+    auto_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
     auto_parser.add_argument("--cycles", type=int, default=3)
 
     enroll_parser = sub.add_parser(
@@ -1370,7 +1371,7 @@ def main() -> int:
     enroll_parser.add_argument("--image", required=True)
     enroll_parser.add_argument("--goal", required=True)
     enroll_parser.add_argument("--file", action="append", required=True)
-    enroll_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+    enroll_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
     enroll_parser.add_argument("--cycles", type=int, default=10)
 
     enrolled_run_parser = sub.add_parser(
@@ -1402,8 +1403,7 @@ def main() -> int:
         return 0
     if args.command == "isolated-once":
         from .service.isolated_flow import run_isolated_once
-        command = (["python", "-m", "unittest", "discover", "-s", "tests"]
-                   if args.test_suite == "python" else ["npm", "test", "--", "--run"])
+        command = list(FIXED_TEST_SUITES[args.test_suite])
         try:
             result = run_isolated_once(
                 repo=args.repo, control_worktree=args.control_worktree,
@@ -1443,8 +1443,7 @@ def main() -> int:
         return 0
     if args.command == "isolated-auto":
         from .service.isolated_auto import run_isolated_auto
-        command = (["python", "-m", "unittest", "discover", "-s", "tests"]
-                   if args.test_suite == "python" else ["npm", "test", "--", "--run"])
+        command = list(FIXED_TEST_SUITES[args.test_suite])
         try:
             result = run_isolated_auto(
                 source_repo=args.source, control_worktree=args.control_worktree,
@@ -1505,8 +1504,7 @@ def main() -> int:
         return 0
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
-        command = (["python", "-m", "unittest", "discover", "-s", "tests"]
-                   if args.test_suite == "python" else ["npm", "test", "--", "--run"])
+        command = list(FIXED_TEST_SUITES[args.test_suite])
         try:
             result = plan_isolated_request(
                 repo=args.repo, control_worktree=args.control_worktree,
