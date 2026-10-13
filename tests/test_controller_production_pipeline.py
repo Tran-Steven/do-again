@@ -71,6 +71,10 @@ class ProductionPipelineTests(unittest.TestCase):
             patch('do_again.supervisor.controller_backend.DevelopmentAttestations',
                 lambda path:DevelopmentAttestations(path,owner_uid=owner)),
             patch.object(NativeControllerEffects,'head',lambda this:self.git('rev-parse','HEAD')),
+            # Synthetic Git/kernel adapter: root-owned metadata snapshot is
+            # exercised separately; simulated capture uses fixture .git only.
+            patch.object(NativeControllerEffects,'prepare_manifest_metadata',
+                         lambda this,sid,head:self.repo/'.git'),
             patch.object(NativeControllerEffects,'capture',self.capture),
             patch('do_again.supervisor.control_history.api_for',lambda broker:self.remote)]
         for p in self.patchers:p.start();self.addCleanup(p.stop)
