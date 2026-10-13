@@ -27,11 +27,11 @@ def _read_committed_source(repo: Path, paths: list[str]) -> tuple[str, list[dict
             raise OperatorError("hidden committed files are not eligible")
         name = item.as_posix()
         entries = _git(repo, "ls-tree", "-z", head, "--", name).stdout
-        rows = entries.split(b"\\x00")
+        rows = entries.split(b"\x00")
         if len(rows) != 2 or rows[1] != b"":
             raise OperatorError("approved file must exist in the committed tree")
         try:
-            metadata, actual = rows[0].split(b"\\t", 1)
+            metadata, actual = rows[0].split(b"\t", 1)
             mode, kind, blob = metadata.split()
         except ValueError as exc:
             raise OperatorError("committed source has an invalid Git tree entry") from exc
