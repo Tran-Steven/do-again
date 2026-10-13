@@ -29,7 +29,7 @@ def controller_service(broker, packet):
             scope = broker.config.get('controller_scope')
             binding = {'repository': 'Tran-Steven/jobpipe', 'branch': 'operator-control',
                 'goal_sha256': broker.config.get('controller_goal_sha256'),
-                'source_sha': broker.config['source_sha'], 'epoch': status['epoch']}
+                'source_sha': broker.config['source_sha'], 'epoch': (status['epoch'] - 1 if status['intent'] == 'active' and status['epoch'] == scope['epoch'] + 1 else status['epoch'])}
             now = datetime.now(timezone.utc)
             validate_scope(scope, binding=binding, now=now)
             backend = getattr(broker, 'controller_backend', None)
