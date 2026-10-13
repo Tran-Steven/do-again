@@ -1334,6 +1334,22 @@ def main() -> int:
     once_parser.add_argument("--file", action="append", required=True)
     once_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
 
+    sandbox_parser = sub.add_parser(
+        "isolated-sandbox", help="Create a private isolated source snapshot without changing the original",
+    )
+    sandbox_parser.add_argument("--source", type=Path, required=True)
+    sandbox_parser.add_argument("--state-dir", type=Path, required=True)
+
+    advance_parser = sub.add_parser(
+        "isolated-advance", help="Commit an acknowledged tested patch only into the private snapshot",
+    )
+    advance_parser.add_argument("--repo", type=Path, required=True)
+    advance_parser.add_argument("--control-worktree", type=Path, required=True)
+    advance_parser.add_argument("--state-dir", type=Path, required=True)
+    advance_parser.add_argument("--branch", required=True)
+    advance_parser.add_argument("--image", required=True)
+    advance_parser.add_argument("--request-id", required=True)
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
@@ -1366,6 +1382,32 @@ def main() -> int:
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["state"] == "completed" else 2
+    if args.command == "isolated-sandbox":
+        from .service.isolated_sandbox import create_isolated_sandbox
+        try:
+            result = create_isolated_sandbox(
+                source_repo=args.source, state_dir=args.state_dir)
+        except (OperatorError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated sandbox blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-advance":
+        from .service.isolated_worker import create_isolated_worker
+        from .service.isolated_sandbox import advance_isolated_sandbox
+        try:
+            agent = create_isolated_worker(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image)
+            result = advance_isolated_sandbox(
+                agent, request_id=args.request_id)
+        except (OperatorError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated advance blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
         command = (["python", "-m", "unittest", "discover", "-s", "tests"]

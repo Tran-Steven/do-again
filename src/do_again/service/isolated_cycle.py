@@ -164,7 +164,7 @@ def run_isolated_cycle(repo: Path, manifest: dict, *, image: str, output_dir: Pa
                 raise OperatorError("coding change exceeds size bound")
             planned[str(path)] = content
         _git(snapshot, "init", "-q")
-        _git(snapshot, "add", "--all")
+        _git(snapshot, "add", "-f", "--all")
         _git(snapshot, "-c", "user.name=Do Again Fixture", "-c",
              "user.email=do-again@invalid.example", "commit", "-qm", "isolated baseline")
         for name, content in planned.items():
