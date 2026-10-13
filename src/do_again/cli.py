@@ -34,7 +34,7 @@ from .browser import (
 from .browser import cdp
 from .platforms.detect import detect_platform
 from .browser.runtime import send_message, use_background_fallback, _find_chatgpt_target, _assistant_snapshot
-from .core.schema import REQUEST_ID_RE, request_fingerprint
+from .core.schema import OperatorError, REQUEST_ID_RE, request_fingerprint
 from .service.rollout import staged_upgrade
 from .service.session_summary import build_summary, render_summary, save_summary, session_start
 from .service.runtime import (
@@ -340,6 +340,13 @@ def setup_project(
 ) -> int:
     try:
         repo = find_repo(path)
+        if install_background:
+            # Never log in, create chats, mutate project configuration or
+            # claim setup success when the shipped background executor is
+            # intentionally disabled. This is a readiness check, not a
+            # fallback to the unsafe legacy runner.
+            from .supervisor.admission import reject_legacy_runtime
+            reject_legacy_runtime(repo)
         init_project(str(repo))
         _set_browser_enabled(repo, browser)
         layout = runtime_layout(repo)
@@ -373,6 +380,7 @@ def setup_project(
         ServiceError,
         BrowserError,
         BrowserAuthRequired,
+        OperatorError,
         subprocess.TimeoutExpired,
     ) as exc:
         print(f"do-again: setup failed: {exc}", file=sys.stderr)
