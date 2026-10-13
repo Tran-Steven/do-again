@@ -1312,9 +1312,32 @@ def main() -> int:
                              help="Explicit approved source path (1-5)")
     plan_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
 
+    receipt_parser = sub.add_parser(
+        "isolated-report", help="Deliver one verified Git execution receipt to its bound ChatGPT conversation",
+    )
+    receipt_parser.add_argument("--repo", type=Path, required=True)
+    receipt_parser.add_argument("--control-worktree", type=Path, required=True)
+    receipt_parser.add_argument("--state-dir", type=Path, required=True)
+    receipt_parser.add_argument("--branch", required=True)
+    receipt_parser.add_argument("--image", required=True)
+    receipt_parser.add_argument("--request-id", required=True)
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
+        return 0
+    if args.command == "isolated-report":
+        from .service.isolated_receipts import report_isolated_receipt
+        try:
+            result = report_isolated_receipt(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                request_id=args.request_id)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated receipt blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
