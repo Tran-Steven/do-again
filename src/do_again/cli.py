@@ -1322,6 +1322,18 @@ def main() -> int:
     receipt_parser.add_argument("--image", required=True)
     receipt_parser.add_argument("--request-id", required=True)
 
+    once_parser = sub.add_parser(
+        "isolated-once", help="Run one bounded ChatGPT plan, isolated execution, and receipt acknowledgment",
+    )
+    once_parser.add_argument("--repo", type=Path, required=True)
+    once_parser.add_argument("--control-worktree", type=Path, required=True)
+    once_parser.add_argument("--state-dir", type=Path, required=True)
+    once_parser.add_argument("--branch", required=True)
+    once_parser.add_argument("--image", required=True)
+    once_parser.add_argument("--goal", required=True)
+    once_parser.add_argument("--file", action="append", required=True)
+    once_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
@@ -1339,6 +1351,21 @@ def main() -> int:
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
+    if args.command == "isolated-once":
+        from .service.isolated_flow import run_isolated_once
+        command = (["python", "-m", "unittest", "discover", "-s", "tests"]
+                   if args.test_suite == "python" else ["npm", "test", "--", "--run"])
+        try:
+            result = run_isolated_once(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                goal=args.goal, files=args.file, test_command=command)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated cycle blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["state"] == "completed" else 2
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
         command = (["python", "-m", "unittest", "discover", "-s", "tests"]
