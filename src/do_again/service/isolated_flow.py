@@ -45,7 +45,8 @@ def _published_identity(*, repo: Path, state_dir: Path, goal: str,
 def run_isolated_once(*, repo: Path, control_worktree: Path,
                       state_dir: Path, branch: str, image: str,
                       goal: str, files: list[str],
-                      test_command: list[str]) -> dict:
+                      test_command: list[str],
+                      chat_repo: Path | None = None) -> dict:
     if (not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 2000
             or not isinstance(test_command, list)
             or tuple(test_command) not in TEST_COMMANDS):
@@ -59,7 +60,8 @@ def run_isolated_once(*, repo: Path, control_worktree: Path,
         planned = plan_isolated_request(
             repo=repo, control_worktree=control_worktree,
             state_dir=state_dir, branch=branch, image=image,
-            goal=goal, files=files, test_command=test_command)
+            goal=goal, files=files, test_command=test_command,
+            chat_repo=chat_repo)
         request_id = planned["request_id"]
     else:
         request_id = existing
@@ -96,7 +98,7 @@ def run_isolated_once(*, repo: Path, control_worktree: Path,
     feedback = report_isolated_receipt(
         repo=repo, control_worktree=control_worktree,
         state_dir=state_dir, branch=branch, image=image,
-        request_id=request_id)
+        request_id=request_id, chat_repo=chat_repo)
     if feedback["state"] != "acknowledged":
         return {
             "state": "awaiting_receipt", "request_id": request_id,

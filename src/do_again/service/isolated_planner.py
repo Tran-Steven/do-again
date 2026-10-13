@@ -125,7 +125,8 @@ def _validate_plan(answer: str, *, call_id: str, head: str,
 
 def plan_isolated_request(*, repo: Path, control_worktree: Path, state_dir: Path,
                           branch: str, image: str, goal: str,
-                          files: list[str], test_command: list[str]) -> dict:
+                          files: list[str], test_command: list[str],
+                          chat_repo: Path | None = None) -> dict:
     """Send once and publish a request, not an execution or source branch merge."""
     if (not isinstance(goal, str) or not 1 <= len(goal.strip()) <= 2000
             or not isinstance(test_command, list)
@@ -141,11 +142,13 @@ def plan_isolated_request(*, repo: Path, control_worktree: Path, state_dir: Path
     with runtime._file_lock(agent.state_dir / "isolated-planner.lock", timeout=5.0):
         return _plan_with_agent(
             agent, repo=repo, branch=branch, goal=goal,
-            files=files, test_command=test_command)
+            files=files, test_command=test_command,
+            chat_repo=Path(chat_repo).resolve() if chat_repo is not None else repo)
 
 
 def _plan_with_agent(agent, *, repo: Path, branch: str, goal: str,
-                     files: list[str], test_command: list[str]) -> dict:
+                     files: list[str], test_command: list[str],
+                     chat_repo: Path) -> dict:
     head, context = _read_source(repo, files)
     basis = {
         "project": str(repo), "head": head, "goal": goal.strip(),
@@ -172,7 +175,7 @@ def _plan_with_agent(agent, *, repo: Path, branch: str, goal: str,
     if intent.exists() or intent.is_symlink():
         raise OperatorError("same planning request already attempted; no duplicate send")
 
-    record = runtime.project_record(repo)
+    record = runtime.project_record(chat_repo)
     bound = str(record.get("chat_url") or "")
     conversation = runtime._chat_id(bound)
     if not bound.startswith("https://chatgpt.com/c/") or not conversation:

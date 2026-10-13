@@ -1350,6 +1350,19 @@ def main() -> int:
     advance_parser.add_argument("--image", required=True)
     advance_parser.add_argument("--request-id", required=True)
 
+    auto_parser = sub.add_parser(
+        "isolated-auto", help="Run 1-10 bounded autonomous coding cycles in a private source snapshot",
+    )
+    auto_parser.add_argument("--source", type=Path, required=True)
+    auto_parser.add_argument("--control-worktree", type=Path, required=True)
+    auto_parser.add_argument("--state-dir", type=Path, required=True)
+    auto_parser.add_argument("--branch", required=True)
+    auto_parser.add_argument("--image", required=True)
+    auto_parser.add_argument("--goal", required=True)
+    auto_parser.add_argument("--file", action="append", required=True)
+    auto_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+    auto_parser.add_argument("--cycles", type=int, default=3)
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
@@ -1408,6 +1421,22 @@ def main() -> int:
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
+    if args.command == "isolated-auto":
+        from .service.isolated_auto import run_isolated_auto
+        command = (["python", "-m", "unittest", "discover", "-s", "tests"]
+                   if args.test_suite == "python" else ["npm", "test", "--", "--run"])
+        try:
+            result = run_isolated_auto(
+                source_repo=args.source, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                goal=args.goal, files=args.file, test_command=command,
+                cycles=args.cycles)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated auto blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["state"] == "completed_bounded_cycles" else 2
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
         command = (["python", "-m", "unittest", "discover", "-s", "tests"]
