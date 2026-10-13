@@ -149,6 +149,69 @@ class IsolatedPlannerTests(unittest.TestCase):
             plan_isolated_request(**self.task)
         self.worker.publish_json.assert_not_called()
 
+    def test_planner_to_git_worker_to_receipt_round_trip(self):
+        """No real ChatGPT/Docker; Git remote, claim, patch and receipt are real."""
+        from do_again.service.isolated_worker import create_isolated_worker
+        remote = self.root / "origin.git"
+        subprocess.run(["git", "init", "--bare", str(remote)], check=True,
+                       capture_output=True, timeout=30)
+        def git(*args):
+            return subprocess.run(["git", "-C", str(self.repo), *args],
+                                  check=True, capture_output=True, text=True).stdout.strip()
+        git("remote", "add", "origin", str(remote))
+        git("push", "origin", "main")
+        git("checkout", "-b", "do-again-isolated")
+        git("push", "origin", "do-again-isolated")
+        git("checkout", "main")
+        git("fetch", "origin", "do-again-isolated")
+        control = self.root / "control"
+        git("worktree", "add", "--detach", str(control), "FETCH_HEAD")
+        task = dict(self.task, control_worktree=control)
+
+        def fake_send(target, prompt, *, before_dispatch, **kwargs):
+            before_dispatch()
+            envelope = json.loads(prompt)
+            return {"chat_url": self.bound, "response": json.dumps({
+                "call_id": envelope["call_id"],
+                "manifest": {
+                    "expected_head": self.head,
+                    "changes": [{
+                        "path": "app.py", "before_sha256": self.before,
+                        "content": "def answer():\\n    return 2\\n",
+                    }],
+                    "test_command": task["test_command"],
+                },
+            })}
+        with patch("do_again.browser.runtime.project_record",
+                   return_value={"chat_url": self.bound}), \\
+             patch("do_again.browser.runtime.ensure_browser_running",
+                   return_value={"port": 9224}), \\
+             patch("do_again.browser.runtime._find_chatgpt_target",
+                   return_value=self.target), \\
+             patch("do_again.browser.runtime.wait_for_authenticated",
+                   return_value=(self.target, {})), \\
+             patch("do_again.browser.runtime.send_message",
+                   side_effect=fake_send) as send, \\
+             patch("do_again.service.isolated_cycle._docker_test",
+                   return_value=True) as tested:
+            plan = plan_isolated_request(**task)
+            agent = create_isolated_worker(
+                repo=self.repo, control_worktree=control, state_dir=self.state,
+                branch=task["branch"], image=self.image)
+            self.assertEqual(agent.run(once=True), 0)
+            self.assertEqual(agent.run(once=True), 0)
+        send.assert_called_once()
+        tested.assert_called_once()
+        rid = plan["request_id"]
+        path = "automation/do_again/receipts/" + rid + ".json"
+        receipt = json.loads(git("show", "origin/do-again-isolated:" + path))
+        self.assertEqual(receipt["state"], "succeeded", receipt.get("error"))
+        self.assertEqual(receipt["result"]["result"]["isolated_patch"]["state"],
+                         "verified_isolated_patch")
+        self.assertEqual(git("rev-parse", "HEAD"), self.head)
+        self.assertEqual((self.repo / "app.py").read_text(),
+                         "def answer():\\n    return 1\\n")
+
     def test_dirty_source_fails_without_opening_browser(self):
         (self.repo / "app.py").write_text("unsaved change")
         with patch("do_again.service.isolated_planner.create_isolated_worker",
