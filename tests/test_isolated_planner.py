@@ -138,9 +138,11 @@ class IsolatedPlannerTests(unittest.TestCase):
         self.worker.publish_json.assert_not_called()
         path = self.state / "planning-intents" / (result["request_id"] + ".json")
         self.assertEqual(json.loads(path.read_text())["state"], "goal_complete")
-        with self.assertRaisesRegex(OperatorError, "outcome uncertain"):
-            plan_isolated_request(**dict(self.task, goal="another goal"))
-        sender.assert_called_once()
+        next_goal = plan_isolated_request(**dict(self.task, goal="another goal"))
+        self.assertEqual(next_goal["state"], "model_declared_complete")
+        with self.assertRaisesRegex(OperatorError, "already attempted"):
+            plan_isolated_request(**self.task)
+        self.assertEqual(sender.call_count, 2)
 
     def test_invalid_completion_shape_cannot_bypass_request_validation(self):
         def malformed(target, prompt, *, before_dispatch, **kwargs):
