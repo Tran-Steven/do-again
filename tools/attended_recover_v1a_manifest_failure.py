@@ -87,6 +87,15 @@ def main():
             or controller.get("acknowledged")!=[]
             or controller.get("outstanding") is not None):
         stop("controller contains unexpected development progress")
+    reconciler=candidate/"tools/reconcile_v1a_abandoned_probe.py"
+    python=Path("/usr/bin/python3")
+    sudo=Path("/usr/bin/sudo")
+    if (not reconciler.is_file() or reconciler.is_symlink()
+            or not python.is_file() or not sudo.is_file()):
+        stop("approved administrator reconciliation runtime unavailable")
+    grant=Path.home()/("do-again-v1a-setup/v1a-browser-repair-grants-"+OLD_SOURCE[:12])/"browser.json"
+    if not grant.is_file() or grant.is_symlink():
+        stop("previous operator browser grant missing; do not change authority")
     print("=== VERIFIED STRANDED CONTROLLER ===",flush=True)
     print("Original execution:",REQUEST)
     print("State: started, no terminal result")
@@ -99,13 +108,6 @@ def main():
         stop("authority transition uncertain; inspect the live status")
     print("Jobpipe: MAINTENANCE epoch 15")
 
-    reconciler=candidate/"tools/reconcile_v1a_abandoned_probe.py"
-    if not reconciler.is_file() or reconciler.is_symlink():
-        stop("approved root reconciliation script missing")
-    python=Path("/usr/bin/python3")
-    sudo=Path("/usr/bin/sudo")
-    if not python.is_file() or not sudo.is_file():
-        stop("system administrator runtime unavailable")
     print("\n=== ADMINISTRATOR INSPECTION (READ-ONLY) ===",flush=True)
     inspect=subprocess.run([str(sudo),str(python),"-B",str(reconciler),"--inspect"],
                            timeout=120,check=True,capture_output=True,text=True)
