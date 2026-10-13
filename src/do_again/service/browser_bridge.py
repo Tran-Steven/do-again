@@ -18,7 +18,7 @@ from pathlib import Path
 from ..core.schema import canonical_json
 from ..supervisor.macos_execution import ExecutionBlocked
 
-CALL_ID = re.compile(r'planner-[0-9a-f]{20}-[123]')
+CALL_ID = re.compile(r'planner-[0-9a-f]{20}-[1-9][0-9]{0,4}')
 MAX_FRAME = 100000
 
 

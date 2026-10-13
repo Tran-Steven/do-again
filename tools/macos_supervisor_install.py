@@ -73,7 +73,7 @@ def validate_project_scope(config, previous=None):
                 or config.get('production_ready') is not False
                 or config.get('live_canary') is not None
                 or config.get('codex_canary') is not None
-                or grant.get('kind')!='jobpipe-offline-v1'
+                or grant.get('kind') not in {'jobpipe-offline-v1','jobpipe-native-v1'}
                 or grant.get('network_access') is not False
                 or grant.get('application_submissions') is not False
                 or not isinstance(config.get('source_sha'),str)
@@ -87,11 +87,14 @@ def validate_project_scope(config, previous=None):
             raise RuntimeError('root-sealed jobpipe offline grant is invalid')
         try:
             issued=datetime.strptime(grant['issued_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-            expires=datetime.strptime(grant['expires_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            persistent=grant['kind']=='jobpipe-native-v1'
+            expires=None if persistent else datetime.strptime(grant['expires_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
             if (issued.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['issued_at_utc']
-                    or expires.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['expires_at_utc']
-                    or not issued<=datetime.now(timezone.utc)<=expires
-                    or not timedelta(0)<expires-issued<=timedelta(days=14)):
+                    or datetime.now(timezone.utc)<issued
+                    or (persistent and grant['expires_at_utc'] is not None)
+                    or (not persistent and (expires.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['expires_at_utc']
+                        or datetime.now(timezone.utc)>expires
+                        or not timedelta(0)<expires-issued<=timedelta(days=14)))):
                 raise ValueError('invalid jobpipe development grant lifetime')
         except (ValueError,TypeError,KeyError) as exc:
             raise RuntimeError('root-sealed jobpipe offline grant lifetime is invalid') from exc

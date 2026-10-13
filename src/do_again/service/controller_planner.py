@@ -50,15 +50,19 @@ class PlanningCallJournal:
     def __init__(self, path: Path): self.path = path
 
     def reserve(self, grant, cycle, prompt, schema):
-        if type(cycle) is not int or not 1 <= cycle <= 3:
-            raise ExecutionBlocked('hosted planner cycle outside three-call qualification')
+        persistent = grant.get('kind') == 'browser-planning-persistent-v1'
+        limit = grant.get('max_calls', 0) if persistent else 3
+        if type(limit) is not int or not 1 <= limit <= 10000:
+            raise ExecutionBlocked('invalid persistent call budget')
+        if type(cycle) is not int or not 1 <= cycle <= limit:
+            raise ExecutionBlocked('hosted planner cycle outside approved call budget')
         scope_hash = hashlib.sha256(canonical_json(grant)).hexdigest()
         value = json.loads(self.path.read_text()) if self.path.exists() else {
             'scope_sha256': scope_hash, 'calls': {}}
         if value['scope_sha256'] != scope_hash:
             raise ExecutionBlocked('hosted planning journal belongs to another grant')
         key = str(cycle)
-        if key in value['calls'] or len(value['calls']) >= 3:
+        if key in value['calls'] or len(value['calls']) >= limit:
             raise ExecutionBlocked('hosted call already reserved or call budget exhausted')
         record = {'call_id': 'planner-'+scope_hash[:20]+'-'+key, 'state': 'reserved',
             'prompt_sha256': hashlib.sha256(prompt.encode()).hexdigest(),

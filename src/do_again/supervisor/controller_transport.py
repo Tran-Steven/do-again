@@ -104,7 +104,7 @@ class ControllerHistory:
         state=self.controller.status(now)
         if not state['acknowledged'] or state['state'] in {'stopped','blocked'}:return
         value={'scope_sha256':digest(self.controller.scope),'source_sha':self.controller.scope['source_sha'],
-            'acknowledged_receipts':state['acknowledged'],'state':'completed' if len(state['acknowledged'])==3 else 'in_progress'}
+            'acknowledged_receipts':state['acknowledged'],'state':'completed' if len(state['acknowledged'])>=self.controller.scope['max_cycles'] else 'in_progress'}
         original=state.get('ack_publication',{})
         if original.get('value')==value and original.get('phase')=='committed':return
         path='automation/do_again/agent_status.json'

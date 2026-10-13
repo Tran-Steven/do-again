@@ -57,6 +57,35 @@ second feature roadmap. Mac-first V1 is acceptable; Linux and Windows native
 parity can be explicit follow-up work rather than a reason to postpone a
 working macOS V1.
 
+### Persistent native authority (implementation candidate, unqualified)
+
+`jobpipe-native-controller-v1` is a separate until-revoked scope. It accepts
+only ChatGPT browser planning, proposal-only integration, one outstanding
+request, no uncertain retry, no worker network, no applications/deploy/merge,
+and an operator-selected total cycle/call budget (1–10000). Each individual
+execution still has a 15-minute request lifetime and a 600-second maximum.
+The controller/browser/development scopes must explicitly select persistent
+mode together. Legacy V1A scopes retain their two-hour/three-call limits.
+Persistent journals and the zero-call bridge proof use a scope-digest namespace;
+legacy controller, effect, browser-delivery and archival records are retained.
+Maintenance, pause, source or goal changes fence further admission.
+Explicit start can resume jobpipe at a new protected epoch without renewing
+the grant; each worker/runner is pinned to its current operating epoch.
+
+On an installed and qualified persistent controller, normal `do-again start`,
+`status`, `summary`, `stop` and `restart` select the native lifecycle.
+`do-again controller native-start`, `native-status`, and `native-stop` expose
+the same lifecycle for direct inspection. The launchd runner
+survives Terminal closure and restarts after process failure. A started tick
+is reconciled against root state before continuation; uncertain planning
+stops without another Send. A last-written heartbeat is not liveness proof.
+The model receives verified prior commit/test/receipt hashes and must echo
+the exact acknowledgments before its next proposal is accepted.
+
+These are source capabilities awaiting installed live validation. This
+candidate has **zero verified useful autonomous coding cycles**. Persistent
+mode does not yet establish clean installation, rollover or V1 readiness.
+
 ## Mandatory V1A qualification evidence (necessary, never sufficient)
 
 1. The final release candidate SHA passes all cross-platform CI jobs with

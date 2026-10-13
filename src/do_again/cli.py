@@ -886,8 +886,19 @@ def retry_request(request_id: str, path: str = ".") -> int:
 
 
 def _service_action(action: str, path: str) -> int:
+    from .supervisor.macos_execution import ExecutionBlocked
     try:
         repo = find_repo(path)
+        from .service import native_operating
+        from .supervisor.macos_execution import ExecutionBlocked
+        if native_operating.configured(repo) and action in {'start', 'stop', 'restart'}:
+            if action == 'restart':
+                native_operating.stop(repo)
+                value = native_operating.start(repo)
+            else:
+                value = getattr(native_operating, action)(repo)
+            print(json.dumps(value, indent=2, sort_keys=True))
+            return 0
         layout = runtime_layout(repo)
         report_since = session_start(layout) if action == "stop" else None
 
@@ -918,7 +929,7 @@ def _service_action(action: str, path: str) -> int:
                 stop_if_unused()
         else:
             raise ServiceError(f"unsupported service action: {action}")
-    except (ServiceError, BrowserError, BrowserAuthRequired) as exc:
+    except (ServiceError, BrowserError, BrowserAuthRequired, ExecutionBlocked, OSError, ValueError) as exc:
         print(f"do-again: {exc}", file=sys.stderr)
         return 1
     _print_service_status(value)
@@ -1234,6 +1245,12 @@ def main() -> int:
     runner.add_argument("path")
     runner.add_argument("--source-sha", required=True)
     runner.add_argument("--epoch", type=int, required=True)
+    persistent = controller_sub.add_parser("run-persistent", help="Run the separately authorized persistent native controller")
+    persistent.add_argument("path")
+    persistent.add_argument("--source-sha", required=True)
+    persistent.add_argument("--epoch", type=int, required=True)
+    for action in ("native-start", "native-status", "native-stop"):
+        controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
     for action in ("background", "background-status", "background-stop"):
         controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
@@ -1420,7 +1437,14 @@ def main() -> int:
         from .supervisor.macos_client import broker_request
         from .supervisor.macos_execution import ExecutionBlocked
         try:
-            if args.controller_command in ("run", "background", "background-status", "background-stop"):
+            if args.controller_command in ("run-persistent", "native-start", "native-status", "native-stop"):
+                from .service import native_operating
+                repo = Path(args.path).expanduser().resolve()
+                if args.controller_command == "run-persistent":
+                    value = native_operating.run_persistent(repo, source=args.source_sha, epoch=args.epoch)
+                else:
+                    value = getattr(native_operating, args.controller_command.removeprefix("native-"))(repo)
+            elif args.controller_command in ("run", "background", "background-status", "background-stop"):
                 from .service.controller_background import (
                     run_bounded, background_start, background_status, background_stop,
                 )
@@ -1440,6 +1464,18 @@ def main() -> int:
             return 1
         print(json.dumps(value, indent=2, sort_keys=True))
         return 0
+    if args.command in {"status", "summary"}:
+        from .service import native_operating
+        from .supervisor.macos_execution import ExecutionBlocked
+        try:
+            repo = Path(args.path).expanduser().resolve()
+            if native_operating.configured(repo):
+                value = getattr(native_operating, args.command)(repo)
+                print(json.dumps(value, indent=2, sort_keys=True))
+                return 0
+        except (ExecutionBlocked, OSError, ValueError) as exc:
+            print(f"do-again: {exc}", file=sys.stderr)
+            return 1
     if args.command == "status":
         return status(args.path)
     if args.command == "summary":

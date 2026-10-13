@@ -15,6 +15,7 @@ from ..service.browser_planner import (
     BrowserResponseTransport, browser_grant_digest, validate_browser_planner_grant,
 )
 from .macos_execution import ExecutionBlocked, private_root_file
+from ..service.offline_continuation import controller_artifact, persistent_scope
 
 
 class SealedBrowserPlannerHelper:
@@ -22,7 +23,7 @@ class SealedBrowserPlannerHelper:
         self.config, self.state, self.admission = config, state, admission
         grant = config.get('browser_planning_scope')
         self.validate(grant, datetime.now(timezone.utc))
-        qualification = Path(state) / 'browser-planner-qualification.json'
+        qualification = Path(state) / controller_artifact(config['controller_scope'], 'browser-planner-qualification.json')
         private_root_file(qualification)
         try:
             proof = json.loads(qualification.read_text())
@@ -144,13 +145,15 @@ def qualify_operator_browser_bridge(broker):
         'operator_uid':501, 'peer_uid':peer['peer_uid'],
         'browser_calls':0,
     }
-    path = Path(broker.state) / 'browser-planner-qualification.json'
+    path = Path(broker.state) / controller_artifact(scope, 'browser-planner-qualification.json')
     # The very first successful V1A bridge proof was minted by source
     # 9ea8d930. A source-bound security fix needs a NEW proof. Preserve
     # the old sealed evidence without giving it authority for this source.
     # Fail closed if the previous grant had any controller/model-call state.
     original_source = '7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191'
     recent_source = 'de3de3314a4195133f25132ec7874785ee661b9a'
+    if persistent_scope(scope) and (path.exists() or path.is_symlink()):
+        raise ExecutionBlocked('persistent bridge proof already exists; no replacement')
     if path.exists() or path.is_symlink():
         private_root_file(path)
         try:

@@ -208,11 +208,15 @@ def validate_planner_authorization_preflight(source_sha, uid, gid, controller_gr
     browser=(json.loads(private_proposal_preflight(browser_planner_grant).read_text())
              if browser_planner_grant is not None else None)
     candidate={'source_sha':source_sha,'operator_uid':uid,'operator_gid':gid,
-               'development_scope':{'kind':'jobpipe-offline-v1'},'production_ready':False}
+               'development_scope':{'kind': ('jobpipe-native-v1' if proposal['scope'].get('kind') == 'jobpipe-native-controller-v1' else 'jobpipe-offline-v1')},'production_ready':False}
     apply_controller_grant(candidate,proposal,hosted,browser=browser)
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_persistent_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None):
+    if jobpipe_persistent_development:
+        if (not jobpipe_offline_development or controller_grant is None
+                or json.loads(private_proposal_preflight(controller_grant).read_text())['scope'].get('kind') != 'jobpipe-native-controller-v1'):
+            raise ValueError('persistent native authority requires explicit offline execution and persistent controller grants')
     if controller_grant is None and (hosted_planner_grant is not None or browser_planner_grant is not None or codex_native_payload is not None or controller_test_wheels is not None):
         raise ValueError('hosted capabilities require a separate controller package')
     if controller_grant is not None and (canary_grant is not None or codex_grant is not None or classify_canary_partial):
@@ -416,10 +420,10 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         issued=datetime.now(timezone.utc).replace(microsecond=0)
         expires=issued+timedelta(days=14)
         config['development_scope']={
-            'kind':'jobpipe-offline-v1', 'source_sha':source_sha,
+            'kind':('jobpipe-native-v1' if jobpipe_persistent_development else 'jobpipe-offline-v1'), 'source_sha':source_sha,
             'project_key':jobpipe_project['key'], 'goal_revision':jobpipe_project['goal_revision'],
             'issued_at_utc':issued.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'expires_at_utc':expires.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'expires_at_utc':None if jobpipe_persistent_development else expires.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'network_access':False, 'application_submissions':False}
         require_jobpipe_grant(config,project_from_dict(jobpipe_project),now=issued)
     if controller_grant is not None:
@@ -430,7 +434,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
                 raise ValueError('controller authorization proposal must be private and unaliased')
             return json.loads(path.read_text())
         if 'development_scope' not in config:
-            if installed is None or installed.get('development_scope',{}).get('kind')!='jobpipe-offline-v1':
+            if installed is None or installed.get('development_scope',{}).get('kind') not in {'jobpipe-offline-v1','jobpipe-native-v1'}:
                 raise ValueError('controller requires existing or explicitly prepared offline execution authority')
             # Rebind only source identity through the administrator-approved stage;
             # do not silently renew or broaden the existing offline grant.
@@ -546,6 +550,7 @@ if __name__=='__main__':
     grants.add_argument('--canary-grant',type=Path)
     grants.add_argument('--codex-grant',type=Path)
     grants.add_argument('--jobpipe-offline-development',action='store_true',help='Seal a 14-day jobpipe-only offline coding grant; does not resume or start workers')
+    parser.add_argument('--jobpipe-persistent-development',action='store_true',help='Explicit until-revoked native coding authority; requires persistent controller/browser grants')
     parser.add_argument('--controller-test-wheels',type=Path,help='Offline directory of preapproved wheels named by artifact id')
     parser.add_argument('--controller-grant',type=Path,help='Private exact controller scope/goal/profile for administrator review')
     parser.add_argument('--hosted-planner-grant',type=Path,help='Separate private hosted-model authority; never inferred from execution')
@@ -560,5 +565,6 @@ if __name__=='__main__':
                              classify_canary_partial=args.classify_canary_partial_publication,
                               sonary_repo=args.sonary_repo,
                               jobpipe_offline_development=args.jobpipe_offline_development,
+                              jobpipe_persistent_development=args.jobpipe_persistent_development,
                               jobpipe_migration_sha=args.jobpipe_migration_sha,controller_grant=args.controller_grant,
                               hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels,browser_planner_grant=args.browser_planner_grant),indent=2))

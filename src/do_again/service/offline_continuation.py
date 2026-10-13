@@ -19,6 +19,21 @@ def digest(value):
     return hashlib.sha256(canonical_json(value)).hexdigest()
 
 
+PERSISTENT_KIND = 'jobpipe-native-controller-v1'
+MAX_PERSISTENT_CYCLES = 10000
+
+
+def persistent_scope(scope):
+    return isinstance(scope, dict) and scope.get('kind') == PERSISTENT_KIND
+
+
+def controller_artifact(scope, name):
+    # New authority gets new journals. Never reinterpret a canary journal.
+    if persistent_scope(scope):
+        return 'native-' + digest(scope)[:20] + '-' + name
+    return name
+
+
 def validate_scope(scope, *, binding, now: datetime):
     fields = {'kind', 'repository', 'branch', 'goal_sha256', 'source_sha',
               'epoch', 'issued_at_utc', 'expires_at_utc', 'max_requests',
@@ -27,7 +42,8 @@ def validate_scope(scope, *, binding, now: datetime):
               'browser_messages'}
     if not isinstance(scope, dict) or set(scope) != fields:
         raise ExecutionBlocked('controller scope absent or contains unknown authority')
-    if (scope['kind'] != 'jobpipe-offline-controller-v1'
+    persistent = persistent_scope(scope)
+    if (scope['kind'] not in {'jobpipe-offline-controller-v1', PERSISTENT_KIND}
             or scope['repository'] != 'Tran-Steven/jobpipe'
             or scope['branch'] != 'operator-control'
             or scope['planner'] not in {'sealed-offline', 'codex-cli', 'chatgpt-browser-cdp'}
@@ -35,17 +51,29 @@ def validate_scope(scope, *, binding, now: datetime):
             or any(scope[k] is not False for k in
                    ('network_access', 'application_submissions', 'browser_messages'))
             or any(type(scope[k]) is not int or scope[k] != v for k, v in
-                   [('max_requests', 3), ('max_cycles', 3), ('max_outstanding', 1),
-                    ('max_retries', 0)])
+                   [('max_outstanding', 1), ('max_retries', 0)])
             or type(scope['epoch']) is not int or scope['epoch'] < 1
             or not isinstance(scope['source_sha'], str)
             or not re.fullmatch('[0-9a-f]{40}', scope['source_sha'])
             or not isinstance(scope['goal_sha256'], str)
             or not re.fullmatch('[0-9a-f]{64}', scope['goal_sha256'])
             or any(scope.get(k) != binding.get(k) for k in
-                   ('repository', 'branch', 'goal_sha256', 'source_sha', 'epoch'))):
+                   ('repository', 'branch', 'goal_sha256', 'source_sha'))
+            or (persistent and (type(binding.get('epoch')) is not int or binding['epoch'] < scope['epoch']))
+            or (not persistent and scope['epoch'] != binding.get('epoch'))):
         raise ExecutionBlocked('controller binding or bounded authority differs')
-    issued, expires = parse_utc(scope['issued_at_utc']), parse_utc(scope['expires_at_utc'])
+    if (type(scope['max_cycles']) is not int or type(scope['max_requests']) is not int
+            or scope['max_requests'] != scope['max_cycles']
+            or not 1 <= scope['max_cycles'] <= (MAX_PERSISTENT_CYCLES if persistent else 3)
+            or (not persistent and scope['max_cycles'] != 3)
+            or (persistent and scope['planner'] != 'chatgpt-browser-cdp')):
+        raise ExecutionBlocked('controller cycle budget or persistent provider differs')
+    issued = parse_utc(scope['issued_at_utc'])
+    if persistent:
+        if scope['expires_at_utc'] is not None or now < issued:
+            raise ExecutionBlocked('persistent scope requires explicit until-revoked authority')
+        return
+    expires = parse_utc(scope['expires_at_utc'])
     if not issued <= now < expires or not timedelta(0) < expires-issued <= timedelta(hours=2):
         raise ExecutionBlocked('controller expired, premature or exceeds two hours')
 
@@ -100,7 +128,7 @@ class OfflineContinuation:
         if state['state'] != 'planning' or state['outstanding'] or pending_ids:
             raise ExecutionBlocked('controller not planning or a request remains outstanding')
         if len(state['requests']) >= self.scope['max_requests']:
-            raise ExecutionBlocked('three-request budget exhausted')
+            raise ExecutionBlocked('authorized request budget exhausted')
         required = {'request', 'gap', 'acceptance', 'evidence_sha256'}
         if (not isinstance(proposal, dict) or set(proposal) != required
                 or any(not isinstance(proposal[k], str) or not proposal[k]
@@ -125,7 +153,8 @@ class OfflineContinuation:
         expires = parse_utc(request.get('expires_at_utc', ''))
         if (not issued <= now < expires
                 or not timedelta(0) < expires-issued <= timedelta(minutes=15)
-                or expires > parse_utc(self.scope['expires_at_utc'])
+                or (not persistent_scope(self.scope)
+                    and expires > parse_utc(self.scope['expires_at_utc']))
                 or not re.fullmatch('[0-9a-f]{64}', proposal['evidence_sha256'])):
             raise ExecutionBlocked('request lifetime or evidence binding differs')
         if state.get('validated_head') and request['expected']['repo_head'] != state['validated_head']:
@@ -134,11 +163,12 @@ class OfflineContinuation:
         rid = 'offline-' + digest(self.scope)[:20] + '-' + str(ordinal)
         request['request_id'] = rid
         request['continuation'] = {'goal_id': self.scope['goal_sha256'],
-            'goal_state': 'in_progress', 'acknowledged_receipts': list(state['acknowledged']),
+            'goal_state': 'in_progress', 'acknowledged_receipts': list(state['acknowledged'][-8:] if persistent_scope(self.scope) else state['acknowledged']),
             'summary': proposal['gap'] + ': ' + proposal['acceptance']}
         # Reserve exact content before the broker initiates any remote effect.
         record = {'request': request, 'fingerprint': request_fingerprint(request),
-                  'proposal_sha256': digest(proposal), 'phase': 'reserved'}
+                  'proposal_sha256': digest(proposal), 'phase': 'reserved',
+                  'gap': proposal['gap'], 'acceptance': proposal['acceptance']}
         state['requests'].append(record)
         state['outstanding'] = rid
         state['state'] = 'waiting'
@@ -190,5 +220,5 @@ class OfflineContinuation:
         record.update(implementation_commit=sha, test_commit=sha,
                       branch=evidence.get('branch'))
         if state['state'] != 'stopped':
-            state['state'] = 'completed' if len(state['acknowledged']) == 3 else 'planning'
+            state['state'] = 'completed' if len(state['acknowledged']) >= self.scope['max_cycles'] else 'planning'
         return self._save(state)

@@ -292,9 +292,15 @@ def main(argv: list[str] | None = None) -> int:
             return {'delivered':0,'liveness':'running'}
         return broker_request(repo,{'operation':'browser_tick','request_id':'browser-'+uuid.uuid4().hex,
                                     'epoch':status['epoch']})
+    from ..service.offline_continuation import persistent_scope
+    persistent = persistent_scope(config.get('controller_scope'))
     def controller_effect():
         # A separately sealed controller replaces browser continuation for this
         # worker. Existing uncertain browser journals/outbox remain untouched.
+        if persistent:
+            # The persistent runner serializes planning ticks and crash intent.
+            # This worker consumes reserved Git requests and publishes receipts.
+            return {'delivered':0, 'liveness':'native_runner_owned'}
         value = broker_request(repo, {'operation': 'controller_tick'})
         return {'delivered': int(value.get('state') == 'planning'), 'liveness': value.get('state', 'blocked')}
     effect = controller_effect if (config.get('controller_scope') is not None

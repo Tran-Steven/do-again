@@ -7,13 +7,24 @@ ANSWER_LIMITS = {'gap': 1000, 'acceptance': 1000, 'script': 16000}
 MAX_PROMPT_BYTES = 32768
 
 
+def completed_changes(state):
+    acknowledged = set(state.get('acknowledged', [])[-8:])
+    return [{k:record.get(k) for k in ('receipt_sha256', 'implementation_commit',
+                                      'test_commit', 'gap', 'acceptance')}
+            | {'request_id': record['request']['request_id']}
+            for record in state.get('requests', [])
+            if record.get('phase') == 'acknowledged'
+            and record['request']['request_id'] in acknowledged]
+
+
 def planning_prompt(goal, evidence, state):
     """Only previously redacted public evidence may be passed by the caller."""
     if not isinstance(state, dict) or not isinstance(state.get('acknowledged'), list):
         raise ExecutionBlocked('planning state is not a verified continuation')
     prompt = canonical_json({
         'goal': goal, 'evidence': evidence,
-        'completed_request_ids': state['acknowledged'],
+        'completed_request_ids': state['acknowledged'][-8:],
+        'completed_changes': completed_changes(state),
     }).decode()
     if len(prompt.encode()) > MAX_PROMPT_BYTES:
         raise ExecutionBlocked('planning prompt exceeds authorized exposure budget')
@@ -62,7 +73,18 @@ class AuthorizedTransportPlanner:
         grant = self._validated_grant(now)
         prompt = planning_prompt(goal, evidence, state)
         schema = planning_schema()
+        persistent = grant.get('kind') == 'browser-planning-persistent-v1'
+        completed = completed_changes(state)
+        if persistent:
+            schema['properties']['acknowledged_receipts'] = {'const': completed}
+            schema['required'].append('acknowledged_receipts')
         cycle = len(state['requests']) + 1
         call = self.reserve_call(grant, cycle, prompt, schema)
         answer = self.transport(prompt, schema, call=call, grant=grant)
+        if persistent:
+            if (not isinstance(answer, dict)
+                    or set(answer) != set(ANSWER_LIMITS) | {'acknowledged_receipts'}
+                    or answer['acknowledged_receipts'] != completed):
+                raise ExecutionBlocked('model did not acknowledge exact verified prior receipts')
+            answer = {k:v for k,v in answer.items() if k != 'acknowledged_receipts'}
         return self.request_builder(validate_planning_answer(answer), evidence, now)

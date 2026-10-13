@@ -102,6 +102,9 @@ spec.loader.exec_module(module)
 config=json.loads(sys.argv[2])
 previous=dict(config,source_sha='a'*40,development_scope=None)
 assert module.validate_project_scope(config,previous) is False
+config['development_scope']['kind']='jobpipe-native-v1'
+config['development_scope']['expires_at_utc']=None
+assert module.validate_project_scope(config,previous) is False
 config['development_scope']['application_submissions']=True
 try:
     module.validate_project_scope(config,previous)

@@ -10,7 +10,7 @@ import hashlib
 import os
 
 from ..core.schema import canonical_json
-from ..service.browser_planner import browser_grant_digest
+from ..service.browser_planner import browser_grant_digest, validate_reserved_browser_call
 from ..service.browser_bridge import (
     CALL_ID, authenticated_peer_uid, read_frame, write_frame,
 )
@@ -36,8 +36,9 @@ class DurableDeliveryReservation:
 
     def __call__(self, identity):
         if (not isinstance(identity, dict)
-                or set(identity) != {'call_id', 'conversation_id',
-                                     'profile_sha256', 'message_sha256'}
+                or set(identity) not in ({'call_id', 'conversation_id', 'profile_sha256', 'message_sha256'},
+                                     {'call_id', 'conversation_id', 'profile_sha256', 'message_sha256', 'state'})
+                or ('state' in identity and identity['state'] != 'dispatch_started')
                 or not isinstance(identity.get('call_id'), str)
                 or not CALL_ID.fullmatch(identity['call_id'])):
             raise ExecutionBlocked('browser delivery reservation identity invalid')
@@ -100,6 +101,10 @@ class OperatorBrowserBridge:
                 or not isinstance(request['message'], str)
                 or len(request['message'].encode()) > self.grant['max_prompt_bytes'] + 2048):
             raise ExecutionBlocked('browser bridge request differs from approved scope')
+        if self.grant.get('kind') == 'browser-planning-persistent-v1':
+            validate_reserved_browser_call(request['call_id'], self.grant)
+        elif not re.fullmatch(r'planner-[a-f0-9]{20}-[123]', request['call_id']):
+            raise ExecutionBlocked('browser call exceeds legacy three-call qualification')
         identity = {
             'call_id': request['call_id'],
             'conversation_id': request['conversation_id'],

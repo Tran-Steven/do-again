@@ -132,6 +132,7 @@ class ProjectBroker:
             return {'operator_intent': status['intent'], 'epoch': status['epoch'],
                     'source_sha': self.config['source_sha'], 'uid': self.project.uid,
                     'controller_enabled': self.config.get('controller_scope') is not None and self.project.account == '_doagain_jp',
+                    'controller_mode': (self.config.get('controller_scope') or {}).get('kind') if self.project.account == '_doagain_jp' else None,
                     'worktree': str(self.project.worktree),
                     'production_ready': self.config.get('production_ready', False),
                     'canary_authorized': self._canary_authorized(),

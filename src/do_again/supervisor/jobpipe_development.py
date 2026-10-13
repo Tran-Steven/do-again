@@ -40,7 +40,7 @@ def require_jobpipe_grant(config, project, status=None, *, now=None):
     if (config.get("production_ready") is not False
             or config.get("live_canary") is not None
             or config.get("codex_canary") is not None
-            or grant["kind"] != "jobpipe-offline-v1"
+            or grant["kind"] not in {"jobpipe-offline-v1", "jobpipe-native-v1"}
             or grant["network_access"] is not False
             or grant["application_submissions"] is not False
             or not isinstance(config.get("source_sha"), str)
@@ -74,11 +74,14 @@ def require_jobpipe_grant(config, project, status=None, *, now=None):
             or not _GOAL.fullmatch(grant["goal_revision"])):
         raise ExecutionBlocked("offline development requires an exact accepted goal revision")
     issued = _timestamp(grant["issued_at_utc"])
-    expires = _timestamp(grant["expires_at_utc"])
+    persistent = grant['kind'] == 'jobpipe-native-v1'
+    expires = None if persistent else _timestamp(grant["expires_at_utc"])
     current = now if now is not None else datetime.now(timezone.utc)
     if (not isinstance(current, datetime) or current.tzinfo is None
-            or not issued <= current <= expires
-            or not timedelta(0) < expires - issued <= timedelta(days=14)):
+            or current < issued
+            or (persistent and grant['expires_at_utc'] is not None)
+            or (not persistent and (current > expires
+                or not timedelta(0) < expires - issued <= timedelta(days=14)))):
         raise ExecutionBlocked("offline development grant is expired, premature, or overlong")
     if status is not None and status.get("goal_revision") != grant["goal_revision"]:
         raise ExecutionBlocked("offline development goal revision differs from root grant")

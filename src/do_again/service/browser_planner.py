@@ -13,6 +13,7 @@ from datetime import timedelta
 from ..core.schema import canonical_json, parse_utc
 from ..supervisor.macos_execution import ExecutionBlocked
 from .planner_contract import AuthorizedTransportPlanner
+from .offline_continuation import MAX_PERSISTENT_CYCLES
 
 
 def browser_grant_digest(grant):
@@ -30,7 +31,8 @@ def validate_browser_planner_grant(grant, *, source_sha, goal_sha256, epoch, now
     }
     if not isinstance(grant, dict) or set(grant) != required:
         raise ExecutionBlocked('separate browser planner grant absent or contains unknown authority')
-    if (grant['kind'] != 'browser-planning-v1'
+    persistent = grant['kind'] == 'browser-planning-persistent-v1'
+    if (grant['kind'] not in {'browser-planning-v1', 'browser-planning-persistent-v1'}
             or grant['transport'] != 'chatgpt-browser-cdp'
             or grant['repository'] != 'Tran-Steven/jobpipe'
             or grant['branch'] != 'operator-control'
@@ -44,7 +46,7 @@ def validate_browser_planner_grant(grant, *, source_sha, goal_sha256, epoch, now
             or not isinstance(grant['profile_sha256'], str)
             or not re.fullmatch(r'[0-9a-f]{64}', grant['profile_sha256'])):
         raise ExecutionBlocked('browser planner conversation or profile identity differs')
-    if (type(grant['max_calls']) is not int or grant['max_calls'] != 3
+    if (type(grant['max_calls']) is not int or not (1 <= grant['max_calls'] <= MAX_PERSISTENT_CYCLES if persistent else grant['max_calls'] == 3)
             or type(grant['max_prompt_bytes']) is not int
             or grant['max_prompt_bytes'] != 32768
             or type(grant['max_answer_bytes']) is not int
@@ -55,9 +57,13 @@ def validate_browser_planner_grant(grant, *, source_sha, goal_sha256, epoch, now
         raise ExecutionBlocked('browser planner privileges or budgets differ')
     try:
         issued = parse_utc(grant['issued_at_utc'])
-        expires = parse_utc(grant['expires_at_utc'])
+        expires = None if persistent else parse_utc(grant['expires_at_utc'])
     except (TypeError, ValueError, KeyError) as exc:
         raise ExecutionBlocked('browser planner grant timestamps invalid') from exc
+    if persistent:
+        if grant['expires_at_utc'] is not None or now < issued:
+            raise ExecutionBlocked('persistent browser authority must be explicitly until revoked')
+        return grant
     if not issued <= now < expires or not timedelta(0) < expires-issued <= timedelta(hours=2):
         raise ExecutionBlocked('browser planner grant expired, premature, or overlong')
     return grant
@@ -84,6 +90,13 @@ class BrowserPlanner(AuthorizedTransportPlanner):
             epoch=self.epoch, now=now)
 
 
+def validate_reserved_browser_call(call_id, grant):
+    match = re.fullmatch(r'planner-([a-f0-9]{20})-([1-9][0-9]{0,4})', str(call_id))
+    if (match is None or match[1] != browser_grant_digest(grant)[:20]
+            or int(match[2]) > grant['max_calls']):
+        raise ExecutionBlocked('browser call identity outside exact approved grant budget')
+
+
 class BrowserResponseTransport:
     """No-CDP adapter for an injected, separately authorized single-send driver.
 
@@ -96,9 +109,12 @@ class BrowserResponseTransport:
 
     def __call__(self, prompt, schema, *, call, grant):
         import json
+        pattern = r'planner-[a-f0-9]{20}-[1-9][0-9]{0,4}' if grant.get('kind') == 'browser-planning-persistent-v1' else r'planner-[a-f0-9]{20}-[123]'
         if (not isinstance(call, dict) or not isinstance(call.get('call_id'), str)
-                or not re.fullmatch(r'planner-[a-f0-9]{20}-[123]', call['call_id'])):
+                or not re.fullmatch(pattern, call['call_id'])):
             raise ExecutionBlocked('browser transport requires a durably reserved call identity')
+        if grant.get('kind') == 'browser-planning-persistent-v1':
+            validate_reserved_browser_call(call['call_id'], grant)
         if not isinstance(prompt, str) or len(prompt.encode()) > grant['max_prompt_bytes']:
             raise ExecutionBlocked('browser planning prompt exceeds authorized length')
         envelope = {

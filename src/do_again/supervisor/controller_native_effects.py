@@ -137,7 +137,7 @@ class NativeControllerEffects:
                 'stderr_sha256':hashlib.sha256(outcome['stderr'].encode()).hexdigest()})
         if before!=self.measure(head,manifest):raise ExecutionBlocked('planning probes changed source')
         sources={};budget=16384
-        for path in self.profile['allowed_paths']:
+        for path in dict.fromkeys([*self.profile['allowed_paths'], *self.profile['test_files']]):
             if path not in manifest:continue
             data=(broker.project.worktree/path).read_bytes();budget-=len(data)
             if budget<0:raise ExecutionBlocked('approved public source exposure exceeds 16 KiB')
@@ -149,7 +149,10 @@ class NativeControllerEffects:
 
     def __call__(self,stage,sid,request,stages):
         broker=self.broker;fp=request_fingerprint(request);base=request['expected']['repo_head']
+        from ..service.offline_continuation import persistent_scope
         epoch=broker.config['controller_scope']['epoch']+1
+        if persistent_scope(broker.config['controller_scope']):
+            epoch=broker.registry.status(broker.project.repo)['epoch']
         if stage=='implementation':
             return broker._dispatch({'operation':'execute','request_id':sid,
                 'argv':[broker.config['python'],'-B','-c',request['args']['content']],

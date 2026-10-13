@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from .macos_execution import ExecutionBlocked
 from .jobpipe_development import require_broker_jobpipe_development
-from ..service.offline_continuation import validate_scope
+from ..service.offline_continuation import validate_scope, persistent_scope
 
 
 def controller_service(broker, packet):
@@ -36,5 +36,8 @@ def controller_service(broker, packet):
             if backend is None or backend.controller.scope != scope:
                 raise ExecutionBlocked('sealed controller backend has not been installed and qualified')
         operation = packet['operation']
-        if operation == 'controller_tick': return backend.tick(now)
-        return getattr(backend.controller, operation.split('_', 1)[1])(now)
+        result = backend.tick(now) if operation == 'controller_tick' else getattr(backend.controller, operation.split('_', 1)[1])(now)
+        if persistent_scope(scope):
+            # Retain complete root journals but bound every status/tick frame.
+            result = dict(result, request_count=len(result['requests']), requests=result['requests'][-8:])
+        return result

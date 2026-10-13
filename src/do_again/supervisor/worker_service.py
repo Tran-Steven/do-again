@@ -16,6 +16,8 @@ AGENTS=Path('/Library/LaunchAgents')
 
 
 def service_spec(broker,epoch):
+    from ..service.offline_continuation import persistent_scope
+    persistent = broker.project.account == '_doagain_jp' and persistent_scope(broker.config.get('controller_scope'))
     key=broker.project.key[:12];label='io.github.tran-steven.do-again.worker.'+key
     name={'_doagain_da':'do-again','_doagain_jp':'jobpipe','_doagain_so':'Sonary'}.get(broker.project.account)
     if name is None:raise ExecutionBlocked('worker service project is excluded')
@@ -24,7 +26,7 @@ def service_spec(broker,epoch):
         '--expected-source',broker.config['source_sha'],'--expected-epoch',str(epoch),
         *(['--canary'] if getattr(broker,'canary',None) is not None else []),
         *(['--codex-canary'] if getattr(broker,'codex',None) is not None else [])],
-        'RunAtLoad':False,'KeepAlive':False,'ThrottleInterval':30,
+        'RunAtLoad':False,'KeepAlive':{'SuccessfulExit':False} if persistent else False,'ThrottleInterval':30,
         'WorkingDirectory':str(INSTALL_ROOT/'current'),
         'EnvironmentVariables':{'HOME':broker.config['operator_home'],'PATH':'/usr/bin:/bin'}}
 

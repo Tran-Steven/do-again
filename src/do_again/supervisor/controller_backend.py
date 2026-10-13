@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import threading
 from ..core.schema import canonical_json
-from ..service.offline_continuation import OfflineContinuation, digest
+from ..service.offline_continuation import OfflineContinuation, digest, controller_artifact, persistent_scope
 from ..service.controller_loop import ControllerLoop, DeterministicPlanner
 from ..service.controller_planner import CodexPlanner, PlanningCallJournal
 from ..service.planner_selection import select_controller_planner
@@ -22,7 +22,7 @@ class ControllerBackend:
         scope=validate_controller_configuration(broker.config)
         if scope is None or broker.project.account!='_doagain_jp':
             raise ExecutionBlocked('no sealed controller authority for this execution identity')
-        self.controller=OfflineContinuation(broker.state/'controller.json',scope,
+        self.controller=OfflineContinuation(broker.state/controller_artifact(scope,'controller.json'),scope,
             {k:scope[k] for k in ('source_sha','goal_sha256','epoch','repository','branch')})
         self.profile=broker.config['controller_profile']
         self.attestations=DevelopmentAttestations(Path(broker.config['authority_path']))
@@ -42,7 +42,7 @@ class ControllerBackend:
             from .controller_browser_helper import SealedBrowserPlannerHelper
             from ..service.browser_planner import BrowserPlanner
             helper=SealedBrowserPlannerHelper(broker.config,broker.state,self.admission)
-            journal=PlanningCallJournal(broker.state/'browser-planning-calls.json')
+            journal=PlanningCallJournal(broker.state/controller_artifact(scope,'browser-planning-calls.json'))
             return BrowserPlanner(
                 helper.authorize,journal.reserve,helper.transport,self.build_request,
                 source_sha=broker.config['source_sha'],
@@ -71,7 +71,7 @@ class ControllerBackend:
         if state['requests'][-1]['request']!=request:raise ExecutionBlocked('test selection request differs')
         # Retest completed priorities and the next bounded priority. The planner
         # cannot replace tests or select a passing-only subset.
-        return self.profile['test_cases'][:len(state['requests'])]
+        return self.profile['test_cases'] if persistent_scope(self.controller.scope) else self.profile['test_cases'][:len(state['requests'])]
 
     def collect(self):
         state=self.controller.status(datetime.now(timezone.utc));cycle=len(state['requests'])+1
@@ -85,7 +85,7 @@ class ControllerBackend:
             'args':{'language':'python','content':answer['script']},
             'expected':{'repo_head':evidence['repo_head']},'limits':{'timeout_seconds':600},
             'issued_at_utc':now.isoformat(),'expires_at_utc':min(now+timedelta(minutes=15),
-                datetime.fromisoformat(scope['expires_at_utc'].replace('Z','+00:00'))).isoformat()},
+                datetime.fromisoformat(scope['expires_at_utc'].replace('Z','+00:00')) if scope['expires_at_utc'] is not None else now+timedelta(minutes=15)).isoformat()},
             'gap':answer['gap'],'acceptance':answer['acceptance'],'evidence_sha256':digest(evidence)}
 
     def offline_select(self,goal,evidence,state,now):
