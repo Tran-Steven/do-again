@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from do_again.core.schema import OperatorError
-from do_again.service.isolated_cycle import run_isolated_cycle, _docker_test
+from do_again.service.isolated_cycle import FIXED_TEST_SUITES, run_isolated_cycle, _docker_test
 
 
 class IsolatedCycleTests(unittest.TestCase):
@@ -113,6 +113,50 @@ class IsolatedCycleTests(unittest.TestCase):
         self.assertTrue(any("readonly" in part for part in command))
         self.assertIn("--pull=never", command)
         self.assertIn(image, command)
+
+    def test_bun_and_pytest_require_positive_execution_receipts(self):
+        cases = (
+            ("pytest", b"2 passed in 0.03s", True),
+            ("pytest", b"no tests ran in 0.03s", False),
+            ("pytest", b"0 passed in 0.03s", False),
+            ("bun", b" 3 pass\\n 0 fail\\n", True),
+            ("bun", b" 0 pass\\n 0 fail\\n", False),
+            ("bun", b"No tests found!", False),
+        )
+        for suite, report, expected in cases:
+            with self.subTest(suite=suite, report=report):
+                calls = []
+                def fake_run(argv, **kwargs):
+                    calls.append(argv)
+                    return subprocess.CompletedProcess(argv, 0, report, b"")
+                with patch(
+                    "do_again.service.isolated_cycle.subprocess.run",
+                    side_effect=fake_run
+                ):
+                    self.assertEqual(
+                        _docker_test(self.repo, self.image, list(FIXED_TEST_SUITES[suite])),
+                        expected)
+                runner = calls[-1]
+                for flag in ("--network=none", "--read-only", "--pull=never",
+                             "--cap-drop=ALL", "--user=65534:65534"):
+                    self.assertIn(flag, runner)
+                self.assertEqual(
+                    runner[-len(FIXED_TEST_SUITES[suite]):],
+                    list(FIXED_TEST_SUITES[suite]))
+
+    def test_unapproved_test_runner_variants_never_start_containers(self):
+        for command in (
+            ["pytest", "-q"],
+            ["python", "-m", "pytest", "-q"],
+            ["bun", "test", "some-other-file.test.ts"],
+            ["bun", "run", "deploy"],
+            ["npm", "run", "deploy"],
+        ):
+            with self.subTest(command=command):
+                with patch("do_again.service.isolated_cycle.subprocess.run") as execute:
+                    with self.assertRaisesRegex(OperatorError, "not an admitted"):
+                        _docker_test(self.repo, self.image, command)
+                    execute.assert_not_called()
 
     def test_unpinned_image_and_unapproved_command_fail_before_docker(self):
         with patch("do_again.service.isolated_cycle.subprocess.run") as execute:
