@@ -72,6 +72,38 @@ class NativeBrowserQualificationTests(unittest.TestCase):
         with self.assertRaisesRegex(ExecutionBlocked,'already exists'):
             self.qualify()
 
+    def test_guarded_source_upgrade_retains_zero_call_qualification(self):
+        previous_source = '9ea8d9306354c3a6b44da57a1caf57e0019abd8e'
+        self.broker.config['source_sha'] = 'c' * 40
+        prior = {'state':'qualified_operator_bridge',
+                 'source_sha':previous_source,
+                 'goal_sha256':self.scope['goal_sha256'],
+                 'epoch':13,'grant_sha256':'d'*64,
+                 'operator_uid':501,'peer_uid':501,'browser_calls':0}
+        path = self.broker.state / 'browser-planner-qualification.json'
+        path.write_text(json.dumps(prior))
+        path.chmod(0o600)
+        updated = self.qualify()
+        self.assertEqual(updated['source_sha'], 'c'*40)
+        retained = self.broker.state / (
+            'browser-planner-qualification-' + previous_source[:12] + '-retained.json')
+        self.assertEqual(json.loads(retained.read_text()), prior)
+        self.assertEqual(json.loads(path.read_text()), updated)
+
+    def test_guarded_source_upgrade_denies_prior_planning_activity(self):
+        previous_source = '9ea8d9306354c3a6b44da57a1caf57e0019abd8e'
+        self.broker.config['source_sha'] = 'c'*40
+        path = self.broker.state / 'browser-planner-qualification.json'
+        path.write_text(json.dumps({
+            'state':'qualified_operator_bridge','source_sha':previous_source,
+            'goal_sha256':self.scope['goal_sha256'],'epoch':13,
+            'operator_uid':501,'peer_uid':501,'browser_calls':0}))
+        path.chmod(0o600)
+        (self.broker.state / 'browser-planning-calls.json').write_text('{}')
+        with self.assertRaisesRegex(ExecutionBlocked, 'manual reconciliation'):
+            self.qualify()
+        self.assertTrue(path.exists())
+
     def test_maintenance_is_required(self):
         self.broker.registry = SimpleNamespace(status=lambda repo:{
             'intent':'active','epoch':13})

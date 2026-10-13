@@ -105,6 +105,42 @@ def qualify_operator_browser_bridge(broker):
         'browser_calls':0,
     }
     path = Path(broker.state) / 'browser-planner-qualification.json'
+    # The very first successful V1A bridge proof was minted by source
+    # 9ea8d930. A source-bound security fix needs a NEW proof. Preserve
+    # the old sealed evidence without giving it authority for this source.
+    # Fail closed if the previous grant had any controller/model-call state.
+    previous_source = '9ea8d9306354c3a6b44da57a1caf57e0019abd8e'
+    if path.exists() or path.is_symlink():
+        private_root_file(path)
+        try:
+            previous = json.loads(path.read_text())
+        except (ValueError, OSError) as exc:
+            raise ExecutionBlocked('previous bridge qualification is unreadable') from exc
+        if isinstance(previous, dict) and previous.get('source_sha') == broker.config['source_sha']:
+            raise ExecutionBlocked('bridge qualification already exists')
+        if (not isinstance(previous, dict)
+                or previous.get('state') != 'qualified_operator_bridge'
+                or previous.get('source_sha') != previous_source
+                or broker.config['source_sha'] == previous_source
+                or previous.get('epoch') != scope['epoch']
+                or previous.get('goal_sha256') != scope['goal_sha256']
+                or previous.get('browser_calls') != 0
+                or previous.get('operator_uid') != 501
+                or previous.get('peer_uid') != 501):
+            raise ExecutionBlocked('previous bridge proof is not eligible for guarded requalification')
+        if any((Path(broker.state) / name).exists() for name in (
+                'browser-planning-calls.json', 'controller.json',
+                'planning-calls.json')):
+            raise ExecutionBlocked('previous controller state requires manual reconciliation')
+        retained = path.with_name('browser-planner-qualification-' + previous_source[:12] + '-retained.json')
+        if retained.exists() or retained.is_symlink():
+            raise ExecutionBlocked('previous bridge qualification already retained')
+        os.rename(path, retained)
+        parent_fd = os.open(path.parent, os.O_RDONLY | getattr(os,'O_DIRECTORY',0))
+        try:
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os,'O_NOFOLLOW',0)
     try:
         fd = os.open(path, flags, 0o600)
