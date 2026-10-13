@@ -109,10 +109,30 @@ class IsolatedEnrollmentTests(unittest.TestCase):
         self.assertEqual(again["state"], "already_configured")
         self.assertEqual(self.git("branch", "--show-current"), "main")
 
-    def test_dirty_source_fails_before_creating_any_remote_branch(self):
-        (self.repo / "app.py").write_text("uncommitted\n")
-        with self.assertRaisesRegex(OperatorError, "clean"):
-            self.enroll()
+    def test_dirty_source_is_enrolled_from_pinned_HEAD_without_modification(self):
+        (self.repo / "app.py").write_text("uncommitted change\n")
+        self.git("add", "app.py")
+        (self.repo / "untracked.py").write_text("private untracked source\n")
+        before = self.git("status", "--porcelain", "--untracked-files=all")
+        result = self.enroll()
+        self.assertEqual(result["state"], "configured")
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=all"), before)
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.head)
+        self.assertEqual((self.repo / "app.py").read_text(), "uncommitted change\n")
+        self.assertTrue((self.repo / "untracked.py").is_file())
+        self.assertEqual(
+            self.git("ls-remote", "--heads", "origin", result["branch"]).split()[0],
+            self.head)
+        from do_again.service.isolated_enrollment import _read_committed_source
+        head, sources = _read_committed_source(self.repo, ["app.py"])
+        self.assertEqual(head, self.head)
+        self.assertEqual(sources[0]["content"], "def value():\n    return 1\n")
+        self.assertNotIn("uncommitted change", sources[0]["content"])
+
+    def test_untracked_source_file_never_becomes_an_approved_snapshot_file(self):
+        (self.repo / "untracked.py").write_text("not committed\n")
+        with self.assertRaisesRegex(OperatorError, "committed tree"):
+            self.enroll(files=["untracked.py"])
         self.assertFalse((self.home / "isolated-projects").exists())
 
     def test_absent_project_chat_blocks_before_mutating_repository(self):
