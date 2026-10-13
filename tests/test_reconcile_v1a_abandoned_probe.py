@@ -63,6 +63,27 @@ class ReconcileV1AProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"already altered"):
             recovery.classify(self.db,self.project,self.expected,dry_run=False)
 
+    def test_retains_original_blocked_controller_without_reset_or_overwrite(self):
+        root=Path(self.temp.name)
+        original=root/"controller.json"
+        data={"state":"blocked","requests":[],"outstanding":None,"acknowledged":[],
+              "blocker":"planner failed or uncertain: ExecutionBlocked"}
+        original.write_text(json.dumps(data))
+        kept=recovery.retain_blocked_controller(original)
+        self.assertFalse(original.exists())
+        self.assertEqual(json.loads(kept.read_text()),data)
+        with self.assertRaisesRegex(RuntimeError,"already retained"):
+            recovery.retain_blocked_controller(original)
+        self.assertEqual(json.loads(kept.read_text()),data)
+
+    def test_refuses_archiving_controller_with_any_reserved_request(self):
+        path=Path(self.temp.name)/"controller.json"
+        path.write_text(json.dumps({"state":"blocked","requests":[{}],
+                                    "outstanding":None,"acknowledged":[]}))
+        with self.assertRaisesRegex(RuntimeError,"progress"):
+            recovery.retain_blocked_controller(path)
+        self.assertTrue(path.exists())
+
     def test_rejects_incorrect_authority_or_controller_progress(self):
         config={"source_sha":recovery.OLD_SOURCE,"production_ready":False,
                 "projects":[{"account":"_doagain_jp","source_sha":recovery.JOBPIPE_HEAD}]}
