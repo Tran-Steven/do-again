@@ -190,7 +190,10 @@ def isolated_service_status(source_repo: Path) -> dict:
     }
 
 
-def serve_isolated_enrollment(source_repo: Path) -> dict:
+def serve_isolated_enrollment(source_repo: Path, *, poll_seconds: int = 30,
+                              max_rechecks: int = 60) -> dict:
+    if not 0 <= poll_seconds <= 300 or not 0 <= max_rechecks <= 60:
+        raise OperatorError("isolated receipt poll policy is invalid")
     try:
         layout, config = enrolled_config(source_repo)
     except Exception as exc:
@@ -216,11 +219,25 @@ def serve_isolated_enrollment(source_repo: Path) -> dict:
     atomic_json(status, initial)
     try:
         result = run_enrolled_isolated(source_repo)
+        rechecks = 0
+        while result["state"] == "awaiting_receipt" and rechecks < max_rechecks:
+            atomic_json(status, {
+                **initial,
+                "state": "awaiting_receipt",
+                "request_id": result.get("request_id"),
+                "completed_cycles": result.get("completed_cycles", 0),
+                "rechecks": rechecks,
+                "updated_at_utc": utc_now().isoformat(),
+            })
+            time.sleep(poll_seconds)
+            rechecks += 1
+            result = run_enrolled_isolated(source_repo)
         latest = {
             **initial,
             "state": result["state"],
             "completed_cycles": result.get("completed_cycles", 0),
             "request_id": result.get("request_id"),
+            "rechecks": rechecks,
             "completed_at_utc": utc_now().isoformat(),
         }
     except Exception as exc:
