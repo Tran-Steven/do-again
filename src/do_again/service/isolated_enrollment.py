@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -10,7 +11,51 @@ from ..browser import runtime
 from ..core.schema import OperatorError, atomic_json, utc_now
 from .isolated_auto import run_isolated_auto
 from .isolated_cycle import FIXED_TEST_SUITES, IMAGE_RE, _git
-from .isolated_planner import _read_source
+from .isolated_cycle import _path
+
+
+def _read_committed_source(repo: Path, paths: list[str]) -> tuple[str, list[dict]]:
+    if (not isinstance(paths, list) or not 1 <= len(paths) <= 5
+            or len(set(paths)) != len(paths)):
+        raise OperatorError("committed planning requires 1 to 5 distinct source files")
+    head = _git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    sources = []
+    total = 0
+    for requested in paths:
+        item = _path(requested)
+        if any(segment.startswith(".") for segment in item.parts):
+            raise OperatorError("hidden committed files are not eligible")
+        name = item.as_posix()
+        entries = _git(repo, "ls-tree", "-z", head, "--", name).stdout
+        rows = entries.split(b"\\x00")
+        if len(rows) != 2 or rows[1] != b"":
+            raise OperatorError("approved file must exist in the committed tree")
+        try:
+            metadata, actual = rows[0].split(b"\\t", 1)
+            mode, kind, blob = metadata.split()
+        except ValueError as exc:
+            raise OperatorError("committed source has an invalid Git tree entry") from exc
+        if (actual.decode("utf-8") != name
+                or mode not in {b"100644", b"100755"}
+                or kind != b"blob"
+                or not re.fullmatch(rb"[0-9a-f]{40,64}", blob)):
+            raise OperatorError("committed source must be a regular tracked file")
+        raw = _git(repo, "cat-file", "blob", blob.decode("ascii")).stdout
+        total += len(raw)
+        if len(raw) > 10_000 or total > 25_000:
+            raise OperatorError("committed source context exceeds private-code budget")
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise OperatorError("committed planning only accepts UTF-8 text") from exc
+        sources.append({
+            "path": name,
+            "before_sha256": hashlib.sha256(raw).hexdigest(),
+            "content": content,
+        })
+    if _git(repo, "rev-parse", "HEAD").stdout.decode().strip() != head:
+        raise OperatorError("source HEAD changed during committed planning")
+    return head, sources
 
 
 def _private_layout(source_repo: Path) -> dict:
@@ -133,7 +178,7 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
     if test_suite not in set(FIXED_TEST_SUITES):
         raise OperatorError("isolated tests must use a fixed supported suite")
     _check_image(image)
-    head, _ = _read_source(repo, files)
+    head, _ = _read_committed_source(repo, files)
     bound = str(runtime.project_record(repo).get("chat_url") or "")
     if not bound.startswith("https://chatgpt.com/c/") or not runtime._chat_id(bound):
         raise OperatorError("source project must already have a bound ChatGPT conversation")
@@ -189,6 +234,8 @@ def enroll_isolated_project(*, source_repo: Path, image: str, goal: str,
             raise OperatorError("prior isolated setup attempt is incomplete or inconsistent")
     else:
         atomic_json(journal_path, intended)
+    if _git(repo, "rev-parse", "HEAD").stdout.decode().strip() != head:
+        raise OperatorError("source HEAD changed before isolated branch creation")
     result = _remote_git(repo, "ls-remote", "--heads", "origin", branch).stdout.decode().strip()
     if result:
         remote_head = result.split("\t", 1)[0]
