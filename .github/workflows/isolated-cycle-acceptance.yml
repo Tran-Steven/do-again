@@ -1,0 +1,92 @@
+name: Isolated coding cycle acceptance
+
+on:
+  pull_request:
+    paths:
+      - "src/do_again/service/isolated_cycle.py"
+      - "src/do_again/cli.py"
+      - "tests/test_isolated_cycle.py"
+      - ".github/workflows/isolated-cycle-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-python-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install local package and pinned test image
+        run: |
+          python -m pip install -e .
+          docker pull python:3.12-slim
+          docker image inspect python:3.12-slim --format '{{index .RepoDigests 0}}' > "$RUNNER_TEMP/test-image.txt"
+      - name: Prepare isolated disposable project and task
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cycle/fixture/tests"
+          cd "$RUNNER_TEMP/cycle/fixture"
+          git init -b main
+          git config user.name "Do Again Test"
+          git config user.email "do-again@example.invalid"
+          printf 'def answer():\n    return 1\n' > app.py
+          printf 'import unittest\nfrom app import answer\nclass TestPatch(unittest.TestCase):\n    def test_answer(self):\n        self.assertEqual(answer(), 2)\n' > tests/test_app.py
+          git add app.py tests/test_app.py
+          git commit -m "baseline"
+          python - <<'PY'
+          import hashlib,json,subprocess
+          from pathlib import Path
+          repo=Path.cwd()
+          head=subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
+          manifest={
+              "expected_head":head,
+              "changes":[{
+                  "path":"app.py",
+                  "before_sha256":hashlib.sha256((repo/"app.py").read_bytes()).hexdigest(),
+                  "content":"def answer():\n    return 2\n",
+              }],
+              "test_command":["python","-m","unittest","discover"],
+          }
+          (repo.parent/"manifest.json").write_text(json.dumps(manifest))
+          PY
+      - name: Execute real offline isolated coding cycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="$(cat "$RUNNER_TEMP/test-image.txt")"
+          do-again isolated-cycle "$RUNNER_TEMP/cycle/manifest.json" \
+            --repo "$RUNNER_TEMP/cycle/fixture" \
+            --image "$IMAGE" \
+            --output "$RUNNER_TEMP/cycle/receipts"
+      - name: Verify patch, receipt, source immutability
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,hashlib,subprocess,os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])/"cycle"
+          repo=root/"fixture"
+          manifest=json.loads((root/"manifest.json").read_text())
+          receipt_path,=list((root/"receipts").glob("*.receipt.json"))
+          receipt=json.loads(receipt_path.read_text())
+          patch=(root/"receipts"/receipt["patch_file"]).read_bytes()
+          assert receipt["state"]=="verified_isolated_patch"
+          assert receipt["tested_offline"] is True
+          assert receipt["production_deployed"] is False
+          assert receipt["automatic_merge"] is False
+          assert receipt["chatgpt_planning_verified"] is False
+          assert hashlib.sha256(patch).hexdigest()==receipt["patch_sha256"]
+          assert b"return 2" in patch
+          assert (repo/"app.py").read_text()=="def answer():\n    return 1\n"
+          assert subprocess.check_output(["git","-C",str(repo),"rev-parse","HEAD"],text=True).strip()==manifest["expected_head"]
+          assert not subprocess.check_output(["git","-C",str(repo),"status","--porcelain"])
+          print("ISOLATED_CODING_CYCLE_VERIFIED")
+          print("SOURCE_UNCHANGED")
+          print("NO_NETWORK_NO_DEPLOY_NO_MERGE")
+          PY
