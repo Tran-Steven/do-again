@@ -60,7 +60,7 @@ class ControllerBackend:
         with self.broker.admission():
             verify_installation(self.broker.config)
             status=self.broker.registry.status(self.broker.project.repo)
-            validate_controller_configuration(self.broker.config,epoch=status['epoch'])
+            validate_controller_configuration(self.broker.config,epoch=(status['epoch'] - 1 if status['intent'] == 'active' and status['epoch'] == self.controller.scope['epoch'] + 1 else status['epoch']))
             require_broker_jobpipe_development(self.broker)
             if status['intent']!='active' or not self.broker._verified():
                 raise ExecutionBlocked('controller admission inactive or unqualified')
