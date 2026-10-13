@@ -138,10 +138,15 @@ print(json.dumps(result),flush=True)
         verify_literal_source_scope(config, project, root, scratch, cache, start_guard=start_guard)
         snapshot_evidence = verify_reviewed_metadata_snapshot(config, project, root, start_guard=start_guard)
         result['reviewed_metadata_snapshot'] = True
+        baseline_evidence = None
+        if project.account == '_doagain_jp' and config.get('reviewed_task_scope') is not None:
+            baseline_evidence = verify_reviewed_native_baseline(config, project, nonce, start_guard=start_guard)
+            result['reviewed_native_original_baseline'] = True
         result['literal_source_scope'] = True
         result['git_transaction'] = True
         result['git_broker_promotion'] = True
         return {'verified': True, 'git': git_evidence, 'reviewed_metadata_snapshot': snapshot_evidence,
+                'reviewed_native_original_baseline': baseline_evidence,
                 'checks': sorted(result), 'detached_descendants_drained': True,
                 'execution_uid': project.uid, 'fixture': label}
     finally:
@@ -274,6 +279,39 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     return {'verified':True,'promoted_sha':promoted['repo_head'], 'base_sha':base,
             'metadata_root_owned':True,'terminal_receipt_replayed':True,
             'live_authority_unchanged':True,'production_configuration_unchanged':True}
+
+
+def verify_reviewed_native_baseline(config, project, nonce, *, start_guard):
+    """Collect the exact original baseline under the actual confined UID before admission."""
+    from types import SimpleNamespace
+    from .reviewed_task_native import prepare_original_baseline, require_original_baseline
+    from .reviewed_task import ASSETS, sha
+    from .controller_native_effects import NativeControllerEffects
+    from .macos_execution import INSTALL_ROOT
+    content = ASSETS['files']['tests/test_ats_question_triage.py']['before'].encode()
+    sid = 'reviewed-baseline-proof-' + nonce
+    baseline, directory = prepare_original_baseline(EXECUTION_ROOT / project.key / 'requests' / sid, content)
+    broker = SimpleNamespace(config=config, project=project)
+    effects = NativeControllerEffects(broker, config['controller_profile'], start_guard, lambda request: ())
+    code = ('import sys;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
+            'from do_again.supervisor.reviewed_test_runner import main;sys.exit(main(sys.argv[1],sys.argv[2]))')
+    captured = effects.capture(sid+'-capture', [config['python'],'-I','-S','-B','-c',code,
+        str(baseline),str(INSTALL_ROOT/'current/runtimes/test-packages')],60,
+        read_only_source=True,extra_read_paths=(directory,))
+    try:
+        counts = json.loads(captured.get('stdout','').rpartition('\nNATIVE_PYTEST_OBSERVATION=')[2].strip())
+    except (ValueError,TypeError):
+        counts = {}
+    if (captured['returncode'] != 0 or captured['timed_out']
+            or captured.get('stdout_truncated') or captured.get('stderr_truncated')
+            or counts != {'execution_uid':project.uid,'pytest_exit_code':0,
+                'collected':ASSETS['expected_baseline_count'],'passed':ASSETS['expected_baseline_count'],
+                'failed':0,'skipped':0}):
+        raise BoundaryProbeBlocked('original native baseline did not independently pass',
+            {'phase':'reviewed_native_original_baseline','capture':captured,'observation':counts})
+    require_original_baseline(baseline,content)
+    return {'verified':True,'actual_tests':counts,'network_denied':captured['network_denied'],
+            'baseline_sha256':sha(content),'source_read_only':True,'immutable_baseline_reverified':True}
 
 
 def verify_reviewed_metadata_snapshot(config, project, root, *, start_guard):

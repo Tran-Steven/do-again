@@ -25,6 +25,29 @@ def require_original_baseline(path, content, *, owner_uid=0):
         raise ExecutionBlocked('original independent baseline changed')
 
 
+def prepare_original_baseline(root, content, *, owner_uid=0):
+    # The daemon's restrictive umask also applies to mkdir(parents=True).
+    # Permit traversal to this public baseline only; recovery journals remain private.
+    root.mkdir(mode=0o711, parents=True, exist_ok=True)
+    if root.is_symlink() or root.stat().st_uid != owner_uid:
+        raise ExecutionBlocked('baseline traversal directory ownership or alias differs')
+    root.chmod(0o711)
+    directory = root / 'baseline'
+    directory.mkdir(mode=0o711, exist_ok=True)
+    if directory.is_symlink() or directory.stat().st_uid != owner_uid:
+        raise ExecutionBlocked('baseline traversal directory ownership or alias differs')
+    # Pytest must enumerate this directory; it contains only approved public tests.
+    directory.chmod(0o755)
+    baseline = directory / 'test_original_baseline.py'
+    if not baseline.exists():
+        with baseline.open('xb') as stream:
+            stream.write(content)
+            stream.flush(); os.fsync(stream.fileno())
+        baseline.chmod(0o444)
+    require_original_baseline(baseline, content, owner_uid=owner_uid)
+    return baseline, directory
+
+
 def execute_reviewed_task(broker, packet):
     if packet != {'operation': 'controller_amended_task'}:
         raise ExecutionBlocked('reviewed task accepts no caller-selected payload')
@@ -124,14 +147,8 @@ def execute_reviewed_task(broker, packet):
                         'source_state':'exact_reviewed_source_binding'}
 
             root = EXECUTION_ROOT / broker.project.key / 'requests' / rid
-            baseline_dir = root / 'baseline'
-            baseline_dir.mkdir(mode=0o711, parents=True, exist_ok=True)
-            baseline = baseline_dir / 'test_original_baseline.py'
             content = ASSETS['files']['tests/test_ats_question_triage.py']['before'].encode()
-            if baseline.exists():
-                require_original_baseline(baseline, content)
-            else:
-                baseline.write_bytes(content); baseline.chmod(0o444)
+            baseline, baseline_dir = prepare_original_baseline(root, content)
             def test(case):
                 selected = str(baseline) if case == 'original_baseline' else (
                     'tests/test_ats_question_triage.py' if case == 'complete_reviewed_file' else case)

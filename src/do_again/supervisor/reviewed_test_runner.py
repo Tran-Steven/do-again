@@ -27,7 +27,13 @@ def main(case, packages):
             elif report.when == 'call' and report.passed:
                 counts['passed'] += 1
 
-    status = int(pytest.main(['-q', '-p', 'no:cacheprovider', '--strict-markers', case], plugins=[Observer()]))
+    arguments = ['-q', '-p', 'no:cacheprovider', '--strict-markers']
+    if os.path.isabs(case.split('::', 1)[0]):
+        # Independent baseline collection must not enumerate private ancestors
+        # or inherit repository configuration/conftest outside its public directory.
+        directory = os.path.dirname(case.split('::', 1)[0])
+        arguments += ['-c', '/dev/null', '--rootdir', directory, '--confcutdir', directory]
+    status = int(pytest.main([*arguments, case], plugins=[Observer()]))
     counts['pytest_exit_code'] = status
     counts['execution_uid'] = os.getuid()
     # A typed observer record accompanies an independently captured process exit.

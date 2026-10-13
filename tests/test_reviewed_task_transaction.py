@@ -14,6 +14,40 @@ from do_again.supervisor.reviewed_task import (
 )
 
 
+class OriginalBaselineTraversalTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name); self.root = self.home / 'request'
+
+    def test_restrictive_daemon_umask_preserves_traversal_and_immutable_bytes(self):
+        from do_again.supervisor.reviewed_task_native import prepare_original_baseline
+        previous = os.umask(0o077)
+        try:
+            baseline, directory = prepare_original_baseline(self.root, b'approved public tests\n', owner_uid=os.getuid())
+        finally:
+            os.umask(previous)
+        self.assertEqual(self.root.stat().st_mode & 0o777, 0o711)
+        self.assertEqual(directory.stat().st_mode & 0o777, 0o755)
+        self.assertEqual(baseline.stat().st_mode & 0o777, 0o444)
+        self.assertEqual(baseline.read_bytes(), b'approved public tests\n')
+
+    def test_existing_altered_baseline_is_refused_without_rewrite(self):
+        from do_again.supervisor.reviewed_task_native import prepare_original_baseline
+        baseline, _ = prepare_original_baseline(self.root, b'original\n', owner_uid=os.getuid())
+        baseline.chmod(0o644); baseline.write_bytes(b'external change\n')
+        with self.assertRaisesRegex(ExecutionBlocked, 'original independent baseline changed'):
+            prepare_original_baseline(self.root, b'original\n', owner_uid=os.getuid())
+        self.assertEqual(baseline.read_bytes(), b'external change\n')
+
+    def test_aliased_request_directory_is_refused_before_creation(self):
+        from do_again.supervisor.reviewed_task_native import prepare_original_baseline
+        external = self.home / 'external'; external.mkdir()
+        self.root.symlink_to(external, target_is_directory=True)
+        with self.assertRaisesRegex(ExecutionBlocked, 'ownership or alias'):
+            prepare_original_baseline(self.root, b'original\n', owner_uid=os.getuid())
+        self.assertEqual(list(external.iterdir()), [])
+
+
 class GitMetadataSnapshotTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
