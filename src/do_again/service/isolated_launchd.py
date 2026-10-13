@@ -11,7 +11,7 @@ import sys
 import time
 
 from ..core.schema import OperatorError, atomic_json, utc_now
-from .isolated_enrollment import enrolled_config, run_enrolled_isolated
+from .isolated_enrollment import _private_layout, enrolled_config, run_enrolled_isolated
 
 
 def _service_layout(source_repo: Path) -> tuple[dict, dict, str, Path]:
@@ -191,7 +191,20 @@ def isolated_service_status(source_repo: Path) -> dict:
 
 
 def serve_isolated_enrollment(source_repo: Path) -> dict:
-    layout, config = enrolled_config(source_repo)
+    try:
+        layout, config = enrolled_config(source_repo)
+    except Exception as exc:
+        layout = _private_layout(source_repo)
+        status = layout["root"] / "run-status.json"
+        blocked = {
+            "schema_version": 1,
+            "state": "blocked",
+            "source_repo": str(layout["source_repo"]),
+            "error": type(exc).__name__ + ": " + str(exc)[:500],
+            "completed_at_utc": utc_now().isoformat(),
+        }
+        atomic_json(status, blocked)
+        return blocked
     status = layout["root"] / "run-status.json"
     initial = {
         "schema_version": 1,
