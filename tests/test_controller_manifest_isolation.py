@@ -6,13 +6,13 @@ from do_again.supervisor.controller_native_effects import NativeControllerEffect
 
 class ManifestBoundaryTests(unittest.TestCase):
     def test_manifest_uses_sanitized_snapshot_not_protected_git(self):
-        source=inspect.getsource(NativeControllerEffects.manifest)
+        source=inspect.getsource(NativeControllerEffects.prepare_manifest_metadata)
         self.assertIn('copy_git_data(',source)
         self.assertIn("'git-manifest-'",source)
         self.assertIn('item.chmod(0o400)',source)
         self.assertIn('metadata.chmod(0o500)',source)
-        self.assertIn('str(metadata),head',source)
-        self.assertNotIn("str(broker.project.worktree/'.git'),head",source)
+        self.assertIn('str(metadata),head', inspect.getsource(NativeControllerEffects.manifest))
+        self.assertNotIn("str(broker.project.worktree/'.git'),head", inspect.getsource(NativeControllerEffects.manifest))
         self.assertIn('with self.admission()',source)
         self.assertIn('stderr_sha256',source)
 
