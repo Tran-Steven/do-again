@@ -137,6 +137,9 @@ def retain_blocked_controller(controller_path):
 def run(*, dry_run=True):
     if sys.platform != "darwin" or os.geteuid() != 0:
         refused("only approved macOS administrator can inspect or quarantine root ledger")
+    # Verify native identities with the currently installed immutable root code,
+    # never import a developer checkout as root for authority decisions.
+    sys.path.insert(0, str(ROOT / "current/package"))
     from do_again.supervisor.macos_execution import (
         MacOSProcesses, load_configuration, project_from_dict)
     from do_again.supervisor.macos_server import verify_installation,worktree_authority
