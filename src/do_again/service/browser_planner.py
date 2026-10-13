@@ -20,6 +20,14 @@ class BrowserPlanningNotDispatched(ExecutionBlocked):
     """Authenticated helper positively refused before its Send boundary."""
 
 
+class BrowserPlanningAnsweredInvalid(ExecutionBlocked):
+    """The original bound reply was observed but failed the answer contract."""
+
+
+class BrowserPlanningAwaitingReply(ExecutionBlocked):
+    """Only read-only observation of the original call is permitted."""
+
+
 class PlanningNotReady(ExecutionBlocked):
     """A proven pre-dispatch wait, never uncertainty or task completion."""
 
@@ -112,8 +120,9 @@ class BrowserResponseTransport:
     This layer accepts only an exact call-bound, JSON-only assistant response.
     """
 
-    def __init__(self, send_once):
+    def __init__(self, send_once, observe_once=None):
         self.send_once = send_once
+        self.observe_once = observe_once
 
     def __call__(self, prompt, schema, *, call, grant):
         import json
@@ -127,13 +136,19 @@ class BrowserResponseTransport:
             raise ExecutionBlocked('browser planning prompt exceeds authorized length')
         envelope = {
             'call_id': call['call_id'], 'task': 'Return one JSON object and nothing else',
-            'response_schema': schema, 'planning_input': json.loads(prompt),
+            'response_schema': {'type': 'object', 'properties': {
+                'call_id': {'const': call['call_id']}, 'result': schema},
+                'required': ['call_id', 'result'], 'additionalProperties': False},
+            'planning_input': json.loads(prompt),
         }
         message = json.dumps(envelope, sort_keys=True, separators=(',', ':'))
         if len(message.encode()) > grant['max_prompt_bytes'] + 2048:
             raise ExecutionBlocked('browser envelope exceeds bounded transmission budget')
         # The broker must have reserved the call before this single dispatch.
-        received = self.send_once(message, conversation_id=grant['conversation_id'],
+        sender = self.observe_once if call.get('observe_only') else self.send_once
+        if sender is None:
+            raise ExecutionBlocked('original browser call has no read-only observer')
+        received = sender(message, conversation_id=grant['conversation_id'],
                                   call_id=call['call_id'],
                                   profile_sha256=grant['profile_sha256'],
                                   grant_sha256=browser_grant_digest(grant))
@@ -145,8 +160,8 @@ class BrowserResponseTransport:
         try:
             answer = json.loads(received['response'])
         except (ValueError, TypeError) as exc:
-            raise ExecutionBlocked('browser planning reply must be a single JSON object') from exc
+            raise BrowserPlanningAnsweredInvalid('browser planning reply must be a single JSON object') from exc
         if (not isinstance(answer, dict) or set(answer) != {'call_id', 'result'}
                 or answer['call_id'] != call['call_id']):
-            raise ExecutionBlocked('browser planning reply does not match reserved call')
+            raise BrowserPlanningAnsweredInvalid('browser planning reply does not match reserved call')
         return answer['result']

@@ -42,6 +42,9 @@ class DurableDeliveryReservation:
                 or not isinstance(identity.get('call_id'), str)
                 or not CALL_ID.fullmatch(identity['call_id'])):
             raise ExecutionBlocked('browser delivery reservation identity invalid')
+        self._write(identity)
+
+    def _write(self, identity):
         flags = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0)
         try:
             directory_fd = os.open(self.directory, flags)
@@ -68,11 +71,48 @@ class DurableDeliveryReservation:
         finally:
             os.close(directory_fd)
 
+def read_private_record(directory, call_id):
+    if not CALL_ID.fullmatch(call_id): raise ExecutionBlocked('invalid browser record identity')
+    flags = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    with_fd = os.open(directory, flags)
+    try:
+        if not private_operator_directory(with_fd):
+            raise ExecutionBlocked('browser record directory privacy differs')
+        try:
+            fd = os.open(call_id+'.json', os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0), dir_fd=with_fd)
+        except FileNotFoundError: return None
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != 501 or info.st_nlink != 1
+                    or info.st_mode & 0o077 or info.st_size > 100000):
+                raise ExecutionBlocked('browser record privacy differs')
+            with os.fdopen(fd, 'r', closefd=False) as stream: return json.load(stream)
+        finally: os.close(fd)
+    finally: os.close(with_fd)
+
+
+class DurableReplyJournal:
+    def __init__(self, directory): self.directory = Path(directory)
+
+    def read(self, call_id): return read_private_record(self.directory, call_id)
+
+    def record(self, identity, reply):
+        value = dict(identity, reply=reply)
+        old = self.read(identity['call_id'])
+        if old is not None:
+            if old != value: raise ExecutionBlocked('original browser reply already recorded differently')
+            return
+        # Use the same exclusive durable write primitive; no prior bytes are replaced.
+        reservation = DurableDeliveryReservation(self.directory)
+        reservation._write(value)
+
+
 class OperatorBrowserBridge:
-    def __init__(self, *, grant, driver, reserve_delivery):
+    def __init__(self, *, grant, driver, reserve_delivery, replies=None):
         self.grant = grant
         self.driver = driver
         self.reserve_delivery = reserve_delivery
+        self.replies = replies
 
     def handle_once(self, connection):
         if os.geteuid() != 501:
@@ -92,6 +132,9 @@ class OperatorBrowserBridge:
                 'profile_sha256':self.grant['profile_sha256'],
                 'grant_sha256':browser_grant_digest(self.grant)})
             return {'state':'probed','model_calls':0}
+        observing = request.pop('operation', None)
+        if observing not in (None, 'observe-original'):
+            raise ExecutionBlocked('unknown browser bridge operation')
         if (set(request) != {'call_id', 'conversation_id', 'profile_sha256', 'grant_sha256', 'message'}
                 or not isinstance(request['call_id'], str)
                 or not CALL_ID.fullmatch(request['call_id'])
@@ -115,10 +158,24 @@ class OperatorBrowserBridge:
         # Crash, timeout, or uncertain UI delivery can never trigger replay.
         if not callable(self.reserve_delivery):
             raise ExecutionBlocked('browser bridge has no durable delivery reservation')
-        self.reserve_delivery(identity)
+        if observing:
+            if not isinstance(self.reserve_delivery, DurableDeliveryReservation) or self.replies is None:
+                raise ExecutionBlocked('original reply observation unavailable')
+            original = read_private_record(self.reserve_delivery.directory, request['call_id'])
+            if original != identity:
+                raise ExecutionBlocked('original reply observation differs from delivery reservation')
+            cached = self.replies.read(request['call_id'])
+            if cached is not None:
+                if {k:cached.get(k) for k in identity} != identity:
+                    raise ExecutionBlocked('cached original reply identity differs')
+                write_frame(connection, cached['reply'])
+                return dict(identity, state='observed_original')
+        else:
+            self.reserve_delivery(identity)
         from .errors import BrowserPreDispatchBlocked
         try:
-            result = self.driver.send_once(
+            method = self.driver.observe_once if observing else self.driver.send_once
+            result = method(
                 request['message'], conversation_id=request['conversation_id'],
                 call_id=request['call_id'], profile_sha256=request['profile_sha256'])
         except BrowserPreDispatchBlocked as exc:
@@ -129,6 +186,11 @@ class OperatorBrowserBridge:
                 'grant_sha256':browser_grant_digest(self.grant),
                 'state':'pre_dispatch_blocked','error':str(exc)[:1000]})
             return dict(identity, state='pre_dispatch_blocked')
+        if observing and result is None:
+            write_frame(connection, {'call_id':request['call_id'],
+                'conversation_id':request['conversation_id'],
+                'grant_sha256':browser_grant_digest(self.grant), 'state':'awaiting_original_reply'})
+            return dict(identity, state='awaiting_original_reply')
         if (not isinstance(result, dict)
                 or result.get('conversation_id') != request['conversation_id']
                 or not isinstance(result.get('response'), str)
@@ -138,5 +200,6 @@ class OperatorBrowserBridge:
                  'conversation_id': request['conversation_id'],
                  'grant_sha256':browser_grant_digest(self.grant),
                  'response': result['response']}
+        if self.replies is not None: self.replies.record(identity, reply)
         write_frame(connection, reply)
         return identity

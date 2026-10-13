@@ -78,7 +78,7 @@ On an installed and qualified persistent controller, normal `do-again start`,
 the same lifecycle for direct inspection. The launchd runner
 survives Terminal closure and restarts after process failure. A started tick
 is reconciled against root state before continuation; uncertain planning
-stops without another Send. A last-written heartbeat is not liveness proof.
+waits for read-only observation of the original reserved prompt, without another Send. A last-written heartbeat is not liveness proof.
 The model receives verified prior commit/test/receipt hashes and must echo
 the exact acknowledgments before its next proposal is accepted.
 
@@ -111,6 +111,30 @@ fresh call ID, consuming total budget. Closed connections, timeouts, generic
 errors and ambiguous dispatch remain non-replayable. Old persistent journals
 without original cycle provenance are rejected, never implicitly upgraded.
 This update cannot retrospectively adjudicate the installed failed call.
+
+### Persistent reply recovery — implementation candidate, 2026-10-13
+
+The approved `3132f9c` installation made one fresh planning call,
+`planner-293c00b37ce43fbf8b87-1`, at active epoch 20. Its durable dispatch
+marker exists. The controller timed out before recording an answer, with
+zero coding requests or verified cycles. Read-only observation subsequently
+matched the exact user prompt SHA-256 to the retained delivery record and
+associated the immediately following assistant turn. The answer had an inner
+result instead of the required call envelope and proposed changing an immutable
+test; it was not executed or acknowledged. The original records remain intact.
+Jobpipe was stopped to maintenance epoch 21; Sonary remained at epoch 1.
+
+The recovery implementation sends a full call-bound response schema and exposes
+the sealed editable paths, immutable tests, mandatory cases and safe collection
+failure categories. Planning-call restarts reuse the original identity in an
+**observation-only** path. The operator journals the original reply before
+writing the socket response, so a disconnected consumer can recover it without
+Send. Exact prompt matching and the immediately following assistant turn replace
+message-count heuristics. Busy, missing, duplicate or changed prompts remain
+pending; they do not authorize a new message. Only an observed, invalid original
+answer or a positively authenticated pre-dispatch refusal permits a fresh call
+identity, consuming the existing call budget. Historical unknown records are
+never retroactively upgraded, and no useful coding acceptance is claimed here.
 
 ## Mandatory V1A qualification evidence (necessary, never sufficient)
 

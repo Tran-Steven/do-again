@@ -59,7 +59,7 @@ class SealedBrowserPlannerHelper:
         with self.admission():
             self.validate(grant, datetime.now(timezone.utc))
         client = BrokerBrowserBridge(self.socket_path)
-        return BrowserResponseTransport(client.send_once)(
+        return BrowserResponseTransport(client.send_once, client.observe_once)(
             prompt, schema, call=call, grant=grant)
 
 

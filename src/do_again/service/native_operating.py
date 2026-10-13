@@ -254,6 +254,15 @@ def status(repo):
     loaded = subprocess.run(['launchctl', 'print', 'gui/'+str(os.getuid())+'/'+LABEL],
                             capture_output=True, timeout=20)
     record['service_loaded'] = loaded.returncode == 0
+    record['last_written_state'] = record.get('state')
+    authority = broker_request(Path(repo).resolve(), {'operation': 'status'})
+    controller = broker_request(Path(repo).resolve(), {'operation': 'controller_status'})
+    record['state'] = controller['state']
+    record['operator_intent'] = authority.get('operator_intent', authority.get('intent'))
+    record['live_source_sha'] = authority.get('source_sha')
+    record['live_epoch'] = authority.get('epoch')
+    record['acknowledged_cycles'] = len(controller.get('acknowledged', []))
+    record['blocker'] = controller.get('blocker')
     record['autonomous_acceptance'] = False
     return record
 
@@ -263,8 +272,15 @@ def stop(repo):
     # Root stop preserves the outstanding reservation. Bootout prevents launchd
     # restart and does not cancel an in-flight native effect.
     controller = broker_request(repo, {'operation': 'controller_stop'})
-    worker_service_request(repo, 'withdraw_worker')
+    withdrawal_error = None
+    try:
+        worker_service_request(repo, 'withdraw_worker')
+    except ExecutionBlocked as exc:
+        # Admission is already stopped. Always unload the operator runner;
+        # preserve an uncertain worker withdrawal for read-only reconciliation.
+        withdrawal_error = str(exc)
     result = subprocess.run(['launchctl', 'bootout', 'gui/'+str(os.getuid())+'/'+LABEL],
                             capture_output=True, timeout=20)
-    return {'state': 'stopped', 'controller': controller['state'],
+    return {'state': 'worker_withdrawal_uncertain' if withdrawal_error else 'stopped',
+            'controller': controller['state'], 'withdrawal_error': withdrawal_error,
             'service_unloaded': result.returncode == 0, 'journals_retained': True}

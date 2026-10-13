@@ -72,8 +72,9 @@ class PersistentAuthorityTests(unittest.TestCase):
             grant=self.config['browser_planning_scope']
             call=journal.reserve(grant,4,'prompt',{})
             validate_reserved_browser_call(call['call_id'],grant)
-            with self.assertRaises(ExecutionBlocked):
-                PlanningCallJournal(journal.path).reserve(grant,4,'prompt',{})
+            observed=PlanningCallJournal(journal.path).reserve(grant,4,'prompt',{})
+            self.assertEqual(observed['call_id'],call['call_id'])
+            self.assertTrue(observed['observe_only'])
             with self.assertRaises(ExecutionBlocked):
                 journal.reserve(grant,13,'prompt',{})
             with self.assertRaises(ExecutionBlocked):
@@ -86,12 +87,12 @@ class PersistentAuthorityTests(unittest.TestCase):
             journal=PlanningCallJournal(Path(tmp)/'calls.json')
             grant=self.config['browser_planning_scope']
             first=journal.reserve(grant,1,'prompt',{})
-            with self.assertRaises(ExecutionBlocked): journal.reserve(grant,1,'prompt',{})
+            self.assertTrue(journal.reserve(grant,1,'prompt',{})['observe_only'])
             journal.not_dispatched(first,'composer not ready before Send')
             second=journal.reserve(grant,1,'prompt',{})
             self.assertNotEqual(first['call_id'],second['call_id'])
             self.assertEqual(len(json.loads(journal.path.read_text())['calls']),2)
-            with self.assertRaises(ExecutionBlocked): journal.reserve(grant,1,'prompt',{})
+            self.assertTrue(journal.reserve(grant,1,'prompt',{})['observe_only'])
             with self.assertRaises(ExecutionBlocked): journal.not_dispatched(first,'overwrite old disposition')
 
     def test_original_incomplete_persistent_journal_cannot_be_reinterpreted(self):
@@ -113,7 +114,7 @@ class PersistentAuthorityTests(unittest.TestCase):
             lambda *a,**kw:dict(answer,acknowledged_receipts=[]),
             lambda *a:calls.append(a),source_sha='a'*40,
             goal_sha256=grant['goal_sha256'],epoch=13)
-        with self.assertRaisesRegex(ExecutionBlocked,'acknowledge'):
+        with self.assertRaisesRegex(ExecutionBlocked,'durable original reply journal'):
             planner.select(goal={},evidence={},state=state,now=self.now)
         self.assertEqual(calls,[])
         planner.transport=lambda *a,**kw:dict(answer,acknowledged_receipts=completed_changes(state))

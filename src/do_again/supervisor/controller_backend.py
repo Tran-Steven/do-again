@@ -113,7 +113,7 @@ class ControllerBackend:
         from .control_history import api_for
         with self.admission():api=api_for(self.broker)
         history=ControllerHistory(self.controller,api,self.admission)
-        return ControllerLoop(self.controller,history,self.planner,planning_goal(self.broker.config['controller_goal']),
+        return ControllerLoop(self.controller,history,self.planner,planning_goal(self.broker.config['controller_goal'], self.profile),
             self.collect,self.verifier).tick(now)
 
 
@@ -133,7 +133,7 @@ def create_controller_backend(broker):
     return ControllerBackend(broker)
 
 
-def planning_goal(goal):
+def planning_goal(goal, profile=None):
     """Bound public roadmap context while retaining the complete sealed goal hash."""
     value={k:v for k,v in goal.items() if k!='roadmap_snapshot'}
     snapshot=goal.get('roadmap_snapshot')
@@ -142,5 +142,15 @@ def planning_goal(goal):
         value['roadmap_snapshot']={'title':snapshot.get('title'),'state':snapshot.get('state'),
             'body_prefix':body[:4096] if isinstance(body,str) else '',
             'truncated':isinstance(body,str) and len(body)>4096,'snapshot_sha256':digest(snapshot)}
+    if profile is not None:
+        value['execution_contract'] = {
+            'editable_paths': profile['allowed_paths'],
+            'immutable_test_files': profile['test_files'],
+            'mandatory_test_cases': profile['test_cases'],
+            'language': 'python',
+            'instructions': 'Return a Python script that edits only editable_paths. '
+                'Never modify immutable tests. Create missing editable regression files. '
+                'The isolated worker commits and runs every mandatory test independently. '
+                'Use public fixtures only. No network, applications, deployments or merges.'}
     value['sealed_goal_sha256']=digest(goal)
     return value

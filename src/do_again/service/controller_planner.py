@@ -69,7 +69,13 @@ class PlanningCallJournal:
             # reserved/uncertain call; only proven non-dispatch admits a new ID.
             previous = [record for record in value['calls'].values()
                         if record.get('cycle') == cycle]
-            if any(record.get('state') != 'not_dispatched' for record in previous):
+            reserved = [record for record in previous if record.get('state') == 'reserved']
+            if reserved:
+                if (len(reserved) != 1 or reserved[0]['prompt_sha256'] != hashlib.sha256(prompt.encode()).hexdigest()
+                        or reserved[0]['schema_sha256'] != hashlib.sha256(canonical_json(schema)).hexdigest()):
+                    raise ExecutionBlocked('original call observation differs from reserved prompt')
+                return dict(reserved[0], observe_only=True)
+            if any(record.get('state') not in {'not_dispatched', 'answered_invalid'} for record in previous):
                 raise ExecutionBlocked('hosted call already reserved or call budget exhausted')
             key = str(len(value['calls']) + 1)
         if key in value['calls'] or len(value['calls']) >= limit:
@@ -89,4 +95,13 @@ class PlanningCallJournal:
         if original != call or original.get('state') != 'reserved':
             raise ExecutionBlocked('non-dispatch disposition differs from original reservation')
         original.update(state='not_dispatched', error=str(error)[:1000])
+        atomic_json(self.path, value)
+
+    def answered_invalid(self, call, error):
+        value = json.loads(self.path.read_text())
+        original = value['calls'].get(call['call_id'].rsplit('-', 1)[1])
+        expected = {k:v for k,v in call.items() if k != 'observe_only'}
+        if original != expected or original.get('state') != 'reserved':
+            raise ExecutionBlocked('invalid reply disposition differs from original reservation')
+        original.update(state='answered_invalid', error=str(error)[:1000])
         atomic_json(self.path, value)

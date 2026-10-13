@@ -69,6 +69,12 @@ class AuthorizedTransportPlanner:
     def _validated_grant(self, now):
         raise ExecutionBlocked('planner provider requires explicit sealed adapter')
 
+    def _reject_original(self, call, error):
+        journal = getattr(self.reserve_call, '__self__', None)
+        if journal is None or not hasattr(journal, 'answered_invalid'):
+            raise ExecutionBlocked('persistent planner lacks durable original reply journal')
+        journal.answered_invalid(call, error)
+
     def select(self, *, goal, evidence, state, now):
         grant = self._validated_grant(now)
         prompt = planning_prompt(goal, evidence, state)
@@ -83,18 +89,33 @@ class AuthorizedTransportPlanner:
         try:
             answer = self.transport(prompt, schema, call=call, grant=grant)
         except ExecutionBlocked as exc:
-            from .browser_planner import BrowserPlanningNotDispatched, PlanningNotReady
+            from .browser_planner import (BrowserPlanningNotDispatched, BrowserPlanningAnsweredInvalid,
+                BrowserPlanningAwaitingReply, PlanningNotReady)
             if persistent and isinstance(exc, BrowserPlanningNotDispatched):
                 journal = getattr(self.reserve_call, '__self__', None)
                 if journal is None or not hasattr(journal, 'not_dispatched'):
                     raise ExecutionBlocked('persistent planner lacks durable refusal journal') from exc
                 journal.not_dispatched(call, exc)
                 raise PlanningNotReady(str(exc)) from exc
+            if persistent and isinstance(exc, BrowserPlanningAwaitingReply):
+                raise PlanningNotReady(str(exc)) from exc
+            if persistent and isinstance(exc, BrowserPlanningAnsweredInvalid):
+                self._reject_original(call, exc)
+                raise PlanningNotReady(str(exc)) from exc
             raise
         if persistent:
             if (not isinstance(answer, dict)
                     or set(answer) != set(ANSWER_LIMITS) | {'acknowledged_receipts'}
                     or answer['acknowledged_receipts'] != completed):
-                raise ExecutionBlocked('model did not acknowledge exact verified prior receipts')
+                self._reject_original(call, 'model did not acknowledge exact verified prior receipts')
+                from .browser_planner import PlanningNotReady
+                raise PlanningNotReady('original reply rejected: receipt acknowledgment differs')
             answer = {k:v for k,v in answer.items() if k != 'acknowledged_receipts'}
-        return self.request_builder(validate_planning_answer(answer), evidence, now)
+        try:
+            answer = validate_planning_answer(answer)
+        except ExecutionBlocked as exc:
+            if not persistent: raise
+            self._reject_original(call, exc)
+            from .browser_planner import PlanningNotReady
+            raise PlanningNotReady('original reply rejected: bounded result schema differs') from exc
+        return self.request_builder(answer, evidence, now)

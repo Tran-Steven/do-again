@@ -21,7 +21,7 @@ from ..service.browser_planner import validate_browser_planner_grant
 from ..supervisor.macos_execution import ExecutionBlocked
 from . import runtime
 from .planner_driver import ChatGPTPlannerDriver
-from .planner_bridge_server import OperatorBrowserBridge, DurableDeliveryReservation
+from .planner_bridge_server import OperatorBrowserBridge, DurableDeliveryReservation, DurableReplyJournal
 
 
 def private_operator_directory(directory, *, create=False):
@@ -85,12 +85,13 @@ def serve_forever(*, repo, grant_path):
     root = private_operator_directory(runtime.browser_paths().root)
     delivery = private_operator_directory(root / 'planner-delivery', create=True)
     dispatched = private_operator_directory(root / 'planner-dispatch', create=True)
+    replies = private_operator_directory(root / 'planner-replies', create=True)
     driver = ChatGPTPlannerDriver(
         repo=Path(repo).resolve(), profile_attestor=profile_fingerprint,
         record_dispatch=DurableDeliveryReservation(dispatched))
     handler = OperatorBrowserBridge(
         grant=grant, driver=driver,
-        reserve_delivery=DurableDeliveryReservation(delivery))
+        reserve_delivery=DurableDeliveryReservation(delivery), replies=DurableReplyJournal(replies))
     path = root / 'planner.sock'
     if path.exists() or path.is_symlink():
         raise ExecutionBlocked('existing browser planner socket requires reconciliation; no takeover')
@@ -109,7 +110,7 @@ def serve_forever(*, repo, grant_path):
                         now=datetime.now(timezone.utc))
                     try:
                         handler.handle_once(connection)
-                    except ExecutionBlocked:
+                    except (ExecutionBlocked, runtime.BrowserError, OSError):
                         # Never reissue a request or click Send after uncertainty.
                         # A bad inbound request is terminal only for that connection.
                         continue

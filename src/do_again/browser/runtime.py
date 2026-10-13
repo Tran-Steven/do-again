@@ -1102,6 +1102,7 @@ def send_message(
     timeout: float = 180.0,
     wait_for_response: bool = True,
     before_dispatch: Any = None,
+    response_observer: Any = None,
 ) -> dict[str, Any]:
     _require_send_target_focus(target)
     baseline = _assistant_snapshot(target)
@@ -1210,11 +1211,12 @@ return rendered===expected.split(lineBreak).join(lineBreak+lineBreak) &&
         stable = 0
         while time.monotonic() < deadline:
             time.sleep(1.0)
-            current = _assistant_snapshot(target)
+            current = response_observer() if response_observer is not None else _assistant_snapshot(target)
             if _context_limit_warning(target):
                 raise BrowserError("ChatGPT conversation reached its context limit")
             if (
-                int(current.get("count") or 0) > int(baseline.get("count") or 0)
+                (current.get("bound") is True if response_observer is not None else
+                 int(current.get("count") or 0) > int(baseline.get("count") or 0))
                 and not current.get("busy")
                 and str(current.get("latest") or "").strip()
             ):

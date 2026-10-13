@@ -107,7 +107,7 @@ class BridgeTests(unittest.TestCase):
                 call_id=reply['call_id'], profile_sha256='f'*64,
                 grant_sha256='e'*64)
         self.assertEqual(result['response'], '{}')
-        self.assertEqual(fake.timeout, 120.0)
+        self.assertEqual(fake.timeout, 480.0)
         self.assertEqual(len(fake.sent), 1)
 
     def test_non_dispatch_refusal_must_match_the_original_call_and_grant(self):

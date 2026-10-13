@@ -123,7 +123,10 @@ class BrokerBrowserBridge:
         return {'peer_uid': self.expected_uid, 'conversation_id': conversation_id,
                 'profile_sha256': profile_sha256}
 
-    def send_once(self, message, *, conversation_id, call_id, profile_sha256, grant_sha256):
+    def observe_once(self, message, **identity):
+        return self.send_once(message, observe_only=True, **identity)
+
+    def send_once(self, message, *, conversation_id, call_id, profile_sha256, grant_sha256, observe_only=False):
         path = self.socket_path
         if not path.is_absolute() or path.is_symlink():
             raise ExecutionBlocked('browser bridge socket must be absolute and unaliased')
@@ -139,13 +142,23 @@ class BrokerBrowserBridge:
         request = {'call_id': call_id, 'conversation_id': conversation_id,
                    'profile_sha256': profile_sha256, 'grant_sha256':grant_sha256,
                    'message': message}
+        if observe_only: request['operation'] = 'observe-original'
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-            client.settimeout(120.0)
+            client.settimeout(480.0)
             client.connect(str(path))
             if authenticated_peer_uid(client) != self.expected_uid:
                 raise ExecutionBlocked('browser bridge peer is not the approved operator')
             write_frame(client, request)
-            reply = read_frame(client)
+            try:
+                reply = read_frame(client)
+            except (OSError, ExecutionBlocked) as exc:
+                from .browser_planner import BrowserPlanningAwaitingReply
+                raise BrowserPlanningAwaitingReply('original reply pending; observe only, never resend') from exc
+        if (set(reply) == {'call_id', 'conversation_id', 'grant_sha256', 'state'}
+                and reply['call_id'] == call_id and reply['conversation_id'] == conversation_id
+                and reply['grant_sha256'] == grant_sha256 and reply['state'] == 'awaiting_original_reply'):
+            from .browser_planner import BrowserPlanningAwaitingReply
+            raise BrowserPlanningAwaitingReply('original reply pending; observe only, never resend')
         if (set(reply) == {'call_id', 'conversation_id', 'grant_sha256', 'state', 'error'}
                 and reply['call_id'] == call_id
                 and reply['conversation_id'] == conversation_id

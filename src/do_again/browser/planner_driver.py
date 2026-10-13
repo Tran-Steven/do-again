@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from pathlib import Path
 
 from ..supervisor.macos_execution import ExecutionBlocked
@@ -60,9 +61,35 @@ class ChatGPTPlannerDriver:
         # send_message locks the browser Send gesture and fails uncertain after
         # its durable dispatch boundary. Never retry from this method.
         result = runtime.send_message(
-            target, message, timeout=120.0, wait_for_response=True,
+            target, message, timeout=300.0, wait_for_response=True,
+            response_observer=lambda: self._observe_target(target, message, conversation_id),
             before_dispatch=before_dispatch, background_focus=True)
         if (not isinstance(result, dict)
                 or runtime._chat_id(str(result.get('chat_url') or '')) != conversation_id):
             raise ExecutionBlocked('browser reply moved to another conversation')
         return {'conversation_id': conversation_id, 'response': result.get('response')}
+
+    @staticmethod
+    def _observe_target(target, message, conversation_id):
+        from .planner_observation import original_reply
+        result = original_reply(target, message, conversation_id=conversation_id)
+        return {'latest': result['response'], 'url': target.url, 'busy': False, 'bound': True} if result else {}
+
+    def observe_once(self, message, *, conversation_id, call_id, profile_sha256):
+        # Read only the already open bound conversation. No browser startup,
+        # tab creation, focus changes, authentication gestures, or Send.
+        if os.geteuid() != 501 or self.profile_attestor() != profile_sha256:
+            raise ExecutionBlocked('original reply observer profile differs')
+        record = runtime.project_record(self.repo)
+        url = str(record.get('chat_url') or '')
+        if runtime._chat_id(url) != conversation_id:
+            raise ExecutionBlocked('original reply observer conversation differs')
+        state = runtime.load_state()
+        target = runtime._find_chatgpt_target(int(state['port']), url)
+        if target is None: return None
+        from .planner_observation import original_reply
+        first = original_reply(target, message, conversation_id=conversation_id)
+        if first is None: return None
+        time.sleep(1)
+        second = original_reply(target, message, conversation_id=conversation_id)
+        return first if first == second else None

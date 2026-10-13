@@ -133,6 +133,9 @@ class NativeControllerEffects:
             if outcome['timed_out'] or outcome.get('stdout_truncated') or outcome.get('stderr_truncated'):
                 raise ExecutionBlocked('planning probe incomplete')
             cases.append({'case':case,'returncode':outcome['returncode'],
+                'file_present': (broker.project.worktree / case.split('::', 1)[0]).is_file(),
+                'pytest_exit_category': {0:'passed',1:'failed',2:'interrupted',3:'internal_error',
+                    4:'collection_or_usage_error',5:'no_tests_collected'}.get(outcome['returncode'],'other'),
                 'stdout_sha256':hashlib.sha256(outcome['stdout'].encode()).hexdigest(),
                 'stderr_sha256':hashlib.sha256(outcome['stderr'].encode()).hexdigest()})
         if before!=self.measure(head,manifest):raise ExecutionBlocked('planning probes changed source')
