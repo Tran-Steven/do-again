@@ -25,7 +25,10 @@ def _private_layout(source_repo: Path) -> dict:
     if home.is_symlink():
         raise OperatorError("Do Again home must not be a symlink")
     home = home.resolve()
-    root = home / "isolated-projects" / key
+    parent = home / "isolated-projects"
+    root = parent / key
+    if parent.is_symlink() or root.is_symlink():
+        raise OperatorError("isolated runtime path must not traverse a symlink alias")
     if source == root or source in root.parents or root in source.parents:
         raise OperatorError("isolated runtime must be outside the source checkout")
     return {
@@ -93,9 +96,13 @@ def enrolled_config(source_repo: Path) -> tuple[dict, dict]:
             or config.get("test_suite") not in {"python", "npm"}):
         raise OperatorError("isolated enrollment has invalid bounded policy")
     journal = _read_object(layout["journal_path"])
+    digest = hashlib.sha256(
+        json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
     if (journal.get("state") != "configured"
             or journal.get("branch") != config["branch"]
-            or journal.get("original_head") != config.get("original_head")):
+            or journal.get("original_head") != config.get("original_head")
+            or journal.get("config_sha256") != digest):
         raise OperatorError("isolated enrollment is incomplete")
     return layout, config
 
