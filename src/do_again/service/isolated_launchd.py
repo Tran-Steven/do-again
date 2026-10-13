@@ -146,10 +146,17 @@ def install_isolated_service(source_repo: Path) -> dict:
 
 def start_isolated_service(source_repo: Path) -> dict:
     layout, config, label, plist = _service_layout(source_repo)
-    if _verified_plist(plist, label) is None:
+    expected = _expected_plist(layout, label, str(Path(sys.executable).resolve()))
+    installed = _verified_plist(plist, label)
+    if installed is None:
         raise OperatorError("isolated service not installed; enroll and install first")
-    if _service_loaded(label):
-        _launchctl("kickstart", "-k", _domain() + "/" + label)
+    if installed != expected:
+        raise OperatorError("installed isolated service no longer matches its approved definition")
+    status = isolated_service_status(source_repo)
+    if status["process_running"]:
+        return status
+    if status["launchd_loaded"]:
+        _launchctl("kickstart", _domain() + "/" + label)
     else:
         _launchctl("bootstrap", _domain(), str(plist))
     return isolated_service_status(source_repo)
