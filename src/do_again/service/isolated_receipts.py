@@ -11,8 +11,8 @@ from .isolated_planner import _private_exclusive_json
 from .isolated_worker import create_isolated_worker
 
 
-_REQUEST_RE = re.compile(r"isolated-[a-f0-9]{24}\\Z")
-_PATCH_RE = re.compile(r"[a-f0-9]{24}\\.patch\\Z")
+_REQUEST_RE = re.compile(r"isolated-[a-f0-9]{24}")
+_PATCH_RE = re.compile(r"[a-f0-9]{24}[.]patch")
 _TERMINAL = {"succeeded", "failed", "blocked", "error"}
 
 
