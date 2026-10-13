@@ -150,7 +150,13 @@ def advance_isolated_sandbox(agent, *, request_id: str) -> dict:
     if _git(workspace, "status", "--porcelain", "--untracked-files=all").stdout.strip():
         raise OperatorError("isolated source is dirty; no patch application")
     patch_file = state_dir / "isolated-patches" / patch["patch_file"]
-    changed = set(_git(workspace, "apply", "--name-only", str(patch_file)).stdout.decode().splitlines())
+    changed = set()
+    for line in _git(workspace, "apply", "--numstat", str(patch_file)).stdout.decode().splitlines():
+        values = line.split("\t", 2)
+        if (len(values) != 3 or not values[0].isdigit()
+                or not values[1].isdigit() or not values[2]):
+            raise OperatorError("isolated patch has unsupported or binary changes")
+        changed.add(values[2])
     if changed != set(patch["files"]):
         raise OperatorError("patch affects unapproved isolated source paths")
     _git(workspace, "apply", "--check", "--index", str(patch_file))
