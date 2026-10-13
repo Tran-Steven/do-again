@@ -182,8 +182,9 @@ def qualify_operator_browser_bridge(broker):
                 or previous.get('browser_calls') != 0
                 or previous.get('operator_uid') != 501
                 or previous.get('peer_uid') != 501
-                or not isinstance(previous.get('grant_sha256'),str)
-                or len(previous.get('grant_sha256')) != 64):
+                or (previous_source == recent_source
+                    and (not isinstance(previous.get('grant_sha256'),str)
+                         or len(previous.get('grant_sha256')) != 64))):
             raise ExecutionBlocked('previous bridge proof is not eligible for guarded requalification')
         if any((Path(broker.state) / name).exists() for name in (
                 'browser-planning-calls.json', 'controller.json',
