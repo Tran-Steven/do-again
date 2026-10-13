@@ -70,11 +70,11 @@ def create_isolated_sandbox(*, source_repo: Path, state_dir: Path) -> dict:
         }
     if workspace.exists() or workspace.is_symlink():
         raise OperatorError("isolated source exists without a durable marker")
-    if _git(source_repo, "status", "--porcelain", "--untracked-files=all").stdout.strip():
-        raise OperatorError("original source must be clean before isolated snapshot")
     head = _git(source_repo, "rev-parse", "HEAD").stdout.decode().strip()
     workspace.mkdir(mode=0o700)
     _export(source_repo, workspace, head)
+    if _git(source_repo, "rev-parse", "HEAD").stdout.decode().strip() != head:
+        raise OperatorError("source HEAD changed during committed snapshot export")
     _git(workspace, "init", "-q", "-b", "isolated-development")
     _git(workspace, "add", "-f", "--all")
     _git(
