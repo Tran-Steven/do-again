@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import uuid
 from pathlib import Path
 from ..core.schema import canonical_json, request_fingerprint
 from .macos_execution import EXECUTION_ROOT, INSTALL_ROOT, ExecutionBlocked, capture, launch_spec
@@ -30,13 +31,53 @@ class NativeControllerEffects:
 
     def manifest(self,sid,head):
         broker=self.broker
+        # Git metadata belongs to the operator, not the sandboxed execution UID.
+        # Export only allowlisted inert Git objects under root admission, using
+        # the same sanitized copier as native Git transactions. Never expand
+        # the worker's access to authoritative .git or host Git configuration.
+        from .git_capabilities import copy_git_data
+        if head!=self.head():
+            raise ExecutionBlocked('manifest source head changed before protected Git export')
+        root=EXECUTION_ROOT/broker.project.key/'requests'/sid
+        root.mkdir(parents=True,exist_ok=True,mode=0o711)
+        (root/'scratch').mkdir(mode=0o700,exist_ok=True)
+        cache=root/'cache';cache.mkdir(mode=0o700,exist_ok=True)
+        for path in (root/'scratch',cache):
+            os.chown(path,broker.project.uid,broker.project.gid)
+        for path in (root,root.parent):
+            path.chmod(0o711)
+        metadata=cache/('git-manifest-'+uuid.uuid4().hex)
+        with self.admission():
+            copy_git_data(broker.project.worktree/'.git',metadata)
+            if head!=self.head():
+                raise ExecutionBlocked('manifest source head changed during protected Git export')
+            # Read-only to the dedicated worker and never writable by its
+            # descendants, even though the surrounding cache is writable.
+            for directory,dirs,files in os.walk(metadata,followlinks=False):
+                for name in files:
+                    item=Path(directory)/name
+                    if item.is_symlink() or item.stat().st_nlink!=1:
+                        raise ExecutionBlocked('exported Git metadata contains an alias')
+                    os.chown(item,broker.project.uid,broker.project.gid)
+                    item.chmod(0o400)
+                for name in dirs:
+                    item=Path(directory)/name
+                    if item.is_symlink():
+                        raise ExecutionBlocked('exported Git metadata directory is aliased')
+                    os.chown(item,broker.project.uid,broker.project.gid)
+                    item.chmod(0o500)
+            os.chown(metadata,broker.project.uid,broker.project.gid)
+            metadata.chmod(0o500)
         code=('import sys;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
             'from do_again.supervisor.git_manifest import tree_manifest;import json;'
             'print(json.dumps(tree_manifest(sys.argv[1],sys.argv[2],sys.argv[3])))')
         result=self.capture(sid,[broker.config['python'],'-I','-S','-B','-c',code,
-            broker.config['git'],str(broker.project.worktree/'.git'),head],30)
+            broker.config['git'],str(metadata),head],30)
         if result['returncode'] or result['timed_out'] or result.get('stdout_truncated'):
-            raise ExecutionBlocked('sealed Git manifest capture failed')
+            diagnostic={'exit_code':result['returncode'],'timed_out':result['timed_out'],
+                'stdout_truncated':result.get('stdout_truncated',False),
+                'stderr_sha256':hashlib.sha256(result.get('stderr','').encode()).hexdigest()}
+            raise ExecutionBlocked('sealed Git manifest capture failed: '+json.dumps(diagnostic,sort_keys=True))
         manifest=json.loads(result['stdout'])
         for path,blob in self.profile['test_files'].items():
             if manifest.get(path,{}).get('blob_sha')!=blob:
