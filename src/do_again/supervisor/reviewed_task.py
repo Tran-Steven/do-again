@@ -73,6 +73,63 @@ def metadata_digest(root):
     return sha(canonical_json(records))
 
 
+def copy_git_metadata(source, destination):
+    """Copy bytes, ownership and modes through unaliased directory descriptors."""
+    def signature(info):
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid,
+                info.st_nlink, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+    def copy_directory(source_fd, target):
+        before = os.fstat(source_fd)
+        target.mkdir(mode=0o700)
+        target_fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            for name in sorted(os.listdir(source_fd)):
+                info = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+                if stat.S_ISDIR(info.st_mode):
+                    child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                    dir_fd=source_fd)
+                    try:
+                        if signature(os.fstat(child)) != signature(info):
+                            raise ExecutionBlocked('Git directory changed before snapshot')
+                        copy_directory(child, target / name)
+                    finally:
+                        os.close(child)
+                elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+                    child = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=source_fd)
+                    try:
+                        if signature(os.fstat(child)) != signature(info):
+                            raise ExecutionBlocked('Git file changed before snapshot')
+                        output = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                         0o600, dir_fd=target_fd)
+                        with os.fdopen(output, 'wb') as stream:
+                            while data := os.read(child, 1024 * 1024):
+                                stream.write(data)
+                            stream.flush()
+                            if signature(os.fstat(child)) != signature(info):
+                                raise ExecutionBlocked('Git file changed during snapshot')
+                            os.fchown(stream.fileno(), info.st_uid, info.st_gid)
+                            os.fchmod(stream.fileno(), stat.S_IMODE(info.st_mode))
+                            os.fsync(stream.fileno())
+                    finally:
+                        os.close(child)
+                else:
+                    raise ExecutionBlocked('Git snapshot contains an alias or special file')
+            if signature(os.fstat(source_fd)) != signature(before):
+                raise ExecutionBlocked('Git directory changed during snapshot')
+            os.fchown(target_fd, before.st_uid, before.st_gid)
+            os.fchmod(target_fd, stat.S_IMODE(before.st_mode))
+            os.fsync(target_fd)
+        finally:
+            os.close(target_fd)
+
+    source_fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        copy_directory(source_fd, Path(destination))
+    finally:
+        os.close(source_fd)
+
+
 class ReviewedTransaction:
     """Protected callbacks are supplied only by the installed native handler."""
     def __init__(self, root, journal, *, measure, test, commit, drain, swap_git, checkpoint=None):
@@ -195,8 +252,9 @@ class ReviewedTransaction:
                 self.state['modes'][name] = [stat.S_IMODE(info.st_mode), info.st_uid, info.st_gid]
             self.state['git_before'] = metadata_digest(self.root / '.git')
             self.save()
-            shutil.copytree(self.root / '.git', self.directory / 'git-before')
-            if metadata_digest(self.directory / 'git-before') != self.state['git_before']:
+            copy_git_metadata(self.root / '.git', self.directory / 'git-before')
+            if (metadata_digest(self.directory / 'git-before') != self.state['git_before']
+                    or metadata_digest(self.root / '.git') != self.state['git_before']):
                 raise ExecutionBlocked('Git snapshot changed during copy')
             self.state['phase'] = 'snapshot'; self.save()
             self.checkpoint('snapshot')

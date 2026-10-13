@@ -136,10 +136,13 @@ print(json.dumps(result),flush=True)
         git_scratch, git_cache = git_proof_directories(root, project.uid, project.gid)
         git_evidence = verify_native_git(config, project, git_scratch, git_cache, nonce, start_guard=start_guard)
         verify_literal_source_scope(config, project, root, scratch, cache, start_guard=start_guard)
+        snapshot_evidence = verify_reviewed_metadata_snapshot(config, project, root, start_guard=start_guard)
+        result['reviewed_metadata_snapshot'] = True
         result['literal_source_scope'] = True
         result['git_transaction'] = True
         result['git_broker_promotion'] = True
-        return {'verified': True, 'git': git_evidence, 'checks': sorted(result), 'detached_descendants_drained': True,
+        return {'verified': True, 'git': git_evidence, 'reviewed_metadata_snapshot': snapshot_evidence,
+                'checks': sorted(result), 'detached_descendants_drained': True,
                 'execution_uid': project.uid, 'fixture': label}
     finally:
         (project.worktree / ('.native-proof-' + nonce)).unlink(missing_ok=True)
@@ -271,6 +274,36 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     return {'verified':True,'promoted_sha':promoted['repo_head'], 'base_sha':base,
             'metadata_root_owned':True,'terminal_receipt_replayed':True,
             'live_authority_unchanged':True,'production_configuration_unchanged':True}
+
+
+def verify_reviewed_metadata_snapshot(config, project, root, *, start_guard):
+    """Actual root copy/exchange of synthetic metadata owned by other identities."""
+    from .reviewed_task import copy_git_metadata, metadata_digest
+    from .git_broker import atomic_swap
+    directory = root / 'reviewed-metadata-proof'
+    directory.mkdir(mode=0o700)
+    original, saved = directory / 'original', directory / 'saved'
+    original.mkdir(mode=0o755)
+    (original / 'objects').mkdir(mode=0o750)
+    (original / 'HEAD').write_bytes(b'ref: refs/heads/synthetic-original\n')
+    (original / 'objects' / 'inert').write_bytes(b'synthetic byte-preservation proof\n')
+    for path in (original, original / 'HEAD'):
+        os.chown(path, config['operator_uid'], config['operator_gid'])
+    for path in (original / 'objects', original / 'objects' / 'inert'):
+        os.chown(path, project.uid, project.gid)
+    with start_guard():
+        before = metadata_digest(original)
+        copy_git_metadata(original, saved)
+        if metadata_digest(saved) != before or metadata_digest(original) != before:
+            raise ExecutionBlocked('cross-identity metadata snapshot was not exact')
+        (original / 'HEAD').write_bytes(b'ref: refs/heads/synthetic-candidate\n')
+        atomic_swap(original, saved)
+        if metadata_digest(original) != before:
+            raise ExecutionBlocked('cross-identity metadata recovery was not exact')
+    return {'verified': True, 'root_uid': os.geteuid(),
+            'original_owner_uids': [config['operator_uid'], project.uid],
+            'byte_mode_owner_digest': before, 'atomic_recovery_verified': True,
+            'fixture_only': True}
 
 
 def verify_literal_source_scope(config, project, root, scratch, cache, *, start_guard):

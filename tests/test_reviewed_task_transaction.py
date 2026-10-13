@@ -5,12 +5,69 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from do_again.core.schema import canonical_json
 from do_again.supervisor.macos_execution import ExecutionBlocked
 from do_again.supervisor.reviewed_task import (
-    ASSETS, BASE, PATHS, POLICY, ReviewedTransaction, metadata_digest, sha, validate_scope,
+    ASSETS, BASE, PATHS, POLICY, ReviewedTransaction, copy_git_metadata, metadata_digest, sha, validate_scope,
 )
+
+
+class GitMetadataSnapshotTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name); self.source = self.home / 'original'
+        self.source.mkdir(mode=0o750); (self.source / 'objects').mkdir(mode=0o700)
+        (self.source / 'HEAD').write_bytes(b'original HEAD\n')
+        (self.source / 'objects' / 'inert').write_bytes(b'original object\n')
+        (self.source / 'objects' / 'inert').chmod(0o444)
+        self.destination = self.home / 'saved'
+
+    def test_explicitly_preserves_every_file_and_directory_owner_and_mode(self):
+        expected = sorted((p.stat().st_uid, p.stat().st_gid) for p in
+                          [self.source, *self.source.rglob('*')])
+        before = metadata_digest(self.source)
+        with patch('do_again.supervisor.reviewed_task.os.fchown', wraps=os.fchown) as ownership:
+            copy_git_metadata(self.source, self.destination)
+        self.assertEqual(sorted(call.args[1:] for call in ownership.call_args_list), expected)
+        self.assertEqual(metadata_digest(self.destination), before)
+        self.assertEqual(metadata_digest(self.source), before)
+
+    def test_rejects_symlink_without_following_it(self):
+        (self.source / 'alias').symlink_to(self.source / 'HEAD')
+        with self.assertRaisesRegex(ExecutionBlocked, 'alias'):
+            copy_git_metadata(self.source, self.destination)
+        self.assertEqual((self.source / 'HEAD').read_bytes(), b'original HEAD\n')
+
+    def test_rejects_hardlink(self):
+        os.link(self.source / 'HEAD', self.source / 'alias')
+        with self.assertRaisesRegex(ExecutionBlocked, 'alias'):
+            copy_git_metadata(self.source, self.destination)
+
+    def test_refuses_replaced_file_between_inspection_and_open(self):
+        original_open = os.open
+        def concurrent_open(name, *args, **kwargs):
+            if name == 'HEAD' and kwargs.get('dir_fd') is not None:
+                (self.source / 'HEAD').rename(self.source / 'old-head')
+                (self.source / 'HEAD').write_bytes(b'concurrent bytes\n')
+            return original_open(name, *args, **kwargs)
+        with patch('do_again.supervisor.reviewed_task.os.open', side_effect=concurrent_open):
+            with self.assertRaisesRegex(ExecutionBlocked, 'changed before snapshot'):
+                copy_git_metadata(self.source, self.destination)
+        self.assertEqual((self.source / 'HEAD').read_bytes(), b'concurrent bytes\n')
+
+    def test_fifo_replacement_cannot_block_snapshot_open(self):
+        original_open = os.open
+        def concurrent_open(name, *args, **kwargs):
+            if name == 'HEAD' and kwargs.get('dir_fd') is not None:
+                self.assertTrue(args[0] & os.O_NONBLOCK)
+                (self.source / 'HEAD').unlink()
+                os.mkfifo(self.source / 'HEAD')
+            return original_open(name, *args, **kwargs)
+        with patch('do_again.supervisor.reviewed_task.os.open', side_effect=concurrent_open):
+            with self.assertRaisesRegex(ExecutionBlocked, 'changed before snapshot'):
+                copy_git_metadata(self.source, self.destination)
 
 
 class ReviewedTaskTests(unittest.TestCase):
