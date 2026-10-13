@@ -115,7 +115,7 @@ def _docker_test(workspace: Path, image: str, argv: list[str]) -> bool:
     # never be counted as a successful verified coding cycle.
     if argv[0] in {"python", "python3"}:
         report = (result.stdout + result.stderr).decode("utf-8", "replace")
-        return bool(re.search(r"Ran [1-9][0-9]* tests?\\b", report))
+        return bool(re.search(r"Ran [1-9][0-9]* tests?\b", report))
     return True
 
 
