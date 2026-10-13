@@ -24,6 +24,8 @@ SUFFIXES = {".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".md", ".css", ".html"
 TEST_COMMANDS = {
     ("python", "-m", "unittest", "discover"),
     ("python3", "-m", "unittest", "discover"),
+    ("python", "-m", "unittest", "discover", "-s", "tests"),
+    ("python3", "-m", "unittest", "discover", "-s", "tests"),
     ("npm", "test", "--", "--run"),
 }
 
@@ -107,7 +109,14 @@ def _docker_test(workspace: Path, image: str, argv: list[str]) -> bool:
         result = subprocess.run(cmd, capture_output=True, timeout=240)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise OperatorError("bounded offline container test unavailable") from exc
-    return result.returncode == 0
+    if result.returncode != 0:
+        return False
+    # unittest exits zero even when it discovers zero tests. Such a run must
+    # never be counted as a successful verified coding cycle.
+    if argv[0] in {"python", "python3"}:
+        report = (result.stdout + result.stderr).decode("utf-8", "replace")
+        return bool(re.search(r"Ran [1-9][0-9]* tests?\\b", report))
+    return True
 
 
 def run_isolated_cycle(repo: Path, manifest: dict, *, image: str, output_dir: Path) -> dict:
