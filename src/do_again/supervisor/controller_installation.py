@@ -8,11 +8,12 @@ from .macos_execution import ExecutionBlocked
 
 
 def apply_controller_grant(config,grant,hosted=None,*,browser=None,now=None):
-    if not isinstance(grant,dict) or set(grant)!={'scope','goal','profile'}:
+    if not isinstance(grant,dict) or set(grant) not in ({'scope','goal','profile'}, {'scope','goal','profile','reviewed_task_scope'}):
         raise ExecutionBlocked('controller grant package requires exact scope, goal and profile')
     from ..service.offline_continuation import digest
     config.update(controller_scope=grant['scope'],controller_goal=grant['goal'],
         controller_goal_sha256=digest(grant['goal']),controller_profile=grant['profile'])
+    if 'reviewed_task_scope' in grant:config['reviewed_task_scope']=grant['reviewed_task_scope']
     if hosted is not None and browser is not None:
         raise ExecutionBlocked('controller cannot combine hosted and browser planner grants')
     if hosted is not None:config['hosted_planning_scope']=hosted

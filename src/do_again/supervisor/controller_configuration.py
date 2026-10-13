@@ -8,8 +8,11 @@ from .macos_execution import ExecutionBlocked
 
 
 def validate_controller_configuration(config, *, now=None, epoch=None):
+    from .reviewed_task import validate_scope as validate_reviewed_scope
+    reviewed = validate_reviewed_scope(config)
     scope = config.get('controller_scope')
     if scope is None:
+        if reviewed is not None:raise ExecutionBlocked('reviewed task requires existing native controller integration')
         if any(config.get(k) is not None for k in ('controller_goal','controller_profile','hosted_planning_scope','browser_planning_scope')):
             raise ExecutionBlocked('controller capabilities without a controller scope')
         return None

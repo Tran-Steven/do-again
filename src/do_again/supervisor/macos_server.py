@@ -85,7 +85,9 @@ class ProjectBroker:
         self.state.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._initialize_activity()
         self.ledger = ExecutionLedger(Path(config['authority_path']),on_reserve=self._record_inflight)
-        self.lock = threading.Lock()
+        # Reviewed task holds the project fence across snapshot/test/commit/recovery.
+        # The existing Git capability must be able to reenter it in the same thread.
+        self.lock = threading.RLock()
 
     def _initialize_activity(self):
         self._activity_lock = threading.Lock()
@@ -123,6 +125,13 @@ class ProjectBroker:
     def _dispatch(self, packet: dict, uid: int) -> dict:
         if uid != self.config['operator_uid']:
             raise ExecutionBlocked('peer is not the trusted operator identity')
+        if packet.get('operation') == 'controller_amended_task':
+            from .reviewed_task_native import execute_reviewed_task
+            return execute_reviewed_task(self, packet)
+        if self.config.get('reviewed_task_scope') is not None and packet.get('operation') not in {
+                'status','execution_observe','controller_status','controller_stop',
+                'probe','qualify_service','qualify_worker'}:
+            raise ExecutionBlocked('reviewed no-publication task closes background/general mutation admission')
         if getattr(self,'canary',None) is not None:
             self.canary.packet(packet)
         if getattr(self,'codex',None) is not None:
@@ -458,7 +467,7 @@ def serve_operator(config: dict, brokers: dict) -> None:
                     elif set(packet)=={'operation','project'} and packet['operation']=='qualify_native_enforcement':
                         result=broker.dispatch({'operation':'probe'},config['operator_uid'])
                     elif set(packet)=={'operation','project'} and packet['operation'] in {
-                            'controller_start','controller_stop','controller_status','controller_tick'}:
+                            'controller_start','controller_stop','controller_status','controller_tick','controller_amended_task'}:
                         result=broker.dispatch({'operation':packet['operation']},config['operator_uid'])
                     elif set(packet)=={'operation','project'} and packet['operation']=='restart_canary':
                         from .worker_service import restart_canary

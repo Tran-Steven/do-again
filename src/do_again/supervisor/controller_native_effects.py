@@ -17,14 +17,19 @@ class NativeControllerEffects:
         from .macos_server import worktree_authority
         return worktree_authority(self.broker.project.worktree)['repo_head']
 
-    def capture(self,sid,argv,timeout):
+    def capture(self,sid,argv,timeout,*,read_only_source=False,extra_read_paths=()):
         broker=self.broker;root=EXECUTION_ROOT/broker.project.key/'requests'/sid
         scratch,cache=root/'scratch',root/'cache'
         for p in (scratch,cache):
             p.mkdir(parents=True,exist_ok=True,mode=0o700);os.chown(p,broker.project.uid,broker.project.gid)
         for p in (root,root.parent):p.chmod(0o711)
         packet={'operation':'execute','request_id':sid,'argv':argv,'cwd':'.','timeout':timeout}
-        result=capture(launch_spec(broker.project,packet,scratch,cache),timeout,start_guard=self.admission)
+        spec=launch_spec(broker.project,packet,scratch,cache)
+        if read_only_source:
+            spec['args'][2]+='(deny file-write* (subpath '+json.dumps(str(broker.project.worktree))+'))'
+        for path in extra_read_paths:
+            spec['args'][2]+='(allow file-read* (subpath '+json.dumps(str(path))+'))'
+        result=capture(spec,timeout,start_guard=self.admission)
         # This flag is established by verified launch_spec confinement, not child stdout.
         result['network_denied']=True
         return result
@@ -156,6 +161,13 @@ class NativeControllerEffects:
         epoch=broker.config['controller_scope']['epoch']+1
         if persistent_scope(broker.config['controller_scope']):
             epoch=broker.registry.status(broker.project.repo)['epoch']
+        if stage=='failure_observation':
+            # No mutation: prove that a known failed local stage left an exact
+            # committed tree, including the unchanged immutable baseline tests.
+            current=self.head();manifest=self.manifest(sid+'-failure-inspection',current)
+            measured=self.measure(current,manifest)
+            return {'clean_source_verified': True, 'current_commit':current,
+                    'tree_sha256':measured['tree_sha256']}
         if stage=='implementation':
             return broker._dispatch({'operation':'execute','request_id':sid,
                 'argv':[broker.config['python'],'-B','-c',request['args']['content']],
@@ -174,8 +186,10 @@ class NativeControllerEffects:
                     'source_sha':broker.config['source_sha'],'request_fingerprint':fp})
             manifest=self.manifest(sid,head)
             run=observe_tests(expected_head=head,cases=tuple(self.select_tests(request)),
-                measure=lambda:self.measure(head,manifest),execute=lambda case:self.run_case(sid,case))
-            result={'returncode':0,'timed_out':False,'source_sha':broker.config['source_sha'],'native_test_run':run}
+                measure=lambda:self.measure(head,manifest),execute=lambda case:self.run_case(sid,case),
+                allow_failures=persistent_scope(broker.config['controller_scope']))
+            result={'returncode':int(any(case['exit_code']!=0 for case in run['cases'])),
+                    'timed_out':False,'source_sha':broker.config['source_sha'],'native_test_run':run}
             broker.ledger.finish(broker.project.key,sid,result);return result
         if stage=='publication':
             # Recheck current source after test and before existing native Git export.

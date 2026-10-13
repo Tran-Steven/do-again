@@ -62,3 +62,24 @@ class NativeDevelopmentVerifier:
                 'no_submission': True, 'request_fingerprint': fp,
                 'implementation_commit': sha, 'test_commit': sha,
                 'branch': proof['branch'], 'base_commit': proof['base_commit']}
+
+    def failed(self, record, receipt):
+        """A failed request is retained and never acknowledged as completed work."""
+        rid=record['request']['request_id'];fp=record['fingerprint']
+        native=self.observe_execution(rid,fp);result=native.get('result');envelope=receipt.get('result')
+        if (receipt.get('request_id')!=rid or receipt.get('request_fingerprint')!=fp
+                or receipt.get('state')!='failed' or native.get('state')!='terminal'
+                or native.get('source_sha')!=self.source_sha or native.get('request_fingerprint')!=fp
+                or not isinstance(result,dict) or result.get('source_sha')!=self.source_sha
+                or result.get('returncode')!=1 or result.get('timed_out') is not False
+                or not isinstance(envelope,dict) or envelope.get('request_fingerprint')!=fp
+                or envelope.get('result')!=result):
+            raise ExecutionBlocked('failed receipt lacks original protected terminal evidence')
+        failure=result.get('verified_failure')
+        if (not isinstance(failure,dict) or failure.get('clean_source_verified') is not True
+                or failure.get('failed_stage') not in {'implementation','test'}
+                or type(failure.get('exit_code')) is not int or failure['exit_code']==0
+                or not re.fullmatch('[0-9a-f]{40}',str(failure.get('current_commit','')))
+                or not re.fullmatch('[0-9a-f]{64}',str(failure.get('tree_sha256','')))):
+            raise ExecutionBlocked('failed receipt has no verified clean source')
+        return failure

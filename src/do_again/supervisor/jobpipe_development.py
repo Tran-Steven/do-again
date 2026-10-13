@@ -120,7 +120,7 @@ def synthetic_qualification_config(config, **overrides):
             raise ExecutionBlocked("synthetic qualification lacks jobpipe scope")
         require_jobpipe_grant(config, SimpleNamespace(
             account=project["account"], repo=Path(project["repo"]), key=project["key"]))
-    controller_fields={"controller_scope","controller_goal","controller_goal_sha256","controller_profile","hosted_planning_scope"}
+    controller_fields={"controller_scope","controller_goal","controller_goal_sha256","controller_profile","hosted_planning_scope","reviewed_task_scope"}
     if "production_ready" in overrides or "development_scope" in overrides or controller_fields&set(overrides):
         raise ExecutionBlocked("synthetic qualification authority fields cannot be overridden")
     value=dict(config,production_ready=True,development_scope=None,**overrides)

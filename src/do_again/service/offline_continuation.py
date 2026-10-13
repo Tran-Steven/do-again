@@ -222,3 +222,17 @@ class OfflineContinuation:
         if state['state'] != 'stopped':
             state['state'] = 'completed' if len(state['acknowledged']) >= self.scope['max_cycles'] else 'planning'
         return self._save(state)
+
+    def failed(self, receipt, *, failure, now):
+        state=self._load(now)
+        if (not persistent_scope(self.scope) or state['state']!='waiting'
+                or receipt.get('request_id')!=state['outstanding'] or not state['requests']):
+            raise ExecutionBlocked('failed receipt is not the original outstanding request')
+        record=state['requests'][-1]
+        if (record['phase']!='published' or receipt.get('state')!='failed'
+                or receipt.get('request_fingerprint')!=record['fingerprint']
+                or failure.get('clean_source_verified') is not True):
+            raise ExecutionBlocked('failed receipt lacks verified failure disposition')
+        record.update(phase='failed',verified_failure=failure,receipt_sha256=digest(receipt))
+        state.update(outstanding=None,state='planning',validated_head=failure['current_commit'])
+        return self._save(state)

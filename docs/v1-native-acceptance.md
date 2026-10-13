@@ -303,3 +303,40 @@ canary tab, and the actual send gate must still pass. A blocked preflight
 means no new canary grant or admin installation should be attempted.
 Background authentication alone does not satisfy the two-task release gate
 or authorize production or changes to Sonary/jobpipe.
+
+### Owner-approved ATS task amendment — integration candidate, 2026-10-13
+
+The owner explicitly removed the nonexistent
+`tests/test_ats_question_triage_regression.py` prerequisite. The accepted
+replacement is **reviewed additional safety coverage** appended to
+`tests/test_ats_question_triage.py`. The original test bytes remain an exact
+prefix. No unseen original regression was executed, and equivalence to its
+unknown behavior is not claimed. Original request
+`offline-c96da7e80f41ce6a56ae-1`, its fingerprint, planner call and failed
+reservation remain unchanged lineage; the amended attempt has a fresh
+`amended-…` identity and a fingerprint of its separately sealed task scope.
+
+The one-shot `controller native-amended-task` path uses the existing root
+broker, dedicated execution capture, confined Git transaction and effect
+ledger. It admits only the exact reviewed before/after bytes for the two ATS
+files. Protected baseline tests do not become generally editable. The broker
+runs an immutable copy of the original baseline, all eight required selectors,
+and the complete 124-item after-file in independent pytest processes before
+local commit. Observer counts, actual process exits, UID and source/tree hashes
+bind acceptance; proposed-script success strings confer no authority. The Git
+candidate must match the complete tested source tree before promotion.
+
+Publication is a sealed, false task policy: no push, PR, deployment, application
+submission, merge, Git control publication or background planner admission.
+The task reserves recovery evidence before editing and preserves original
+source/Git bytes. Failure and interrupted-supervisor recovery perform guarded
+restoration only; concurrent modifications block without overwrite. Task
+completion does not start the controller or unpause Sonary. The original
+journals remain intact.
+
+Candidate integration evidence is separate from installed acceptance. Root
+ownership, immutable-install authentication, UID 402, actual Seatbelt
+no-network/read-only tests, service/worker probes and the genuine root-backed
+receipt require the later approved installation. This first amended task is
+necessary evidence and **is not V1 completion**, an autonomous two-task
+continuation, a four-hour soak, package onboarding or production authorization.

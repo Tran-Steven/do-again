@@ -95,6 +95,10 @@ class ControllerHistory:
             raise ExecutionBlocked('receipt canonical blob differs')
         # Trusted implementation must verify native ledger and exact-source
         # artifacts, never copy completion assertions from model/worker stdout.
+        from ..service.offline_continuation import persistent_scope
+        if persistent_scope(self.controller.scope) and receipt.get('state')=='failed':
+            failure=native_verify.failed(record,receipt)
+            return self.controller.failed(receipt,failure=failure,now=now)
         evidence = native_verify(record, receipt)
         return self.controller.accept(receipt, evidence=evidence, now=now)
 

@@ -273,7 +273,7 @@ class ExecutionLedger:
         result=json.loads(row[1])
         if (not isinstance(result,dict) or type(result.get('returncode')) is not int
                 or type(result.get('timed_out',False)) is not bool
-                or intent.get('operation') not in {'execute','git_commit','git_publish','dependency_install'}
+                or intent.get('operation') not in {'execute','git_commit','git_publish','dependency_install','reviewed_task'}
                 or result.get('source_sha')!=intent.get('source_sha')
                 or not isinstance(intent.get('source_sha'),str)
                 or not re.fullmatch('[0-9a-f]{40}',intent['source_sha'])):
@@ -281,7 +281,8 @@ class ExecutionLedger:
         return {'state':'terminal','replay':False,'request_fingerprint':original_fingerprint,
                 'source_sha':intent['source_sha'],'result':result}
 
-    def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None) -> dict[str, Any] | None:
+    def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None,
+                parent_request: str | None = None) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
@@ -292,7 +293,21 @@ class ExecutionLedger:
                 if row[1] == 'terminal':
                     return json.loads(row[2])
                 raise ExecutionBlocked('ambiguous started execution cannot replay')
-            if db.execute("SELECT 1 FROM execution WHERE project=? AND state='started'", (project,)).fetchone():
+            pending = db.execute("SELECT request FROM execution WHERE project=? AND state='started'", (project,)).fetchall()
+            if parent_request is not None:
+                parent = db.execute('SELECT payload FROM capability_intent WHERE project=? AND request=?',
+                                    (project,parent_request)).fetchone()
+                parent_intent = json.loads(parent[0]) if parent else {}
+                if (pending != [(parent_request,)]
+                        or not re.fullmatch('amended-[0-9a-f]{32}',parent_request)
+                        or request != parent_request+'-commit'
+                        or parent_intent.get('operation') != 'reviewed_task'
+                        or parent_intent.get('publication') != 'disabled'
+                        or not intent or intent.get('operation') != 'git_commit'
+                        or intent.get('source_sha') != parent_intent.get('source_sha')
+                        or intent.get('request_fingerprint') != parent_intent.get('request_fingerprint')):
+                    raise ExecutionBlocked('reviewed child commit lacks exact reserved parent authority')
+            elif pending:
                 raise ExecutionBlocked('project already has an unresolved execution')
             db.execute('INSERT INTO execution VALUES(?,?,?,?,NULL)', (project, request, fingerprint, 'started'))
             if intent is not None:

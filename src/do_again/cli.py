@@ -1249,7 +1249,7 @@ def main() -> int:
     persistent.add_argument("path")
     persistent.add_argument("--source-sha", required=True)
     persistent.add_argument("--epoch", type=int, required=True)
-    for action in ("native-start", "native-status", "native-stop"):
+    for action in ("native-start", "native-status", "native-stop", "native-amended-task"):
         controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
     for action in ("background", "background-status", "background-stop"):
         controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
@@ -1437,6 +1437,10 @@ def main() -> int:
         from .supervisor.macos_client import broker_request
         from .supervisor.macos_execution import ExecutionBlocked
         try:
+            if args.controller_command == "native-amended-task":
+                from .supervisor.macos_client import broker_request
+                print(json.dumps(broker_request(Path(args.path).resolve(), {'operation': 'controller_amended_task'}), sort_keys=True))
+                return 0
             if args.controller_command in ("run-persistent", "native-start", "native-status", "native-stop"):
                 from .service import native_operating
                 repo = Path(args.path).expanduser().resolve()

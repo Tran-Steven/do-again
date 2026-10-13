@@ -268,6 +268,61 @@ class ProductionPipelineTests(unittest.TestCase):
                 'substituted_boundaries':['root installation identity','dedicated UID/kernel adapter','GitHub API','worker protocol adapter'],
                 'real_jobpipe_cycles':0},indent=2)+'\n')
 
+    def persistent_request(self, script):
+        from do_again.service.offline_continuation import OfflineContinuation
+        scope=dict(self.config['controller_scope'],kind='jobpipe-native-controller-v1',
+            planner='chatgpt-browser-cdp',expires_at_utc=None,max_requests=12,max_cycles=12)
+        self.config['controller_scope']=scope
+        self.broker.project.repo=self.repo
+        self.broker.registry=SimpleNamespace(status=lambda repo:{'epoch':13})
+        controller=OfflineContinuation(self.state/'persistent.json',scope,
+            {k:scope[k] for k in ('source_sha','goal_sha256','epoch','repository','branch')})
+        self.backend.controller=controller;self.backend.pipeline.controller=controller
+        controller.start(self.now)
+        proposal=self.backend.build_request({'gap':'real fixture defect','acceptance':'all tests pass',
+            'script':script},{'repo_head':self.base},self.now)
+        proposal['evidence_sha256']='b'*64
+        record=controller.reserve(proposal,pending_ids=[],now=self.now)
+        controller.publication(record['request'],self.now)
+        return record
+
+    def test_persistent_known_nonmutating_failure_retained_and_never_acknowledged(self):
+        record=self.persistent_request('raise SystemExit(2)')
+        result=self.worker_execute(record['request'])
+        self.assertEqual(result['returncode'],1)
+        self.assertEqual(result['verified_failure']['failed_stage'],'implementation')
+        self.assertEqual(result['verified_failure']['current_commit'],self.base)
+        receipt={'request_id':record['request']['request_id'],'request_fingerprint':record['fingerprint'],
+            'state':'failed','result':{'request_fingerprint':record['fingerprint'],'result':result}}
+        failure=self.backend.verifier.failed(record,receipt)
+        state=self.backend.controller.failed(receipt,failure=failure,now=self.now)
+        self.assertEqual(state['state'],'planning');self.assertEqual(state['acknowledged'],[])
+        self.assertEqual(state['requests'][0]['phase'],'failed')
+        self.assertIsNone(state['outstanding'])
+        self.assertFalse(any(e[0]=='git_publish' for e in self.events))
+        with self.assertRaises(ExecutionBlocked):self.worker_execute(record['request'])
+        self.assertEqual(len([e for e in self.events if e[0]=='execute']),1)
+
+    def test_persistent_failed_tests_retained_at_clean_unpublished_commit(self):
+        record=self.persistent_request('from pathlib import Path\np=Path("product.py")\np.write_text(p.read_text().replace("def recover(x): return None", "def recover(x): return x"))')
+        result=self.worker_execute(record['request'])
+        self.assertEqual(result['returncode'],1)
+        failure=result['verified_failure']
+        self.assertEqual(failure['failed_stage'],'test')
+        self.assertEqual(len(failure['test_cases']),3)
+        self.assertTrue(any(c['exit_code'] for c in failure['test_cases']))
+        self.assertEqual(failure['current_commit'],self.git('rev-parse','HEAD'))
+        self.assertNotEqual(failure['current_commit'],self.base)
+        self.assertEqual(self.git('status','--porcelain'),'')
+        self.assertFalse(any(e[0]=='git_publish' for e in self.events))
+
+    def test_persistent_failure_with_uncommitted_changes_stops_and_preserves_bytes(self):
+        record=self.persistent_request('from pathlib import Path\nPath("product.py").write_text("partial edit")\nraise SystemExit(2)')
+        with self.assertRaises(ExecutionBlocked):self.worker_execute(record['request'])
+        self.assertEqual((self.repo/'product.py').read_text(),'partial edit')
+        self.assertEqual(self.backend.controller.status(self.now)['state'],'blocked')
+        self.assertEqual(self.ledger.observe_request('fixture',record['request']['request_id'],record['fingerprint'])['state'],'not_started')
+
     def test_unreserved_request_and_direct_execution_denied(self):
         with self.assertRaises(ExecutionBlocked):self.backend.guard_packet({'operation':'execute'})
         with self.assertRaises(ExecutionBlocked):self.backend.execute({'operation':'development_execute','request':{

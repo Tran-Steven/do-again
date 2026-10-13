@@ -12,7 +12,16 @@ const users=messageNodes('user'), assistants=messageNodes('assistant');
 const ordered=[...users.map(n=>({n,role:'user'})),...assistants.map(n=>({n,role:'assistant'}))]
   .sort((a,b)=>a.n.compareDocumentPosition(b.n)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1);
 const stop=document.querySelector('[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Stop response"],button[aria-label="Stop"]');
-return {url:location.href,busy:!!(stop&&!stop.disabled),messages:ordered.map(v=>({role:v.role,text:(v.n.innerText||v.n.textContent||'').trim()}))};
+return {url:location.href,busy:!!(stop&&!stop.disabled),messages:ordered.map(v=>{
+  if(v.role==='user')return {role:v.role,text:(v.n.innerText||v.n.textContent||'').trim()};
+  const copy=v.n.cloneNode(true);
+  for(const h of copy.querySelectorAll('h1,h2,h3,h4,h5,h6'))
+    if((h.textContent||'').trim()==='ChatGPT said:')h.remove();
+  for(const button of copy.querySelectorAll('button'))button.remove();
+  // innerText collapses spaces inside unfenced JSON string literals, corrupting
+  // Python indentation. Text-node content retains the original answer bytes.
+  return {role:v.role,text:(copy.textContent||'').trim()};
+})};
 })()'''
     snapshot = runtime.cdp.evaluate(target, expression, timeout=15.0)
     if (not isinstance(snapshot, dict) or runtime._chat_id(snapshot.get('url', '')) != conversation_id):

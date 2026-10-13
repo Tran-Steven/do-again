@@ -172,7 +172,7 @@ def require_planner_grants_before_staging(controller_grant, hosted_planner_grant
     if browser_planner_grant is not None:
         private_proposal_preflight(browser_planner_grant)
     proposal=json.loads(path.read_text())
-    if not isinstance(proposal,dict) or set(proposal)!={'scope','goal','profile'}:
+    if not isinstance(proposal,dict) or set(proposal) not in ({'scope','goal','profile'}, {'scope','goal','profile','reviewed_task_scope'}):
         raise ValueError('controller grant requires exact scope, goal and profile')
     scope=proposal['scope']
     if not isinstance(scope,dict):
