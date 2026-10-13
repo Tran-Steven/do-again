@@ -26,6 +26,7 @@ class IsolatedCycleTests(unittest.TestCase):
         git("init", "-b", "main")
         git("config", "user.email", "test@example.invalid")
         git("config", "user.name", "Do Again Test")
+        git("config", "core.autocrlf", "false")
         (self.repo / "app.py").write_text("def answer():\n    return 1\n")
         git("add", "app.py")
         git("commit", "-m", "baseline")
