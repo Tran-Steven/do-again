@@ -33,6 +33,50 @@ class BufferedSocket:
 
 
 class BridgeTests(unittest.TestCase):
+    def test_macos_native_getpeereid_fallback_when_socket_wrapper_lacks_it(self):
+        from do_again.service.browser_bridge import authenticated_peer_uid
+        import ctypes
+
+        class NativeOnlySocket:
+            def fileno(self):
+                return 42
+
+        class NativeLibrary:
+            pass
+
+        lib = NativeLibrary()
+
+        def native(fd, uid, gid):
+            self.assertEqual(fd, 42)
+            ctypes.cast(uid, ctypes.POINTER(ctypes.c_uint))[0] = 501
+            ctypes.cast(gid, ctypes.POINTER(ctypes.c_uint))[0] = 20
+            return 0
+
+        lib.getpeereid = native
+        with patch('do_again.service.browser_bridge.sys.platform', 'darwin'), \
+             patch('ctypes.CDLL', return_value=lib):
+            self.assertEqual(authenticated_peer_uid(NativeOnlySocket()), 501)
+
+    def test_macos_native_getpeereid_failure_is_not_a_trust_fallback(self):
+        from do_again.service.browser_bridge import authenticated_peer_uid
+
+        class NativeOnlySocket:
+            def fileno(self):
+                return 42
+
+        class NativeLibrary:
+            pass
+
+        def native(fd, uid, gid):
+            return -1
+
+        library = NativeLibrary()
+        library.getpeereid = native
+        with patch('do_again.service.browser_bridge.sys.platform', 'darwin'), \
+             patch('ctypes.CDLL', return_value=library):
+            with self.assertRaisesRegex(ExecutionBlocked, 'could not be verified'):
+                authenticated_peer_uid(NativeOnlySocket())
+
     def test_frame_round_trip(self):
         value = {'call_id': 'planner-' + 'a'*20 + '-1', 'response': 'valid'}
         target = BufferedSocket(b'')
