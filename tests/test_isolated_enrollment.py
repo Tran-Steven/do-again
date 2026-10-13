@@ -142,7 +142,7 @@ class IsolatedEnrollmentTests(unittest.TestCase):
             result = run_enrolled_isolated(self.repo)
         self.assertEqual(result["completed_cycles"], 3)
         parameters = execute.call_args.kwargs
-        self.assertEqual(parameters["source_repo"], self.repo)
+        self.assertEqual(parameters["source_repo"], self.repo.resolve())
         self.assertEqual(parameters["cycles"], 3)
         self.assertEqual(parameters["goal"], self.args["goal"])
         self.assertEqual(parameters["files"], ["app.py"])
