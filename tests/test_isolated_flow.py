@@ -134,7 +134,8 @@ class IsolatedFullCycleTests(unittest.TestCase):
                     "def value():\n    return 1\n")
                 receipt_path = (
                     "automation/do_again/receipts/" + result["request_id"] + ".json")
-                receipt = json.loads(git("show", "origin:isolated-control:" + receipt_path))
+                git("fetch", "origin", "isolated-control")
+                receipt = json.loads(git("show", "FETCH_HEAD:" + receipt_path))
                 self.assertEqual(receipt["state"], "succeeded")
                 self.assertEqual(
                     receipt["result"]["result"]["isolated_patch"]["state"],
