@@ -93,8 +93,11 @@ def _reconcile(previous, state, source, epoch):
         raise ExecutionBlocked('native runner tick intent is unknown')
     if state.get('state') in {'blocked', 'stopped', 'completed'}:
         return
-    # A durable reservation or a newly acknowledged receipt proves the tick
-    # progressed past planning. Otherwise a send may have occurred: no replay.
+    # The sealed root backend owns each planning-call/probe reservation.
+    # Re-entering planning consults that journal; an uncertain call is rejected
+    # before Send. The operator runner cannot erase or override that record.
+    if state.get('state') == 'planning':
+        return
     if (state.get('outstanding') or
             len(state.get('acknowledged', [])) > previous.get('acknowledged_cycles', 0)):
         return
@@ -135,7 +138,19 @@ def run_persistent(repo, *, source, epoch, poll_seconds=20):
                 _write_status(root, phase, source, epoch, cycles)
                 atomic_json(intent, {'source_sha': source, 'epoch': epoch,
                                      'acknowledged_cycles': cycles, 'state': 'tick_started'})
-                state = broker_request(repo, {'operation': 'controller_tick'})
+                try:
+                    state = broker_request(repo, {'operation': 'controller_tick'})
+                except ExecutionBlocked as exc:
+                    if str(exc) != 'remote request outstanding before planning':
+                        raise
+                    # Authenticated root response, before probe/model reservation.
+                    # Let the native worker settle the original request/receipt.
+                    atomic_json(intent, {'source_sha': source, 'epoch': epoch,
+                                         'acknowledged_cycles': cycles, 'state': 'tick_returned'})
+                    _write_status(root, 'waiting_for_existing_receipt', source, epoch, cycles)
+                    time.sleep(poll_seconds)
+                    state = broker_request(repo, {'operation': 'controller_status'})
+                    continue
                 # Keep the record after completion. A killed process must never
                 # infer safety merely from a missing mutable operator file.
                 atomic_json(intent, {'source_sha': source, 'epoch': epoch,

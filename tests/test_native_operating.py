@@ -152,11 +152,22 @@ class PersistentRunnerTests(unittest.TestCase):
         (self.root/('tick-intent.'+self.sha[:12]+'.18.json')).write_text(json.dumps(dict(
             source_sha=self.sha,epoch=18,acknowledged_cycles=0,state='tick_started')))
         (self.root/('tick-intent.'+self.sha[:12]+'.18.json')).chmod(0o600)
-        with patch.object(runner,'broker_request',return_value={'state':'planning','acknowledged':[]}) as broker:
+        with patch.object(runner,'broker_request',side_effect=[{'state':'planning','acknowledged':[]}, ExecutionBlocked('hosted call already reserved or call budget exhausted')]) as broker:
             result=runner.run_persistent(self.root,source=self.sha,epoch=18)
         self.assertEqual(result['state'],'blocked')
-        self.assertIn('uncertain',result['blocker'])
-        self.assertEqual(broker.call_count,1)
+        self.assertIn('already reserved',result['blocker'])
+        self.assertEqual(broker.call_count,2)
+
+    def test_existing_remote_request_waits_then_continues_without_user_tick(self):
+        states=[{'state':'planning','acknowledged':[]},
+                ExecutionBlocked('remote request outstanding before planning'),
+                {'state':'planning','acknowledged':[]},
+                {'state':'completed','acknowledged':['original']}]
+        with patch.object(runner,'broker_request',side_effect=states) as broker, \
+             patch.object(runner.time,'sleep'):
+            result=runner.run_persistent(self.root,source=self.sha,epoch=18)
+        self.assertEqual(result['state'],'completed')
+        self.assertEqual(broker.call_count,4)
 
     def test_restart_waiting_reconciles_and_continues_without_second_start(self):
         (self.root/('tick-intent.'+self.sha[:12]+'.18.json')).write_text(json.dumps(dict(

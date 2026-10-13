@@ -14,7 +14,8 @@
     "README.md",
     "LICENSE",
     "src/do_again/default_policy.json",
-    "ROADMAP.md"
+    "ROADMAP.md",
+    "src/do_again/worker_policy.json"
   ],
   "engines": {
     "node": ">=18"
