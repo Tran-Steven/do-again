@@ -58,50 +58,54 @@ def validate(config, status, observed, *, no_workers, worktree_head, state, plan
 def classify(db, project_key, expected, *, dry_run=True):
     """Atomic append-only audit + quarantine, never a terminal execution result."""
     db.execute("BEGIN IMMEDIATE")
-    observed = db.execute(
-        "SELECT e.state,e.fingerprint,e.result,i.payload FROM execution e "
-        "LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request "
-        "WHERE e.project=? AND e.request=?", (project_key,REQUEST)).fetchone()
-    if observed is None:
-        refused("original ledger row missing")
-    state,fp,result,intent = observed
-    if state != "started" or fp != FINGERPRINT or result is not None:
-        refused("original execution was already altered")
-    if json.loads(intent or "null") != expected:
-        refused("original intent differs")
-    prior = db.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='v1a_abandoned_probe_audit'"
-    ).fetchone()
-    if prior:
-        refused("abandonment journal already exists; no repeat effect")
-    if dry_run:
-        db.rollback()
-        return {"operation":"would_quarantine", "request_id":REQUEST,
-                "old_state":"started","new_state":"abandoned","original_result":None}
-    # Ledger state 'abandoned' is never terminal; observe_request remains
-    # post_dispatch_uncertain and lookup still refuses replay.
-    db.execute("CREATE TABLE v1a_abandoned_probe_audit ("
-               "project TEXT NOT NULL, request TEXT NOT NULL, fingerprint TEXT NOT NULL, "
-               "source_sha TEXT NOT NULL, reason TEXT NOT NULL, original_intent_sha256 TEXT NOT NULL, "
-               "prior_state TEXT NOT NULL, disposition TEXT NOT NULL, created_at TEXT NOT NULL, "
-               "PRIMARY KEY(project,request))")
-    db.execute("INSERT INTO v1a_abandoned_probe_audit VALUES(?,?,?,?,?,?,?,?,?)",
-        (project_key,REQUEST,FINGERPRINT,OLD_SOURCE,
-         "sealed Git manifest subprocess error; no terminal result; no model call",
-         hashlib.sha256(intent.encode()).hexdigest(),
-         "started","quarantined_unresolved_not_replayable",
-         datetime.now(timezone.utc).isoformat()))
-    changed = db.execute("UPDATE execution SET state='abandoned' "
-        "WHERE project=? AND request=? AND fingerprint=? "
-        "AND state='started' AND result IS NULL",
-        (project_key,REQUEST,FINGERPRINT)).rowcount
-    if changed != 1:
-        refused("lost compare-and-set ledger lock")
-    db.commit()
-    return {"operation":"quarantined", "request_id":REQUEST,
-            "prior_state":"started", "state":"abandoned",
-            "terminal_success":False,"replay_permitted":False}
+    try:
+        observed = db.execute(
+            "SELECT e.state,e.fingerprint,e.result,i.payload FROM execution e "
+            "LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request "
+            "WHERE e.project=? AND e.request=?", (project_key,REQUEST)).fetchone()
+        if observed is None:
+            refused("original ledger row missing")
+        state,fp,result,intent = observed
+        if state != "started" or fp != FINGERPRINT or result is not None:
+            refused("original execution was already altered")
+        if json.loads(intent or "null") != expected:
+            refused("original intent differs")
+        prior = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='v1a_abandoned_probe_audit'"
+        ).fetchone()
+        if prior:
+            refused("abandonment journal already exists; no repeat effect")
+        if dry_run:
+            db.rollback()
+            return {"operation":"would_quarantine", "request_id":REQUEST,
+                    "old_state":"started","new_state":"abandoned","original_result":None}
+        # Ledger state 'abandoned' is never terminal; observe_request remains
+        # post_dispatch_uncertain and lookup still refuses replay.
+        db.execute("CREATE TABLE v1a_abandoned_probe_audit ("
+                   "project TEXT NOT NULL, request TEXT NOT NULL, fingerprint TEXT NOT NULL, "
+                   "source_sha TEXT NOT NULL, reason TEXT NOT NULL, original_intent_sha256 TEXT NOT NULL, "
+                   "prior_state TEXT NOT NULL, disposition TEXT NOT NULL, created_at TEXT NOT NULL, "
+                   "PRIMARY KEY(project,request))")
+        db.execute("INSERT INTO v1a_abandoned_probe_audit VALUES(?,?,?,?,?,?,?,?,?)",
+            (project_key,REQUEST,FINGERPRINT,OLD_SOURCE,
+             "sealed Git manifest subprocess error; no terminal result; no model call",
+             hashlib.sha256(intent.encode()).hexdigest(),
+             "started","quarantined_unresolved_not_replayable",
+             datetime.now(timezone.utc).isoformat()))
+        changed = db.execute("UPDATE execution SET state='abandoned' "
+            "WHERE project=? AND request=? AND fingerprint=? "
+            "AND state='started' AND result IS NULL",
+            (project_key,REQUEST,FINGERPRINT)).rowcount
+        if changed != 1:
+            refused("lost compare-and-set ledger lock")
+        db.commit()
+        return {"operation":"quarantined", "request_id":REQUEST,
+                "prior_state":"started", "state":"abandoned",
+                "terminal_success":False,"replay_permitted":False}
 
+    except BaseException:
+        db.rollback()
+        raise
 
 def retain_blocked_controller(controller_path):
     """Durably archive the consumed old-scope controller, without resetting it.
