@@ -62,6 +62,13 @@ class NativeBrowserQualificationTests(unittest.TestCase):
             self.assertIn("'"+operation+"'", source)
         self.assertIn("broker.dispatch({'operation':packet['operation']}", source)
 
+    def test_authenticated_operator_exposes_native_probe(self):
+        import inspect
+        from do_again.supervisor.macos_server import serve_operator
+        source = inspect.getsource(serve_operator)
+        self.assertIn("'qualify_native_enforcement'", source)
+        self.assertIn("broker.dispatch({'operation':'probe'}", source)
+
     def test_success_seals_exact_zero_call_proof_once(self):
         result = self.qualify()
         self.assertEqual(result['browser_calls'],0)
