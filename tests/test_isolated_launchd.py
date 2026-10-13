@@ -149,6 +149,81 @@ class IsolatedLaunchdTests(unittest.TestCase):
             json.loads((self.isolated / "run-status.json").read_text())["state"],
             "blocked")
 
+    def test_delayed_receipt_reconciles_in_same_background_run(self):
+        answers = [
+            {"state": "awaiting_receipt", "request_id": "isolated-123", "completed_cycles": 0},
+            {"state": "awaiting_receipt", "request_id": "isolated-123", "completed_cycles": 0},
+            {"state": "completed_bounded_cycles", "completed_cycles": 1},
+        ]
+        with patch(
+            "do_again.service.isolated_launchd.enrolled_config",
+            return_value=(self.layout, self.config)
+        ), patch(
+            "do_again.service.isolated_launchd.run_enrolled_isolated",
+            side_effect=answers
+        ) as run, patch(
+            "do_again.service.isolated_launchd.time.sleep"
+        ) as sleep:
+            result = serve_isolated_enrollment(
+                self.project, poll_seconds=30, max_rechecks=5)
+        self.assertEqual(result["state"], "completed_bounded_cycles")
+        self.assertEqual(result["completed_cycles"], 1)
+        self.assertEqual(result["rechecks"], 2)
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        sleep.assert_any_call(30)
+        self.assertEqual(
+            json.loads((self.isolated / "run-status.json").read_text())["state"],
+            "completed_bounded_cycles")
+
+    def test_missing_receipt_stops_after_fixed_budget_with_durable_status(self):
+        pending = {"state": "awaiting_receipt", "request_id": "isolated-456",
+                   "completed_cycles": 0}
+        with patch(
+            "do_again.service.isolated_launchd.enrolled_config",
+            return_value=(self.layout, self.config)
+        ), patch(
+            "do_again.service.isolated_launchd.run_enrolled_isolated",
+            return_value=pending
+        ) as run, patch(
+            "do_again.service.isolated_launchd.time.sleep"
+        ) as sleep:
+            result = serve_isolated_enrollment(
+                self.project, poll_seconds=20, max_rechecks=2)
+        self.assertEqual(result["state"], "awaiting_receipt")
+        self.assertEqual(result["rechecks"], 2)
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(
+            json.loads((self.isolated / "run-status.json").read_text())["state"],
+            "awaiting_receipt")
+
+    def test_uncertain_receipt_delivery_blocks_instead_of_retrying(self):
+        pending = {"state": "awaiting_receipt", "request_id": "isolated-789"}
+        with patch(
+            "do_again.service.isolated_launchd.enrolled_config",
+            return_value=(self.layout, self.config)
+        ), patch(
+            "do_again.service.isolated_launchd.run_enrolled_isolated",
+            side_effect=[pending, OperatorError("browser delivery uncertain")]
+        ) as run, patch(
+            "do_again.service.isolated_launchd.time.sleep"
+        ) as sleep:
+            result = serve_isolated_enrollment(
+                self.project, poll_seconds=20, max_rechecks=3)
+        self.assertEqual(result["state"], "blocked")
+        self.assertIn("uncertain", result["error"])
+        self.assertEqual(run.call_count, 2)
+        sleep.assert_called_once_with(20)
+
+    def test_invalid_poll_policy_fails_before_any_service_or_chat_io(self):
+        with patch("do_again.service.isolated_launchd.enrolled_config") as load:
+            with self.assertRaisesRegex(OperatorError, "poll policy"):
+                serve_isolated_enrollment(self.project, max_rechecks=61)
+            with self.assertRaisesRegex(OperatorError, "poll policy"):
+                serve_isolated_enrollment(self.project, poll_seconds=-1)
+        load.assert_not_called()
+
     def test_service_records_terminal_and_blocked_outcome_without_retry(self):
         with patch(
             "do_again.service.isolated_launchd.enrolled_config",
