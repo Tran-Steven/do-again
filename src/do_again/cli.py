@@ -1363,6 +1363,26 @@ def main() -> int:
     auto_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
     auto_parser.add_argument("--cycles", type=int, default=3)
 
+    enroll_parser = sub.add_parser(
+        "isolated-enroll", help="Prepare a separate, restricted Git control branch and private project config",
+    )
+    enroll_parser.add_argument("--source", type=Path, default=Path("."))
+    enroll_parser.add_argument("--image", required=True)
+    enroll_parser.add_argument("--goal", required=True)
+    enroll_parser.add_argument("--file", action="append", required=True)
+    enroll_parser.add_argument("--test-suite", choices=("python", "npm"), required=True)
+    enroll_parser.add_argument("--cycles", type=int, default=10)
+
+    enrolled_run_parser = sub.add_parser(
+        "isolated-run-enrolled", help="Run the bounded isolated coding workflow from private enrollment",
+    )
+    enrolled_run_parser.add_argument("--source", type=Path, default=Path("."))
+
+    enrolled_status_parser = sub.add_parser(
+        "isolated-enrollment-status", help="Inspect private isolated enrollment without sending ChatGPT messages",
+    )
+    enrolled_status_parser.add_argument("--source", type=Path, default=Path("."))
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
@@ -1437,6 +1457,52 @@ def main() -> int:
             return 1
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["state"] in {"completed_bounded_cycles", "model_declared_complete"} else 2
+    if args.command == "isolated-enroll":
+        from .service.isolated_enrollment import enroll_isolated_project
+        try:
+            result = enroll_isolated_project(
+                source_repo=args.source, image=args.image, goal=args.goal,
+                files=args.file, test_suite=args.test_suite, cycles=args.cycles)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated enrollment blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-run-enrolled":
+        from .service.isolated_enrollment import run_enrolled_isolated
+        try:
+            result = run_enrolled_isolated(args.source)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated run blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["state"] in {
+            "completed_bounded_cycles", "model_declared_complete",
+        } else 2
+    if args.command == "isolated-enrollment-status":
+        from .service.isolated_enrollment import enrolled_config
+        try:
+            layout, config = enrolled_config(args.source)
+            enrollment_state = {
+                "state": "configured",
+                "source_repo": str(layout["source_repo"]),
+                "branch": config["branch"],
+                "control_worktree": config["control_worktree"],
+                "state_dir": config["state_dir"],
+                "cycles": config["cycles"],
+                "automatic_merge": False,
+                "production_deployed": False,
+            }
+            progress = layout["state_dir"] / "isolated-auto.json"
+            if progress.is_file() and not progress.is_symlink():
+                enrollment_state["progress"] = json.loads(progress.read_text(encoding="utf-8"))
+        except (OperatorError, OSError, ValueError) as exc:
+            print(f"do-again: isolated status blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(enrollment_state, indent=2, sort_keys=True))
+        return 0
     if args.command == "isolated-plan":
         from .service.isolated_planner import plan_isolated_request
         command = (["python", "-m", "unittest", "discover", "-s", "tests"]
