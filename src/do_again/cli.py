@@ -1493,7 +1493,7 @@ def main() -> int:
         from .service.isolated_enrollment import enrolled_config
         try:
             layout, config = enrolled_config(args.source)
-            status = {
+            enrollment_state = {
                 "state": "configured",
                 "source_repo": str(layout["source_repo"]),
                 "branch": config["branch"],
@@ -1505,7 +1505,7 @@ def main() -> int:
             }
             progress = layout["state_dir"] / "isolated-auto.json"
             if progress.is_file() and not progress.is_symlink():
-                status["progress"] = json.loads(progress.read_text(encoding="utf-8"))
+                enrollment_state["progress"] = json.loads(progress.read_text(encoding="utf-8"))
         except (OperatorError, OSError, ValueError) as exc:
             print(f"do-again: isolated status blocked: {exc}", file=sys.stderr)
             return 1
