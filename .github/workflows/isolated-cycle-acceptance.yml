@@ -51,7 +51,7 @@ jobs:
                   "before_sha256":hashlib.sha256((repo/"app.py").read_bytes()).hexdigest(),
                   "content":"def answer():\n    return 2\n",
               }],
-              "test_command":["python","-m","unittest","discover"],
+              "test_command":["python","-m","unittest","discover","-s","tests"],
           }
           (repo.parent/"manifest.json").write_text(json.dumps(manifest))
           PY
