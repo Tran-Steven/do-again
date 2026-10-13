@@ -51,10 +51,37 @@ def write_frame(connection, value):
 
 
 def authenticated_peer_uid(connection):
-    if sys.platform != 'darwin' or not hasattr(connection, 'getpeereid'):
+    """Read kernel-authenticated peer UID, including framework Python builds.
+
+    macOS exports getpeereid(2) in libSystem even when Python's socket
+    wrapper does not expose it. Never substitute a caller-supplied UID or
+    a filesystem ownership check for authenticated socket credentials.
+    """
+    if sys.platform != 'darwin':
         raise ExecutionBlocked('browser bridge needs macOS kernel peer credentials')
-    uid, _ = connection.getpeereid()
-    return uid
+    if hasattr(connection, 'getpeereid'):
+        try:
+            uid, _ = connection.getpeereid()
+        except (OSError, ValueError) as exc:
+            raise ExecutionBlocked('macOS peer credentials could not be verified') from exc
+        return uid
+    import ctypes
+    try:
+        fd = connection.fileno()
+        if not isinstance(fd, int) or fd < 0:
+            raise ValueError('invalid socket descriptor')
+        library = ctypes.CDLL('/usr/lib/libSystem.B.dylib', use_errno=True)
+        native = library.getpeereid
+        native.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_uint),
+                           ctypes.POINTER(ctypes.c_uint)]
+        native.restype = ctypes.c_int
+        uid = ctypes.c_uint()
+        gid = ctypes.c_uint()
+        if native(fd, ctypes.byref(uid), ctypes.byref(gid)) != 0:
+            raise OSError(ctypes.get_errno(), 'getpeereid failed')
+        return uid.value
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
+        raise ExecutionBlocked('macOS peer credentials could not be verified') from exc
 
 
 class BrokerBrowserBridge:
