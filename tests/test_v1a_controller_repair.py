@@ -5,6 +5,24 @@ from pathlib import Path
 
 
 class RepairEntrypointTests(unittest.TestCase):
+    def test_path_binding_is_module_scoped_not_shadowed_in_main(self):
+        script = Path(__file__).resolve().parents[1] / "tools/repair_v1a_browser_controller.py"
+        tree = ast.parse(script.read_text(), filename=str(script))
+        self.assertTrue(any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "pathlib"
+            and any(alias.name == "Path" for alias in node.names)
+            for node in tree.body
+        ))
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                    and node.name == "main")
+        self.assertFalse(any(
+            isinstance(node, ast.ImportFrom)
+            and node.module == "pathlib"
+            and any(alias.name == "Path" for alias in node.names)
+            for node in ast.walk(main)
+        ), "Importing Path inside main shadows Path.home() during preflight")
+
     def test_guarded_repair_entrypoint_is_valid_python(self):
         script = Path(__file__).resolve().parents[1] / "tools/repair_v1a_browser_controller.py"
         source = script.read_text()

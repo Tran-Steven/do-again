@@ -128,7 +128,6 @@ def main():
     # The irreversible quarantine happened in the previous attended operation.
     # This repair MUST neither classify the old request again nor reset it.
     import sqlite3
-    from pathlib import Path
     audit_db = Path(installed["authority_path"])
     with sqlite3.connect(audit_db.as_uri()+"?mode=ro",uri=True) as db:
         entry=db.execute("SELECT e.state,e.result,a.disposition FROM execution e "
