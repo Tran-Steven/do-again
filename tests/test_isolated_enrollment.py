@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from do_again.core.schema import OperatorError
 from do_again.service.isolated_enrollment import (
-    enroll_isolated_project, enrolled_config, run_enrolled_isolated,
+    _remote_git, enroll_isolated_project, enrolled_config, run_enrolled_isolated,
 )
 
 
@@ -63,6 +63,21 @@ class IsolatedEnrollmentTests(unittest.TestCase):
             result = enroll_isolated_project(**dict(self.args, **overrides))
         check.assert_called_once()
         return result
+
+    def test_remote_git_retains_user_credentials_without_interactive_prompts(self):
+        result = subprocess.CompletedProcess([], 0, b"", b"")
+        with patch.dict(
+            "os.environ", {"GIT_CONFIG_GLOBAL": "/custom/gitconfig"},
+            clear=False
+        ), patch(
+            "do_again.service.isolated_enrollment.subprocess.run",
+            return_value=result
+        ) as command:
+            _remote_git(self.repo, "ls-remote", "origin", "HEAD")
+        options = command.call_args.kwargs
+        self.assertEqual(options["env"]["GIT_CONFIG_GLOBAL"], "/custom/gitconfig")
+        self.assertEqual(options["env"]["GIT_TERMINAL_PROMPT"], "0")
+        self.assertIn("core.hooksPath=/dev/null", command.call_args.args[0])
 
     def test_disposable_git_branch_enrollment_is_idempotent_and_preserves_main(self):
         result = self.enroll()
