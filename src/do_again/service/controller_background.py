@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import json
 import os
 from pathlib import Path
@@ -77,6 +80,8 @@ def _write_status(root, state, source, epoch, cycles=0, error=None):
 def run_bounded(repo, *, source, epoch, poll_seconds=POLL_SECONDS,
                 max_seconds=MAX_SECONDS):
     repo = _target(repo)
+    if fcntl is None:
+        raise ExecutionBlocked("V1A runner lock is unsupported on this platform")
     if (not isinstance(source, str) or SOURCE.fullmatch(source) is None
             or type(epoch) is not int or epoch <= 0
             or type(poll_seconds) is not int or not 1 <= poll_seconds <= 300
