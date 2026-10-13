@@ -177,21 +177,21 @@ class IsolatedPlannerTests(unittest.TestCase):
                     "expected_head": self.head,
                     "changes": [{
                         "path": "app.py", "before_sha256": self.before,
-                        "content": "def answer():\\n    return 2\\n",
+                        "content": "def answer():\n    return 2\n",
                     }],
                     "test_command": task["test_command"],
                 },
             })}
         with patch("do_again.browser.runtime.project_record",
-                   return_value={"chat_url": self.bound}), \\
+                   return_value={"chat_url": self.bound}), \
              patch("do_again.browser.runtime.ensure_browser_running",
-                   return_value={"port": 9224}), \\
+                   return_value={"port": 9224}), \
              patch("do_again.browser.runtime._find_chatgpt_target",
-                   return_value=self.target), \\
+                   return_value=self.target), \
              patch("do_again.browser.runtime.wait_for_authenticated",
-                   return_value=(self.target, {})), \\
+                   return_value=(self.target, {})), \
              patch("do_again.browser.runtime.send_message",
-                   side_effect=fake_send) as send, \\
+                   side_effect=fake_send) as send, \
              patch("do_again.service.isolated_cycle._docker_test",
                    return_value=True) as tested:
             plan = plan_isolated_request(**task)
@@ -210,7 +210,7 @@ class IsolatedPlannerTests(unittest.TestCase):
                          "verified_isolated_patch")
         self.assertEqual(git("rev-parse", "HEAD"), self.head)
         self.assertEqual((self.repo / "app.py").read_text(),
-                         "def answer():\\n    return 1\\n")
+                         "def answer():\n    return 1\n")
 
     def test_dirty_source_fails_without_opening_browser(self):
         (self.repo / "app.py").write_text("unsaved change")
