@@ -1509,7 +1509,7 @@ def main() -> int:
         except (OperatorError, OSError, ValueError) as exc:
             print(f"do-again: isolated status blocked: {exc}", file=sys.stderr)
             return 1
-        print(json.dumps(status, indent=2, sort_keys=True))
+        print(json.dumps(enrollment_state, indent=2, sort_keys=True))
         return 0
     if args.command in {
         "isolated-install", "isolated-start", "isolated-stop",
