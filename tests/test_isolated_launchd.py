@@ -131,6 +131,24 @@ class IsolatedLaunchdTests(unittest.TestCase):
         self.assertTrue(self.plist.exists())
         self.assertEqual(ctl.call_args.args[0], "bootout")
 
+    def test_missing_enrollment_does_not_restart_background_process(self):
+        with patch(
+            "do_again.service.isolated_launchd.enrolled_config",
+            side_effect=OperatorError("enrollment metadata is damaged")
+        ), patch(
+            "do_again.service.isolated_launchd._private_layout",
+            return_value=self.layout
+        ), patch(
+            "do_again.service.isolated_launchd.run_enrolled_isolated"
+        ) as run:
+            result = serve_isolated_enrollment(self.project)
+        self.assertEqual(result["state"], "blocked")
+        self.assertIn("damaged", result["error"])
+        run.assert_not_called()
+        self.assertEqual(
+            json.loads((self.isolated / "run-status.json").read_text())["state"],
+            "blocked")
+
     def test_service_records_terminal_and_blocked_outcome_without_retry(self):
         with patch(
             "do_again.service.isolated_launchd.enrolled_config",
