@@ -168,11 +168,12 @@ def _plan_with_agent(agent, *, repo: Path, branch: str, goal: str,
             except (OSError, ValueError) as exc:
                 raise OperatorError("unreadable prior planning intent") from exc
             state = previous.get("state")
-            if state != "published":
+            if state not in {"published", "goal_complete"}:
                 raise OperatorError("previous browser planning outcome uncertain; no new sends")
-            agent.sync()
-            if not agent.receipt_exists(str(previous.get("request_id") or "")):
-                raise OperatorError("previous isolated plan is still awaiting its execution receipt")
+            if state == "published":
+                agent.sync()
+                if not agent.receipt_exists(str(previous.get("request_id") or "")):
+                    raise OperatorError("previous isolated plan is still awaiting its execution receipt")
     intent = intent_dir / (call_id + ".json")
     if intent.exists() or intent.is_symlink():
         raise OperatorError("same planning request already attempted; no duplicate send")
