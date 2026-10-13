@@ -13,7 +13,9 @@ class RepairEntrypointTests(unittest.TestCase):
                             for node in tree.body))
         self.assertIn('if __name__ == "__main__":', source)
         self.assertIn('qualify_browser_planner', source)
-        self.assertIn("OLD_SOURCE = \"9ea8d9306354c3a6b44da57a1caf57e0019abd8e\"", source)
+        self.assertIn('qualify_native_enforcement', source)
+        self.assertIn('NATIVE_ENFORCEMENT_VERIFIED', source)
+        self.assertIn("OLD_SOURCE = \"dbcec8acbea790793287945c0f9339f32624797b\"", source)
         self.assertIn('v1a-browser-repair-grants-', source)
 
         self.assertIn('browser_calls") != 0', source)

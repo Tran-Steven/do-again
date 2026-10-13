@@ -454,6 +454,8 @@ def serve_operator(config: dict, brokers: dict) -> None:
                         result=broker.operator_github_token(packet['token'])
                     elif set(packet)=={'operation','project'} and packet['operation']=='qualify_browser_planner':
                         result=broker.dispatch({'operation':'qualify_browser_planner'},config['operator_uid'])
+                    elif set(packet)=={'operation','project'} and packet['operation']=='qualify_native_enforcement':
+                        result=broker.dispatch({'operation':'probe'},config['operator_uid'])
                     elif set(packet)=={'operation','project'} and packet['operation'] in {
                             'controller_start','controller_stop','controller_status','controller_tick'}:
                         result=broker.dispatch({'operation':packet['operation']},config['operator_uid'])

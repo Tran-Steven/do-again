@@ -109,7 +109,7 @@ def qualify_operator_browser_bridge(broker):
     # 9ea8d930. A source-bound security fix needs a NEW proof. Preserve
     # the old sealed evidence without giving it authority for this source.
     # Fail closed if the previous grant had any controller/model-call state.
-    previous_source = '9ea8d9306354c3a6b44da57a1caf57e0019abd8e'
+    previous_source = 'dbcec8acbea790793287945c0f9339f32624797b'
     if path.exists() or path.is_symlink():
         private_root_file(path)
         try:
