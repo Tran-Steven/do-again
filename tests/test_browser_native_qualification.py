@@ -179,6 +179,71 @@ class NativeBrowserQualificationTests(unittest.TestCase):
             self.qualify()
         self.assertTrue(path.exists())
 
+    def _v1a_previous_proof(self, *, source, previous_epoch, now_epoch=17, calls=0):
+        self.scope['epoch'] = now_epoch
+        self.broker.registry = SimpleNamespace(status=lambda repo:{
+            'intent':'maintenance','epoch':now_epoch})
+        self.broker.config['source_sha']='f'*40
+        path = self.broker.state/'browser-planner-qualification.json'
+        proof={'state':'qualified_operator_bridge','source_sha':source,
+               'goal_sha256':self.scope['goal_sha256'],'epoch':previous_epoch,
+               'grant_sha256':'d'*64,'operator_uid':501,'peer_uid':501,
+               'browser_calls':calls}
+        path.write_text(json.dumps(proof))
+        path.chmod(0o600)
+        return path,proof
+
+    def test_epoch17_accepts_only_zero_call_de3_maintenance_proof(self):
+        old='de3de3314a4195133f25132ec7874785ee661b9a'
+        path,proof=self._v1a_previous_proof(source=old,previous_epoch=15)
+        result=self.qualify()
+        self.assertEqual(result['epoch'],17)
+        self.assertEqual(result['source_sha'],'f'*40)
+        retained=path.with_name('browser-planner-qualification-'+old[:12]+'-retained.json')
+        self.assertEqual(json.loads(retained.read_text()),proof)
+        self.assertEqual(json.loads(path.read_text()),result)
+
+    def test_epoch17_never_inherits_known_prior_browser_calls_or_journals(self):
+        old='de3de3314a4195133f25132ec7874785ee661b9a'
+        for prior_calls,controller_journal in ((1,False),(0,True)):
+            with self.subTest(prior_calls=prior_calls,journal=controller_journal):
+                path,_=self._v1a_previous_proof(
+                    source=old,previous_epoch=15,calls=prior_calls)
+                journal=self.broker.state/'controller.json'
+                if controller_journal:journal.write_text('{}')
+                with self.assertRaisesRegex(ExecutionBlocked,
+                    'not eligible' if prior_calls else 'manual reconciliation'):
+                    self.qualify()
+                self.assertTrue(path.exists())
+                self.assertFalse(path.with_name(
+                    'browser-planner-qualification-'+old[:12]+'-retained.json').exists())
+                if journal.exists():journal.unlink()
+
+    def test_epoch17_does_not_generalize_other_previous_sources_or_epochs(self):
+        old='de3de3314a4195133f25132ec7874785ee661b9a'
+        for sha,epoch in ((old,13),(old,16),('e'*40,15),('e'*40,17)):
+            with self.subTest(source=sha,epoch=epoch):
+                path,_=self._v1a_previous_proof(source=sha,previous_epoch=epoch)
+                with self.assertRaisesRegex(ExecutionBlocked,'not eligible'):
+                    self.qualify()
+                self.assertTrue(path.exists())
+
+    def test_exact_legacy_epoch13_to17_still_requires_root_quarantine_audit(self):
+        old='7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191'
+        path,_=self._v1a_previous_proof(source=old,previous_epoch=13)
+        with patch('do_again.supervisor.controller_browser_helper._audited_epoch_13_to_15',
+                   return_value=False) as check:
+            with self.assertRaisesRegex(ExecutionBlocked,'not eligible'):
+                self.qualify()
+            check.assert_called_once()
+        self.assertTrue(path.exists())
+        with patch('do_again.supervisor.controller_browser_helper._audited_epoch_13_to_15',
+                   return_value=True) as check:
+            result=self.qualify()
+            check.assert_called_once()
+        self.assertEqual(result['epoch'],17)
+        self.assertEqual(result['browser_calls'],0)
+
     def test_maintenance_is_required(self):
         self.broker.registry = SimpleNamespace(status=lambda repo:{
             'intent':'active','epoch':13})

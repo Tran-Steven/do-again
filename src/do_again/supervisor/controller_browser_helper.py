@@ -63,10 +63,10 @@ class SealedBrowserPlannerHelper:
 
 
 def _audited_epoch_13_to_15(broker, previous, scope, previous_source):
-    """Allow only the known audit-backed maintenance epoch advance.
-
-    The old browser proof's zero-call assertion must agree with the original
-    quarantined native probe; this is not a generic epoch rollover.
+    """Require original root-private quarantine evidence for the known prior
+    browser proof. Only epoch 15 or the exact subsequent maintenance epoch 17
+    is eligible, and only when the previous source was the original 7d0af...
+    controller. This grants no new model call or replay permission.
     """
     from .macos_execution import private_root_file
     from .authority import AuthorityRegistry
@@ -76,7 +76,7 @@ def _audited_epoch_13_to_15(broker, previous, scope, previous_source):
     prior = 'offline-5d95b82d0952982adda5-1-probe'
     fingerprint = 'ec7355ba8ca0c9270c00a8386c3c9c3eb376fc289ec6ee416fc8bcd84f63d747'
     if (previous.get('source_sha') != previous_source
-            or previous.get('epoch') != 13 or scope['epoch'] != 15
+            or previous.get('epoch') != 13 or scope['epoch'] not in (15, 17)
             or previous.get('browser_calls') != 0):
         return False
     archive = Path(broker.state) / ('controller-blocked-'+previous_source[:12]+'-retained.json')
@@ -149,7 +149,8 @@ def qualify_operator_browser_bridge(broker):
     # 9ea8d930. A source-bound security fix needs a NEW proof. Preserve
     # the old sealed evidence without giving it authority for this source.
     # Fail closed if the previous grant had any controller/model-call state.
-    previous_source = '7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191'
+    original_source = '7d0af8e1a5a0a2e96d9d3cdb8cd1f11ba1344191'
+    recent_source = 'de3de3314a4195133f25132ec7874785ee661b9a'
     if path.exists() or path.is_symlink():
         private_root_file(path)
         try:
@@ -158,16 +159,32 @@ def qualify_operator_browser_bridge(broker):
             raise ExecutionBlocked('previous bridge qualification is unreadable') from exc
         if isinstance(previous, dict) and previous.get('source_sha') == broker.config['source_sha']:
             raise ExecutionBlocked('bridge qualification already exists')
+        previous_source = previous.get('source_sha') if isinstance(previous,dict) else None
+        # The only additional admissible change is the administrator-installed
+        # de3de... -> V1A maintenance epoch 17 upgrade. It cannot inherit a
+        # previous browser send, controller journal, other source, or arbitrary
+        # epoch. The original 7d0af... quarantined proof requires the exact
+        # separately audited immutable root ledger below.
+        epoch_ok = (
+            previous_source == original_source
+            and (previous.get('epoch') == scope['epoch']
+                 or _audited_epoch_13_to_15(broker,previous,scope,previous_source))
+        ) or (
+            previous_source == recent_source
+            and previous.get('epoch') == 15 and scope['epoch'] == 17
+        )
         if (not isinstance(previous, dict)
                 or previous.get('state') != 'qualified_operator_bridge'
-                or previous.get('source_sha') != previous_source
+                or previous_source not in (original_source,recent_source)
                 or broker.config['source_sha'] == previous_source
-                or not (previous.get('epoch') == scope['epoch']
-                        or _audited_epoch_13_to_15(broker,previous,scope,previous_source))
+                or not epoch_ok
                 or previous.get('goal_sha256') != scope['goal_sha256']
                 or previous.get('browser_calls') != 0
                 or previous.get('operator_uid') != 501
-                or previous.get('peer_uid') != 501):
+                or previous.get('peer_uid') != 501
+                or (previous_source == recent_source
+                    and (not isinstance(previous.get('grant_sha256'),str)
+                         or len(previous.get('grant_sha256')) != 64))):
             raise ExecutionBlocked('previous bridge proof is not eligible for guarded requalification')
         if any((Path(broker.state) / name).exists() for name in (
                 'browser-planning-calls.json', 'controller.json',
