@@ -195,6 +195,23 @@ class NativePytestCaptureTests(unittest.TestCase):
 
     def test_assertion_failure_is_distinguished_from_missing_test_collection(self):
         from do_again.supervisor.controller_native_effects import NativeControllerEffects
+        import importlib.util,shutil
+        from unittest.mock import patch
+        # The real isolated subprocess deliberately disables host site-packages.
+        # Provide its dependency closure in this fixture, never borrow an
+        # administrator's installed native runtime or its private state.
+        install=self.root/'fixture-install'
+        packages=install/'current/runtimes/test-packages';packages.mkdir(parents=True)
+        for name in ('pytest','_pytest','py','pluggy','iniconfig','packaging','pygments'):
+            spec=importlib.util.find_spec(name)
+            if spec is None:
+                self.fail('Install the declared .[test] dependency to run real pytest capture fixtures')
+            if spec.submodule_search_locations:
+                shutil.copytree(next(iter(spec.submodule_search_locations)),packages/name,
+                                ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+            else:shutil.copyfile(spec.origin,packages/(name+'.py'))
+        context=patch('do_again.supervisor.controller_native_effects.INSTALL_ROOT',install)
+        context.start();self.addCleanup(context.stop)
         effects=NativeControllerEffects.__new__(NativeControllerEffects)
         effects.profile={'test_runner':'pytest','kind':LOCAL_KIND}
         effects.broker=SimpleNamespace(config={'python':os.sys.executable})

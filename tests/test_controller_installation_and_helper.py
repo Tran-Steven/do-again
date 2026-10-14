@@ -51,6 +51,7 @@ class GrantTests(unittest.TestCase):
             (Path(tmp)/'runtimes/codex').mkdir(parents=True)
             with self.assertRaises(ExecutionBlocked):validate_controller_stage(tmp,self.config,now=self.now)
         with self.assertRaises(ExecutionBlocked):validate_controller_configuration({'hosted_planning_scope':{}},now=self.now)
+    @unittest.skipUnless(os.name=='posix','native backend requires POSIX admission locks')
     def test_unprivileged_factory_rejected_before_backend_creation(self):
         from do_again.supervisor.controller_backend import create_controller_backend
         with patch('os.geteuid',return_value=501,create=True),patch('do_again.supervisor.controller_backend.ControllerBackend') as backend:
