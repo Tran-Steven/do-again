@@ -243,6 +243,51 @@ class PublicationBrokerTests(unittest.TestCase):
         self.assertEqual(self.module.publish_via_broker(self.broker,self.packet),result)
         self.assertEqual(self.exports,1);self.assertEqual(self.api.effects,effects)
 
+    def test_explicit_tested_baseline_publication_keeps_maintenance_and_original_task(self):
+        from dataclasses import replace
+        from do_again.supervisor.candidate_transaction import KIND
+        self.broker.project=replace(self.broker.project,account='_doagain_jp')
+        self.api.repository='Tran-Steven/jobpipe'
+        self.broker.config['projects'][0]['github_repository']=self.api.repository
+        self.broker.config.update(production_ready=False,
+            controller_profile={'kind':KIND,'public_evidence':True},
+            controller_scope={'kind':'jobpipe-native-controller-v1','integration':'proposal-only'})
+        self.state['intent']='maintenance'
+        original={'operation':'reviewed_task','publication_performed':False}
+        self.broker.ledger.reserve(self.broker.project.key,'original-reviewed-task','c'*64)
+        self.broker.ledger.finish(self.broker.project.key,'original-reviewed-task',original)
+        packet={k:v for k,v in self.packet.items() if k not in {'title','body'}}|{'operation':'publish_tested_baseline'}
+        with patch('do_again.supervisor.native_checkpoint.verify_checkpoints',return_value={
+                self.broker.project.key:{'commit':self.head,'verified':True}}),\
+                patch('do_again.supervisor.live_canary.effect_authorized',return_value=True):
+            result=self.module.publish_tested_baseline(self.broker,packet)
+            effects=list(self.api.effects)
+            self.assertEqual(self.module.publish_tested_baseline(self.broker,packet),result)
+            self.assertEqual(effects,self.api.effects)
+        self.assertEqual(self.state['intent'],'maintenance')
+        self.assertEqual(result['head'],self.head)
+        self.assertEqual(self.broker.ledger.lookup(self.broker.project.key,'original-reviewed-task','c'*64),original)
+        self.assertIn('zero autonomous coding cycles',self.api.pr['body'])
+        self.assertEqual(self.broker.ledger.intent(self.broker.project.key,packet['request_id'])['classification'],
+                         'operator_approved_tested_baseline')
+
+    def test_baseline_publication_rejects_unverified_checkpoint_before_effects(self):
+        from dataclasses import replace
+        from do_again.supervisor.candidate_transaction import KIND
+        self.broker.project=replace(self.broker.project,account='_doagain_jp')
+        self.api.repository='Tran-Steven/jobpipe'
+        self.broker.config['projects'][0]['github_repository']=self.api.repository
+        self.broker.config.update(production_ready=False,
+            controller_profile={'kind':KIND,'public_evidence':True},
+            controller_scope={'kind':'jobpipe-native-controller-v1','integration':'proposal-only'})
+        packet={k:v for k,v in self.packet.items() if k not in {'title','body'}}|{'operation':'publish_tested_baseline'}
+        for claim in ({},{self.broker.project.key:{'commit':'f'*40}}):
+            with patch('do_again.supervisor.native_checkpoint.verify_checkpoints',return_value=claim):
+                with self.assertRaisesRegex(ExecutionBlocked,'original native-tested checkpoint'):
+                    self.module.publish_tested_baseline(self.broker,packet)
+        self.assertEqual(self.api.effects,[]);self.assertEqual(self.exports,0)
+        self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+
     def test_lost_pr_response_blocks_after_journal_restart_without_second_trigger(self):
         self.api.lose_pr_response=True
         with self.assertRaises(OSError):self.module.publish_via_broker(self.broker,self.packet)

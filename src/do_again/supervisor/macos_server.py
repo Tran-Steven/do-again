@@ -153,6 +153,9 @@ class ProjectBroker:
                     'effect_journal': self.ledger.evidence(self.project.key),
                     'unresolved_executions': self.ledger.pending(self.project.key),
                     'inflight_request_ids':self._inflight()}
+        if packet.get('operation')=='publish_tested_baseline':
+            from .publication import publish_tested_baseline
+            return publish_tested_baseline(self,packet)
         if packet.get('operation') == 'execution_observe':
             import re
             if (set(packet)!={'operation','request_id','request_fingerprint'}

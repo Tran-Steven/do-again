@@ -23,7 +23,40 @@ def read_credential(broker) -> str:
     return credential.read_text().strip()
 
 
-def publish_via_broker(broker, packet: dict) -> dict:
+def publish_tested_baseline(broker, packet: dict) -> dict:
+    """Trusted operator's explicit publication of a retained tested baseline.
+
+    This is not a controller task, model call, historical replay or autonomous
+    completion. It never activates a worker or changes project intent.
+    """
+    if set(packet)!={'operation','request_id','expected_head','expected_epoch','request_fingerprint'} or packet['operation']!='publish_tested_baseline':
+        raise ExecutionBlocked('baseline publication accepts exact identity only')
+    return publish_via_broker(broker,dict(packet,operation='git_publish',
+        title='Review native-tested ATS question triage baseline',
+        body='Previously reviewed local-only baseline, separately authorized for draft publication. '
+             'Unsupported input controls require human review; verified contact behavior has regression coverage. '
+             'This is zero autonomous coding cycles. No application submission, deployment or automatic merge. '
+             'Exact native-tested commit: '+str(packet['expected_head'])),maintenance_baseline=True)
+
+
+def require_tested_baseline(broker, packet):
+    from .candidate_transaction import KIND
+    from .native_checkpoint import verify_checkpoints
+    config=broker.config
+    if (broker.project.account!='_doagain_jp' or config.get('production_ready') is not False
+            or config.get('controller_profile',{}).get('kind')!=KIND
+            or config.get('controller_profile',{}).get('public_evidence') is not True
+            or config.get('controller_scope',{}).get('kind')!='jobpipe-native-controller-v1'
+            or config.get('controller_scope',{}).get('integration')!='proposal-only'):
+        raise ExecutionBlocked('baseline publication requires independently authorized native proposal mode')
+    verified=verify_checkpoints(config,config)
+    claim=verified.get(broker.project.key)
+    if claim is None or claim['commit']!=packet['expected_head']:
+        raise ExecutionBlocked('baseline publication differs from original native-tested checkpoint')
+    return claim
+
+
+def publish_via_broker(broker, packet: dict, *, maintenance_baseline=False) -> dict:
     from .live_canary import effect_authorized
     from .macos_server import verify_installation, worktree_authority
     if sys.platform != 'darwin' or os.geteuid() != 0:
@@ -42,16 +75,18 @@ def publish_via_broker(broker, packet: dict) -> dict:
     api = GitHubRepository(repository,read_credential(broker))
     fingerprint = hashlib.sha256(canonical_json(packet)).hexdigest()
     with broker.lock:
+        verify_installation(broker.config)
+        if maintenance_baseline:
+            require_tested_baseline(broker,packet)
         def gate():
             status = broker.registry.status(broker.project.repo)
             branch = 'do-again/task-' + hashlib.sha256((broker.project.key+':'+str(status.get('goal_revision'))).encode()).hexdigest()[:20]
             authority = worktree_authority(broker.project.worktree)
-            if (status['intent']!='active' or status['epoch']!=packet['expected_epoch']
+            if (status['intent']!=('maintenance' if maintenance_baseline else 'active') or status['epoch']!=packet['expected_epoch']
                     or not status.get('goal_revision') or not effect_authorized(broker)
                     or not broker._verified() or authority != {'repo_head':packet['expected_head'],'repo_branch':branch}):
                 raise ExecutionBlocked('authority or broker-owned branch blocks publication')
             return branch
-        verify_installation(broker.config)
         with broker.admission():
             branch = gate()
             recovered = broker.ledger.lookup(broker.project.key,packet['request_id'],fingerprint)
@@ -62,7 +97,8 @@ def publish_via_broker(broker, packet: dict) -> dict:
                     intent={'operation':'git_publish','repository':repository,'head':packet['expected_head'],
                             'branch':branch,'source_sha':broker.config['source_sha'],
                             'title':packet['title'],'body':packet['body'],
-                            'request_fingerprint':packet['request_fingerprint']})
+                            'request_fingerprint':packet['request_fingerprint'],
+                            'classification':'operator_approved_tested_baseline' if maintenance_baseline else 'development_publication'})
         root = EXECUTION_ROOT / broker.project.key / 'requests' / packet['request_id']
         scratch, cache = root/'scratch',root/'cache'
         for path in (scratch,cache):
