@@ -1,4 +1,4 @@
-"""Read the response following one exact prompt; never navigate or send."""
+"""Read the response following one exact prompt; expand display controls but never navigate or send."""
 from __future__ import annotations
 import hashlib
 import json
@@ -7,13 +7,20 @@ from ..supervisor.macos_execution import ExecutionBlocked
 
 
 def original_reply(target, message, *, conversation_id):
+    def prompt_text(node):
+        text = str(node.get('text') or '')
+        if text.startswith('You said:\n'): text = text[len('You said:\n'):]
+        if node.get('expanded') and text.endswith('\nShow less'): text = text[:-len('\nShow less')]
+        if node.get('expandable') and text.endswith('\n…\nShow more'): text = text[:-len('\n…\nShow more')]
+        return text
+
     expression = '(() => {' + runtime._MESSAGE_NODES_JS + r'''
 const users=messageNodes('user'), assistants=messageNodes('assistant');
 const ordered=[...users.map(n=>({n,role:'user'})),...assistants.map(n=>({n,role:'assistant'}))]
   .sort((a,b)=>a.n.compareDocumentPosition(b.n)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1);
 const stop=document.querySelector('[data-testid="stop-button"],button[aria-label="Stop generating"],button[aria-label="Stop response"],button[aria-label="Stop"]');
 return {url:location.href,busy:!!(stop&&!stop.disabled),messages:ordered.map(v=>{
-  if(v.role==='user')return {role:v.role,text:(v.n.innerText||v.n.textContent||'').trim()};
+  if(v.role==='user')return {role:v.role,text:(v.n.innerText||v.n.textContent||'').trim(),expanded:[...v.n.querySelectorAll('button')].filter(b=>(b.textContent||'').trim()==='Show less').length===1,expandable:[...v.n.querySelectorAll('button')].filter(b=>(b.textContent||'').trim()==='Show more').length===1};
   const copy=v.n.cloneNode(true);
   for(const h of copy.querySelectorAll('h1,h2,h3,h4,h5,h6'))
     if((h.textContent||'').trim()==='ChatGPT said:')h.remove();
@@ -24,20 +31,40 @@ return {url:location.href,busy:!!(stop&&!stop.disabled),messages:ordered.map(v=>
 })};
 })()'''
     snapshot = runtime.cdp.evaluate(target, expression, timeout=15.0)
-    if (not isinstance(snapshot, dict) or runtime._chat_id(snapshot.get('url', '')) != conversation_id):
+    if (not isinstance(snapshot, dict) or runtime._chat_id(snapshot.get('url', '')) != conversation_id
+            or not str(snapshot.get('url', '')).startswith('https://chatgpt.com/c/')):
         raise ExecutionBlocked('original reply observation changed conversation')
     if snapshot.get('busy'): return None
-    matches = []
     nodes = snapshot.get('messages', [])
+    # A truncated prefix only authorizes a display expansion. Acceptance still
+    # requires the full original prompt digest, including whitespace.
+    candidates = [node for node in nodes if node.get('role') == 'user'
+                  and node.get('expandable') and len(prompt_text(node)) >= 256
+                  and message.startswith(prompt_text(node))]
+    if len(candidates) == 1:
+        prefix = prompt_text(candidates[0])
+        expansion = '(() => {' + runtime._MESSAGE_NODES_JS + r'''
+if(location.origin!=="https://chatgpt.com" || location.pathname!=="/c/"+CID)return false;
+const clean=n=>{let t=(n.innerText||n.textContent||'').trim();
+if(t.startsWith('You said:\n'))t=t.slice('You said:\n'.length);
+if(t.endsWith('\n…\nShow more'))t=t.slice(0,-'\n…\nShow more'.length);return t;};
+const users=messageNodes('user').filter(n=>clean(n)===PREFIX);
+if(users.length!==1)return false;
+const buttons=[...users[0].querySelectorAll('button')].filter(b=>(b.textContent||'').trim()==='Show more');
+if(buttons.length!==1 || buttons[0].disabled)return false;
+buttons[0].click();return true;
+})()'''
+        expansion = expansion.replace('CID', json.dumps(conversation_id)).replace('PREFIX', json.dumps(prefix))
+        if runtime.cdp.evaluate(target, expansion, timeout=15.0):
+            snapshot = runtime.cdp.evaluate(target, expression, timeout=15.0)
+            if (not isinstance(snapshot, dict) or runtime._chat_id(snapshot.get('url', '')) != conversation_id
+                    or not str(snapshot.get('url', '')).startswith('https://chatgpt.com/c/')):
+                raise ExecutionBlocked('original reply expansion changed conversation')
+            if snapshot.get('busy'): return None
+            nodes = snapshot.get('messages', [])
     expected = hashlib.sha256(message.encode()).hexdigest()
-    for i, node in enumerate(nodes):
-        if node.get('role') != 'user': continue
-        text = str(node.get('text') or '')
-        if text.startswith('You said:\n'): text = text[len('You said:\n'):]
-        # The UI appends this exact expansion control to a long prompt. Do
-        # not strip arbitrary text, whitespace, or recover by call ID alone.
-        if text.endswith('\n…\nShow more'): text = text[:-len('\n…\nShow more')]
-        if hashlib.sha256(text.encode()).hexdigest() == expected: matches.append(i)
+    matches = [i for i, node in enumerate(nodes) if node.get('role') == 'user'
+               and hashlib.sha256(prompt_text(node).encode()).hexdigest() == expected]
     if len(matches) != 1: return None
     i = matches[0] + 1
     if i >= len(nodes) or nodes[i].get('role') != 'assistant': return None

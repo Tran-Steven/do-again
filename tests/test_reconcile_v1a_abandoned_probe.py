@@ -1,4 +1,9 @@
 """The original V1A probe can only become audited, permanently unresolved history."""
+import os
+import unittest
+if os.name != 'posix':
+    raise unittest.SkipTest('native POSIX controller and recovery fixtures')
+
 import importlib.util
 import json
 import sqlite3

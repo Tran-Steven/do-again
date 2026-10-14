@@ -3,6 +3,11 @@
 Real source commits and real child tests; no synthetic attestation or verifier.
 Native privilege/confinement installation remains a separate admin qualification.
 """
+import os
+import unittest
+if os.name != 'posix':
+    raise unittest.SkipTest('native POSIX controller and recovery fixtures')
+
 import base64
 from contextlib import nullcontext
 from datetime import datetime,timedelta,timezone

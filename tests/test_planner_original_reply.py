@@ -1,4 +1,9 @@
 """Replay safety under original-answer recovery and UI message virtualization."""
+import os
+import unittest
+if os.name != 'posix':
+    raise unittest.SkipTest('native POSIX controller and recovery fixtures')
+
 import hashlib
 import json
 import os
@@ -22,7 +27,7 @@ class OriginalReplyTests(unittest.TestCase):
         target=Mock(); message='{"call_id":"original","payload":"exact spaces"}'
         snap={'url':'https://chatgpt.com/c/'+self.cid,'busy':False,'messages':[
             {'role':'assistant','text':'old answer'},
-            {'role':'user','text':'You said:\n'+message+'\n…\nShow more'},
+            {'role':'user','text':'You said:\n'+message+'\n…\nShow more','expandable':True},
             {'role':'assistant','text':'ChatGPT said:\n{"result":"original"}'},
             {'role':'user','text':'another question'},
             {'role':'assistant','text':'a later answer'}]}
@@ -40,6 +45,56 @@ class OriginalReplyTests(unittest.TestCase):
             self.assertIsNone(original_reply(Mock(),msg,conversation_id=self.cid))
             snap['busy']=False;snap['messages']*=2
             self.assertIsNone(original_reply(Mock(),msg,conversation_id=self.cid))
+
+    def test_expanded_prompt_removes_only_display_control(self):
+        msg='a'*300
+        snap={'url':'https://chatgpt.com/c/'+self.cid,'busy':False,
+              'messages':[{'role':'user','text':'You said:\n'+msg+'\nShow less','expanded':True},
+                          {'role':'assistant','text':'answer'}]}
+        with patch('do_again.browser.runtime.cdp.evaluate',return_value=snap):
+            self.assertEqual(original_reply(Mock(),msg,conversation_id=self.cid)['response'],'answer')
+            self.assertIsNone(original_reply(Mock(),msg+' ',conversation_id=self.cid))
+
+    def test_collapsed_prefix_expands_but_requires_full_digest_afterward(self):
+        msg='a'*300+' EXACT ORIGINAL'
+        before={'url':'https://chatgpt.com/c/'+self.cid,'busy':False,
+                'messages':[{'role':'user','text':'You said:\n'+'a'*300+'\n…\nShow more','expandable':True},
+                            {'role':'assistant','text':'answer'}]}
+        after={'url':before['url'],'busy':False,
+               'messages':[{'role':'user','text':msg+'\nShow less','expanded':True},
+                           {'role':'assistant','text':'answer'}]}
+        with patch('do_again.browser.runtime.cdp.evaluate',side_effect=[before,True,after]) as evaluate:
+            self.assertEqual(original_reply(Mock(),msg,conversation_id=self.cid)['response'],'answer')
+            script=evaluate.call_args_list[1].args[1]
+            self.assertIn('location.origin',script)
+            self.assertIn("==='Show more'",script)
+            self.assertNotIn('Send',script)
+        after['messages'][0]['text']=msg+' altered\nShow less'
+        with patch('do_again.browser.runtime.cdp.evaluate',side_effect=[before,True,after]):
+            self.assertIsNone(original_reply(Mock(),msg,conversation_id=self.cid))
+
+    def test_control_words_without_actual_controls_are_prompt_content(self):
+        msg='a'*300
+        snap={'url':'https://chatgpt.com/c/'+self.cid,'busy':False,
+              'messages':[{'role':'user','text':msg+'\nShow less'},
+                          {'role':'assistant','text':'answer'}]}
+        with patch('do_again.browser.runtime.cdp.evaluate',return_value=snap):
+            self.assertIsNone(original_reply(Mock(),msg,conversation_id=self.cid))
+            self.assertEqual(original_reply(Mock(),msg+'\nShow less',conversation_id=self.cid)['response'],'answer')
+
+    def test_duplicate_or_unrelated_collapsed_prompt_is_never_expanded(self):
+        msg='a'*300+' exact'
+        node={'role':'user','text':'a'*300+'\n…\nShow more','expandable':True}
+        snap={'url':'https://chatgpt.com/c/'+self.cid,'busy':False,'messages':[node,node]}
+        with patch('do_again.browser.runtime.cdp.evaluate',return_value=snap) as evaluate:
+            self.assertIsNone(original_reply(Mock(),msg,conversation_id=self.cid));evaluate.assert_called_once()
+        snap['messages']=[dict(node,text='unrelated'*40+'\n…\nShow more')]
+        with patch('do_again.browser.runtime.cdp.evaluate',return_value=snap) as evaluate:
+            self.assertIsNone(original_reply(Mock(),msg,conversation_id=self.cid));evaluate.assert_called_once()
+        snap['url']='https://other.invalid/c/'+self.cid
+        with patch('do_again.browser.runtime.cdp.evaluate',return_value=snap) as evaluate:
+            with self.assertRaises(ExecutionBlocked):original_reply(Mock(),msg,conversation_id=self.cid)
+            evaluate.assert_called_once()
 
     def test_prompt_schema_is_full_call_bound_envelope(self):
         grant={'conversation_id':self.cid,'profile_sha256':'a'*64,

@@ -84,7 +84,8 @@ class ChatGPTPlannerDriver:
         return {'latest': result['response'], 'url': target.url, 'busy': False, 'bound': True} if result else {}
 
     def observe_once(self, message, *, conversation_id, call_id, profile_sha256):
-        # Read only the already open bound conversation. No browser startup,
+        # Observe the already open bound conversation, including display-only
+        # expansion of a uniquely matched prompt. No browser startup,
         # tab creation, focus changes, authentication gestures, or Send.
         if os.geteuid() != 501 or self.profile_attestor() != profile_sha256:
             raise ExecutionBlocked('original reply observer profile differs')
