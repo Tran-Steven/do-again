@@ -11,6 +11,7 @@ import plistlib
 import pwd
 import re
 import shutil
+import stat
 import subprocess
 import time
 import sys
@@ -488,7 +489,7 @@ def migrate_jobpipe_snapshot(config, current, previous, journal_path, journal):
 
 
 
-def verify_worker_quiescence(config):
+def verify_worker_quiescence(config, *, reconcile=True):
     """A maintenance runtime cutover never replaces code beneath a live worker."""
     if config.get('live_canary') is not None and config.get('codex_canary') is not None:
         raise RuntimeError('browser and Codex canary grants may not coexist')
@@ -556,7 +557,7 @@ def verify_worker_quiescence(config):
                                          'registered_pid':identity['pid'],
                                          'original_kernel_identity':identity['identity'],
                                          'original_worker_withdrawn':True}
-            atomic(journal,record)
+            if reconcile:atomic(journal,record)
         if record and record.get('phase')=='stage_started':
             target=WORKER_AGENTS/(label+'.plist')
             pending=target.with_suffix('.plist.pending')
@@ -566,7 +567,7 @@ def verify_worker_quiescence(config):
             # the original journal and record this independently proven failure.
             record['phase']='stage_failed_pre_effect'
             record['recovery_evidence']={'service_absent':True,'definition_absent':True,'pending_absent':True}
-            atomic(journal,record)
+            if reconcile:atomic(journal,record)
 
 
 @contextmanager
@@ -749,11 +750,24 @@ def complete_selected_runtime(source_sha):
         inventory=MacOSProcesses()
         if any(inventory.owned(p['uid']) for p in config['projects']):
             raise RuntimeError('dedicated process blocks runtime recovery')
-        verify_worker_quiescence(config)
+        verify_worker_quiescence(config,reconcile=False)
         verify_checkpoints(config,config)
         wait_for_supervisor_readiness(config)
         backup=path.with_name('installation-before-readiness-'+hashlib.sha256(original).hexdigest()+'.json')
-        with backup.open('xb') as stream:stream.write(original);stream.flush();os.fsync(stream.fileno())
+        try:
+            fd=os.open(backup,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        except FileExistsError:
+            fd=os.open(backup,os.O_RDONLY|os.O_NOFOLLOW)
+            try:
+                info=os.fstat(fd)
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1
+                        or info.st_mode&0o077 or info.st_size!=len(original)):
+                    raise RuntimeError('retained readiness ticket is untrusted')
+                with os.fdopen(fd,'rb',closefd=False) as stream:saved=stream.read(len(original)+1)
+                if saved!=original:raise RuntimeError('retained readiness ticket differs')
+            finally:os.close(fd)
+        else:
+            with os.fdopen(fd,'wb') as stream:stream.write(original);stream.flush();os.fsync(stream.fileno())
         sync_directory(backup.parent)
         journal['source_sha']=source_sha;journal['status']='installed_maintenance'
         journal['runtime_transition'].update(phase='complete',readiness_recovery={

@@ -181,6 +181,58 @@ else:
         self.assertEqual(expected['projects'],[{'key':'b'*64,'source_sha':'d'*40}])
         self.assertEqual(config['projects'][0]['source_sha'],'c'*40)
 
+    def test_selected_runtime_recovery_preserves_ticket_and_requires_live_readiness(self):
+        current,retained,database,ledger=self.recovery_fixture()
+        state=self.root/'state';state.mkdir();ticket=state/'installation.json'
+        original=json.dumps({'source_sha':'b'*40,'runtime_transition':{
+            'phase':'runtime_selected','from_source':'b'*40,'to_source':'a'*40,
+            'retained_path':str(retained)}}).encode()
+        ticket.write_bytes(original);ticket.chmod(0o600)
+        original_lstat=Path.lstat
+        original_fstat=os.fstat
+        def owned(path):
+            value=original_lstat(path)
+            if path==ticket:
+                values=list(value);values[4]=0;return os.stat_result(values)
+            return value
+        def root_fstat(fd):
+            values=list(original_fstat(fd));values[4]=0;return os.stat_result(values)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.os,'geteuid',return_value=0),\
+                patch.object(Path,'lstat',owned),patch.object(self.module.os,'fstat',root_fstat),patch.object(self.module,'verify_stage',side_effect=lambda p:{
+                    'source_sha':json.loads((p/'config.json').read_text())['source_sha']}),\
+                patch.object(self.module,'validate_project_scope'),patch.object(self.module,'verify_worker_quiescence'),\
+                patch('do_again.supervisor.native_checkpoint.verify_checkpoints'),\
+                patch.object(self.module,'wait_for_supervisor_readiness') as ready:
+            ready.side_effect=RuntimeError('readiness failed')
+            with self.assertRaisesRegex(RuntimeError,'readiness failed'):
+                self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            self.assertEqual(list(state.iterdir()),[ticket])
+            ready.side_effect=None
+            with patch.object(self.module,'atomic',side_effect=OSError('interrupted ticket completion')):
+                with self.assertRaisesRegex(OSError,'interrupted ticket completion'):
+                    self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            backup=next(state.glob('installation-before-readiness-*.json'))
+            self.assertEqual(backup.stat().st_mode&0o777,0o600)
+            self.assertEqual(backup.read_bytes(),original)
+            backup.write_bytes(b'x'*len(original))
+            with self.assertRaisesRegex(RuntimeError,'ticket differs'):
+                self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            backup.write_bytes(original);backup.chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError,'ticket is untrusted'):
+                self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            backup.chmod(0o600)
+            self.module.complete_selected_runtime('a'*40)
+        saved=list(state.glob('installation-before-readiness-*.json'))
+        self.assertEqual(len(saved),1);self.assertEqual(saved[0].read_bytes(),original)
+        result=json.loads(ticket.read_text())
+        self.assertEqual(result['runtime_transition']['phase'],'complete')
+        self.assertFalse(result['runtime_transition']['readiness_recovery']['effects_replayed'])
+        self.assertEqual(ledger.lookup('fixture','completed','fingerprint')['status'],'succeeded')
+
     def worker_quiescence_fixture(self):
         from do_again.supervisor.macos_execution import ExecutionBlocked
         key='c'*64
@@ -226,6 +278,23 @@ else:
         self.assertEqual(saved['phase'],'withdrawn')
         self.assertEqual(saved['recovery_evidence']['previous_phase'],'running')
         self.assertTrue(saved['recovery_evidence']['original_worker_withdrawn'])
+
+    def test_readiness_quiescence_observation_preserves_worker_journal(self):
+        config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
+        original=journal.read_bytes()
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'WORKER_AGENTS',agents),\
+                patch.object(type(journal),'stat',new=root_owned),\
+                patch.object(self.module.subprocess,'run',return_value=Mock(returncode=113,stderr='Could not find service')),\
+                patch('do_again.supervisor.authority.AuthorityRegistry') as registry,\
+                patch('do_again.supervisor.service_probe.verify_process_withdrawn') as birth,\
+                patch.object(self.module,'atomic') as writes:
+            registry.return_value.status.return_value={'intent':'maintenance'}
+            self.module.verify_worker_quiescence(config,reconcile=False)
+            self.assertEqual(journal.read_bytes(),original);writes.assert_not_called()
+            birth.side_effect=RuntimeError('original worker remains alive')
+            with self.assertRaisesRegex(RuntimeError,'remains alive'):
+                self.module.verify_worker_quiescence(config,reconcile=False)
+            self.assertEqual(journal.read_bytes(),original);writes.assert_not_called()
 
     def test_install_refuses_live_or_unverified_withdrawal_without_journal_mutation(self):
         config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
