@@ -42,8 +42,11 @@ class ControllerLoop:
             from .browser_planner import PlanningNotReady
             if isinstance(exc, PlanningNotReady):
                 return dict(self.controller.status(now), waiting_reason=str(exc))
-            self.controller.block('planner failed or uncertain: '+type(exc).__name__, now)
+            self.controller.block('planner failed or uncertain: '+type(exc).__name__+': '+str(exc)[:250], now)
             raise
+        from .planner_contract import NoFurtherWork
+        if isinstance(proposal,NoFurtherWork):
+            return self.controller.no_further_work(proposal,pending_ids=pending,now=now)
         self.controller.reserve(proposal, pending_ids=pending, now=now)
         self.history.publish_reserved(now)
         return self.controller.status(now)

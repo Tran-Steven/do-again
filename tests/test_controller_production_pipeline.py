@@ -216,6 +216,23 @@ class ProductionPipelineTests(unittest.TestCase):
         self.assertEqual(result['returncode'],1)
         self.assertIn('Ran 0 tests',result['stderr'])
 
+    def test_growing_public_regression_file_does_not_leave_started_planning_probe(self):
+        large=b'# public regression fixture\n'+b'# padding\n'*6000+b'def test_preserved_public_regression(): pass\n'
+        (self.repo/'large_regressions.py').write_bytes(large)
+        self.git('add','large_regressions.py');self.git('commit','-qm','large public fixture')
+        profile=self.backend.effects.profile
+        profile.update(kind='native-development-autonomous-v1',implementation_paths=['product.py'])
+        profile['allowed_paths'].append('large_regressions.py')
+        result=self.backend.effects.collect('growing-source-probe','e'*64)
+        self.assertIn('product.py',result['public_sources'])
+        self.assertNotIn('large_regressions.py',result['public_sources'])
+        summary=result['public_source_inventory']['large_regressions.py']
+        self.assertEqual(summary['sha256'],hashlib.sha256(large).hexdigest())
+        self.assertEqual(summary['top_level_definitions'],['test_preserved_public_regression'])
+        self.assertEqual(len(result['cases']),3)
+        self.assertEqual(self.ledger.pending('fixture'),[])
+        self.assertEqual(self.ledger.observe_request('fixture','growing-source-probe','e'*64)['state'],'terminal')
+
     def test_lost_acknowledgment_response_reconciles_without_repeat_publication(self):
         self.backend.tick(self.now);record=self.backend.controller.status(self.now)['requests'][-1]
         result=self.worker_execute(record['request']);self.receipt(record,result)

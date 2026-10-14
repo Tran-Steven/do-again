@@ -1,10 +1,26 @@
 """Provider-neutral planning contract; grants no network authority."""
 from __future__ import annotations
+from dataclasses import dataclass,asdict
 from ..core.schema import canonical_json
 from ..supervisor.macos_execution import ExecutionBlocked
 
 ANSWER_LIMITS = {'gap': 1000, 'acceptance': 1000, 'script': 16000}
 MAX_PROMPT_BYTES = 32768
+
+
+@dataclass(frozen=True)
+class NoFurtherWork:
+    """A model assessment, never a code request or independent goal verification."""
+    call_id: str
+    source_sha: str
+    goal_sha256: str
+    evidence_sha256: str
+    summary: str
+    acknowledged_receipts: list
+
+    def record(self):
+        return dict(asdict(self),kind='no_further_work',basis='model_assessment',
+                    counted_as_coding_cycle=False,goal_independently_verified=False)
 
 
 def completed_changes(state):
@@ -31,6 +47,10 @@ def planning_prompt(goal, evidence, state, *, max_bytes=MAX_PROMPT_BYTES):
                     for c in r['verified_failure'].get('test_cases',[]) if c['exit_code']!=0][:8]},
             'receipt_sha256': r['receipt_sha256']}
             for r in state.get('requests', [])[-3:] if r.get('phase') == 'failed'],
+        'planning_instruction': 'Select a useful authorized change supported by current evidence. '
+            'If the response schema permits no_further_work and no useful authorized change remains, '
+            'return that assessment with exact prior receipt acknowledgments. Do not manufacture edits. '
+            'The assessment does not independently verify the goal or release acceptance.',
     }).decode()
     if max_bytes not in {32768,65536} or len(prompt.encode()) > max_bytes:
         raise ExecutionBlocked('planning prompt exceeds authorized exposure budget')
@@ -91,9 +111,23 @@ class AuthorizedTransportPlanner:
         schema = planning_schema()
         persistent = grant.get('kind') == 'browser-planning-persistent-v1'
         completed = completed_changes(state)
+        cases=evidence.get('cases') if isinstance(evidence,dict) else None
+        tests_passed=bool(cases) and isinstance(cases,list) and all(
+            isinstance(c,dict) and type(c.get('returncode')) is int and c['returncode']==0
+            and isinstance(c.get('native_test_counts'),dict)
+            and type(c['native_test_counts'].get('passed')) is int and c['native_test_counts']['passed']>0
+            and type(c['native_test_counts'].get('collected')) is int
+            and c['native_test_counts'].get('collected')==c['native_test_counts']['passed']
+            and all(type(c['native_test_counts'].get(k)) is int and c['native_test_counts'][k]==0
+                    for k in ('failed','skipped','pytest_exit_code')) for c in cases)
         if persistent:
             schema['properties']['acknowledged_receipts'] = {'const': completed}
             schema['required'].append('acknowledged_receipts')
+            if tests_passed:schema={'oneOf':[schema,{'type':'object','properties':{
+                'kind':{'const':'no_further_work'},
+                'summary':{'type':'string','minLength':1,'maxLength':1000},
+                'acknowledged_receipts':{'const':completed}},
+                'required':['kind','summary','acknowledged_receipts'],'additionalProperties':False}]}
         cycle = len(state['requests']) + 1
         call = self.reserve_call(grant, cycle, prompt, schema)
         try:
@@ -114,6 +148,16 @@ class AuthorizedTransportPlanner:
                 raise PlanningNotReady(str(exc)) from exc
             raise
         if persistent:
+            if isinstance(answer,dict) and answer.get('kind')=='no_further_work':
+                if (not tests_passed or set(answer)!={'kind','summary','acknowledged_receipts'}
+                        or not isinstance(answer['summary'],str) or not answer['summary'].strip()
+                        or len(answer['summary'])>1000 or answer['acknowledged_receipts']!=completed):
+                    self._reject_original(call,'no-further-work assessment or exact receipt acknowledgment differs')
+                    from .browser_planner import PlanningNotReady
+                    raise PlanningNotReady('original assessment rejected; no completion or execution')
+                from .offline_continuation import digest
+                return NoFurtherWork(call['call_id'],grant['source_sha'],grant['goal_sha256'],digest(evidence),
+                    answer['summary'],completed)
             if (not isinstance(answer, dict)
                     or set(answer) != set(ANSWER_LIMITS) | {'acknowledged_receipts'}
                     or answer['acknowledged_receipts'] != completed):

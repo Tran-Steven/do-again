@@ -82,9 +82,13 @@ waits for read-only observation of the original reserved prompt, without another
 The model receives verified prior commit/test/receipt hashes and must echo
 the exact acknowledgments before its next proposal is accepted.
 
-These are source capabilities awaiting installed live validation. This
-candidate has **zero verified useful autonomous coding cycles**. Persistent
-mode does not yet establish clean installation, rollover or V1 readiness.
+Installed persistent candidate `00b4cf9` has now completed three genuinely
+ChatGPT-authored Jobpipe tasks. The first two have independently verified
+native edits, mandatory tests, commits, publications on draft PR #28, and
+later exact model receipt acknowledgments. This supports the useful-coding
+gate within the authorized ATS triage scope. It is not a V1 release claim.
+Clean installation, sustained operation, rollover and the remaining gates
+still require their own evidence.
 
 ### Installed persistent attempt — 2026-10-13 (not accepted)
 
@@ -135,6 +139,43 @@ pending; they do not authorize a new message. Only an observed, invalid original
 answer or a positively authenticated pre-dispatch refusal permits a fresh call
 identity, consuming the existing call budget. Historical unknown records are
 never retroactively upgraded, and no useful coding acceptance is claimed here.
+
+### Useful persistent coding and source-growth interruption — 2026-10-13
+
+With installed source `00b4cf9beafa4c19ac6232a293bf5e41fb64a723`, jobpipe
+ran at active epoch 38 on the existing dedicated ChatGPT conversation.
+Original calls `planner-1dcf3ac3fffabeddb05c-1`, `-2`, and `-3` independently
+selected ambiguity metadata validation, question/label metadata validation,
+and verification-container validation. They produced native-tested commits
+`828ceade96bf3897172f670ce4f8622b39ae67b6`,
+`2d0c435269b7ff04ebc4cdacad06902334bd31b0`, and
+`ef38b5257158bb1efc5bc428884e8d92898a6d2d` on the same draft Jobpipe PR #28.
+Each used the ten mandatory confined test processes; the first two recorded
+319 and 362 passing test-item executions. The following original model
+responses echoed their exact commit/test heads and canonical receipt hashes.
+No human composed the code or next task. The earlier assisted checkpoint
+publication remains zero autonomous cycles; its original publication journal
+stays unresolved and non-replayable.
+
+The at-least-four-hour gate **failed for this attempt**. After three tasks,
+planning probe `offline-90fb5360625f39209d26-4-probe` exceeded the combined
+public-source budget as the regression file grew. The autonomous profile's
+actual budget was 24 KiB, although its old error message said 16 KiB. There
+was no fourth model reservation or delivery. The normal stop withdrew jobpipe
+to maintenance epoch 39; Sonary stayed paused at epoch 1. The original probe
+reservation is retained started/result-free and cannot be replayed or counted
+as a passing probe.
+
+The next source candidate keeps the full implementation source prioritized
+and exposes oversized approved files as explicitly labeled digests and bounded
+definition inventories. All mandatory native tests still use the complete
+files. Its persistent-only `no_further_work` response is code-free, requires
+exact prior receipt acknowledgments and positive mandatory native test
+counts, and records a model assessment without an execution, coding-cycle
+credit, independent goal verification or V1 acceptance. The exact historical
+probe disposition is a separately reviewed append-only administrator action;
+its original execution and intent bytes remain unchanged. These fixes need
+installed validation and do not repair the failed unattended gate retroactively.
 
 ## Mandatory V1A qualification evidence (necessary, never sufficient)
 

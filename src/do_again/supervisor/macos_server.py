@@ -153,6 +153,7 @@ class ProjectBroker:
                     'effect_journal': self.ledger.evidence(self.project.key),
                     'unresolved_executions': self.ledger.pending(self.project.key),
                     'quarantined_publications':self.ledger.quarantined_publications(self.project.key),
+                    'quarantined_planning_probes':self.ledger.quarantined_planning_probes(self.project.key),
                     'inflight_request_ids':self._inflight()}
         if packet.get('operation') in {'publish_tested_baseline','publish_tested_checkpoint'}:
             from .publication import publish_tested_baseline,publish_tested_checkpoint

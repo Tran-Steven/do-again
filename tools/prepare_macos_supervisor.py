@@ -212,7 +212,7 @@ def validate_planner_authorization_preflight(source_sha, uid, gid, controller_gr
     apply_controller_grant(candidate,proposal,hosted,browser=browser)
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_persistent_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None, native_head_checkpoint=None, publication_quarantine=None, publication_metadata_recovery=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_persistent_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None, native_head_checkpoint=None, publication_quarantine=None, publication_metadata_recovery=None, planning_probe_recovery=None):
     if jobpipe_persistent_development:
         if (not jobpipe_offline_development or controller_grant is None
                 or json.loads(private_proposal_preflight(controller_grant).read_text())['scope'].get('kind') != 'jobpipe-native-controller-v1'):
@@ -242,6 +242,10 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         if not jobpipe_persistent_development or native_head_checkpoint is None or publication_quarantine is not None:
             raise ValueError('metadata completion requires persistent tested-head retention without another recovery')
         private_proposal_preflight(publication_metadata_recovery)
+    if planning_probe_recovery is not None:
+        if not jobpipe_persistent_development or native_head_checkpoint is None or publication_quarantine is not None or publication_metadata_recovery is not None:
+            raise ValueError('probe disposition requires explicit persistent tested-head retention without another recovery')
+        private_proposal_preflight(planning_probe_recovery)
     if output.exists():raise ValueError('output already exists; refusing overwrite')
     source=source.resolve();jobpipe=jobpipe.resolve();do_again_repo=do_again_repo.resolve()
     if sonary_repo is not None:
@@ -330,6 +334,12 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         metadata_recovery=json.loads(Path(publication_metadata_recovery).read_text())
         if metadata_recovery!=proposed_action() or installed is None or installed['source_sha']!=SOURCE:
             raise ValueError('metadata recovery differs from exact installed partial publication')
+    probe_recovery=None
+    if planning_probe_recovery is not None:
+        from do_again.supervisor.native_planning_probe_recovery import proposed_action,SOURCE
+        probe_recovery=json.loads(Path(planning_probe_recovery).read_text())
+        if probe_recovery!=proposed_action() or installed is None or installed['source_sha']!=SOURCE:
+            raise ValueError('probe disposition differs from exact reviewed source exposure failure')
     output.mkdir(parents=True,mode=0o700)
     payload=output/'payload';payload.mkdir(mode=0o700)
     package=payload/'package/do_again';package.parent.mkdir()
@@ -350,6 +360,9 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
     if metadata_recovery is not None:
         (payload/'complete-publication-metadata.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/complete_native_publication_metadata.py']))
         (payload/'publication-metadata-recovery.json').write_text(json.dumps(metadata_recovery,sort_keys=True,indent=2)+'\n')
+    if probe_recovery is not None:
+        (payload/'quarantine-planning-probe.py').write_bytes(subprocess.check_output(['git','-C',str(source),'show',source_sha+':tools/quarantine_native_planning_probe.py']))
+        (payload/'planning-probe-recovery.json').write_text(json.dumps(probe_recovery,sort_keys=True,indent=2)+'\n')
     runtime=seal_runtime(payload)
     native_git=seal_git(payload)
     ca=Path('/private/etc/ssl/cert.pem')
@@ -566,6 +579,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         '/usr/bin/shasum -a 256 -c MANIFEST.sha256 >/dev/null',
         *(['/usr/bin/python3 -I -S -B '+q(stage+'/quarantine-publication.py')+' --stage '+q(stage)+' --execute-approved-action'] if recovery is not None else []),
         *(['/usr/bin/python3 -I -S -B '+q(stage+'/complete-publication-metadata.py')+' --stage '+q(stage)+' --execute-approved-action'] if metadata_recovery is not None else []),
+        *(['/usr/bin/python3 -I -S -B '+q(stage+'/quarantine-planning-probe.py')+' --stage '+q(stage)+' --execute-approved-action'] if probe_recovery is not None else []),
         '/usr/bin/python3 -I -S -B '+q(stage+'/install.py')+' --stage '+q(stage)
         +(' --classify-canary-partial-publication --partial-disposition-source '+q(installed['source_sha'])
           +' --partial-disposition-nonce '+q(installed['live_canary']['nonce']) if classify_canary_partial else ''),
@@ -584,6 +598,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
+    parser.add_argument('--planning-probe-recovery',type=Path,help='Separately approved append-only disposition of the exact read-only source-budget probe')
     parser.add_argument('--publication-metadata-recovery',type=Path,help='Exact separately recorded completion of already authorized checkpoint PR metadata')
     parser.add_argument('--publication-quarantine',type=Path,help='Separately approved exact publication collision disposition; never inferred from installation')
     parser.add_argument('--native-head-checkpoint',type=Path,help='Private exact original tested head to retain during upgrade')
@@ -614,4 +629,4 @@ if __name__=='__main__':
                               jobpipe_offline_development=args.jobpipe_offline_development,
                               jobpipe_persistent_development=args.jobpipe_persistent_development,
                               jobpipe_migration_sha=args.jobpipe_migration_sha,controller_grant=args.controller_grant,
-                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels,browser_planner_grant=args.browser_planner_grant,native_head_checkpoint=args.native_head_checkpoint,publication_quarantine=args.publication_quarantine,publication_metadata_recovery=args.publication_metadata_recovery),indent=2))
+                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels,browser_planner_grant=args.browser_planner_grant,native_head_checkpoint=args.native_head_checkpoint,publication_quarantine=args.publication_quarantine,publication_metadata_recovery=args.publication_metadata_recovery,planning_probe_recovery=args.planning_probe_recovery),indent=2))

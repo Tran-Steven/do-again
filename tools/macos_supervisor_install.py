@@ -626,6 +626,8 @@ def preview_cutover(config, registry, live):
                 projects={row[0] for row in db.execute('SELECT DISTINCT project FROM execution')}
                 if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='publication_quarantine'").fetchone():
                     projects.update(row[0] for row in db.execute('SELECT DISTINCT project FROM publication_quarantine'))
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_probe_quarantine'").fetchone():
+                    projects.update(row[0] for row in db.execute('SELECT DISTINCT project FROM planning_probe_quarantine'))
                 projects.update(p['key'] for p in config['projects'])
             if any(ledger.pending(project) for project in projects):
                 raise RuntimeError('ambiguous execution blocks cutover')

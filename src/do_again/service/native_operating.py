@@ -46,6 +46,7 @@ def summary(repo):
     return {'state': state['state'], 'verified_completed_changes': completed_changes(state),
             'acknowledged_cycles': len(state['acknowledged']),
             'outstanding_request': state.get('outstanding'), 'blocker': state.get('blocker'),
+            'completion_reason':state.get('completion_reason'),'goal_assessment':state.get('goal_assessment'),
             'v1_release_accepted': False}
 
 

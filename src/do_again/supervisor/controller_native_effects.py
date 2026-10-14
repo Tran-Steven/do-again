@@ -161,14 +161,23 @@ class NativeControllerEffects:
                 'stdout_sha256':hashlib.sha256(outcome['stdout'].encode()).hexdigest(),
                 'stderr_sha256':hashlib.sha256(outcome['stderr'].encode()).hexdigest()})
         if before!=self.measure(head,manifest):raise ExecutionBlocked('planning probes changed source')
-        sources={};budget=24576 if self.profile.get("kind")=="native-development-autonomous-v1" else 16384
+        autonomous=self.profile.get('kind')=='native-development-autonomous-v1'
+        sources={};inventory={};budget=24576 if autonomous else 16384;contents={}
         for path in dict.fromkeys([*self.profile['allowed_paths'], *self.profile['test_files']]):
             if path not in manifest:continue
-            data=(broker.project.worktree/path).read_bytes();budget-=len(data)
-            if budget<0:raise ExecutionBlocked('approved public source exposure exceeds 16 KiB')
-            sources[path]=data.decode('utf-8')
+            data=(broker.project.worktree/path).read_bytes()
+            if autonomous:contents[path]=data
+            else:
+                budget-=len(data)
+                if budget<0:raise ExecutionBlocked('approved public source exposure exceeds 16 KiB')
+                sources[path]=data.decode('utf-8')
+        if autonomous:
+            from .planning_source_evidence import summarize_public_sources
+            sources,inventory=summarize_public_sources(contents,budget=budget,
+                implementation_paths=self.profile['implementation_paths'])
         if before!=self.measure(head,manifest):raise ExecutionBlocked('source exposure measurement changed')
         evidence={'repo_head':head,'tree_sha256':before['tree_sha256'],'cases':cases,'public_sources':sources}
+        if autonomous:evidence['public_source_inventory']=inventory
         result={'returncode':0,'timed_out':False,'source_sha':broker.config['source_sha'],'evidence':evidence}
         broker.ledger.finish(project,sid,result);return evidence
 

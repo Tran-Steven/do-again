@@ -12,11 +12,12 @@ REASON='publication-workspace-collision-before-network-v1'
 def pending_rows(db,project):
     from .macos_execution import ExecutionBlocked
     rows=db.execute("SELECT request,fingerprint FROM execution WHERE project=? AND state='started'",(project,)).fetchall()
-    if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone():return rows
-    quarantined=set()
+    from .planning_probe_quarantine import validate_audits
+    quarantined=validate_audits(db,project)
     # Validate every audit even if its original was deleted or falsely finished.
-    audits=db.execute('SELECT request,fingerprint,intent_sha256,source_sha,task_fingerprint,disposition,reason '
+    audits=(db.execute('SELECT request,fingerprint,intent_sha256,source_sha,task_fingerprint,disposition,reason '
                      'FROM publication_quarantine WHERE project=?',(project,)).fetchall()
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone() else [])
     for rid,fp,digest,source,task_fp,disposition,reason in audits:
         original=db.execute('SELECT e.fingerprint,e.state,e.result,i.payload FROM execution e '
             'LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request '
@@ -33,7 +34,8 @@ def pending_rows(db,project):
 
 
 def has_quarantine(db,project,request):
-    return bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone()
+    from .planning_probe_quarantine import exists
+    return exists(db,project,request) or bool(db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone()
         and db.execute('SELECT 1 FROM publication_quarantine WHERE project=? AND request=?',(project,request)).fetchone())
 
 

@@ -123,6 +123,25 @@ class OfflineContinuation:
         state.update(state='blocked', blocker=reason)
         return self._save(state)
 
+    def no_further_work(self, assessment, *, pending_ids, now):
+        from .planner_contract import NoFurtherWork,completed_changes
+        state=self._load(now)
+        if (not persistent_scope(self.scope) or not isinstance(assessment,NoFurtherWork)
+                or state['state']!='planning' or state['outstanding'] or pending_ids
+                or assessment.source_sha!=self.scope['source_sha']
+                or assessment.goal_sha256!=self.scope['goal_sha256']
+                or not re.fullmatch('planner-[0-9a-f]{20}-[1-9][0-9]{0,4}',assessment.call_id)
+                or not re.fullmatch('[0-9a-f]{64}',assessment.evidence_sha256)
+                or not isinstance(assessment.summary,str) or not assessment.summary.strip()
+                or len(assessment.summary)>1000
+                or assessment.acknowledged_receipts!=completed_changes(state)):
+            raise ExecutionBlocked('no-further-work assessment lacks current persistent authority or acknowledgments')
+        state.update(state='completed',completion_reason='planner_no_further_work',
+                     goal_assessment=assessment.record())
+        # Retain requests, actual counts and journals exactly. This adds no
+        # execution, task receipt, verified goal claim, or release acceptance.
+        return self._save(state)
+
     def reserve(self, proposal, *, pending_ids, now):
         state = self._load(now)
         if state['state'] != 'planning' or state['outstanding'] or pending_ids:

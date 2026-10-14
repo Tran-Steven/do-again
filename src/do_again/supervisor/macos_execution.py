@@ -271,6 +271,17 @@ class ExecutionLedger:
                  'state':'quarantined_unresolved','original_state':'started','terminal_success':False,'replay_permitted':False}
                 for rid,source,fp,approval in rows]
 
+    def quarantined_planning_probes(self,project: str) -> list[dict]:
+        from .planning_probe_quarantine import TABLE
+        from .publication_quarantine import pending_rows
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            pending_rows(db,project)
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone():return []
+            rows=db.execute('SELECT request,source_sha,probe_fingerprint,approval_reference FROM planning_probe_quarantine WHERE project=? ORDER BY request',(project,)).fetchall()
+        return [{'request_id':rid,'source_sha':source,'request_fingerprint':fp,'approval_reference':approval,
+                 'state':'quarantined_unresolved','original_state':'started','terminal_success':False,
+                 'replay_permitted':False,'tests_claimed_passed':False} for rid,source,fp,approval in rows]
+
     def lookup(self, project: str, request: str, fingerprint: str) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db:
             from .publication_quarantine import pending_rows,has_quarantine
