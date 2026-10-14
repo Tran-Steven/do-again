@@ -323,7 +323,9 @@ class OngoingAdmissionRecoveryTests(unittest.TestCase):
         from do_again.supervisor.macos_client import _request,BrokerUnavailable
         connection=Mock();connection.recv.side_effect=TimeoutError('delayed broker')
         manager=Mock();manager.__enter__=Mock(return_value=connection);manager.__exit__=Mock(return_value=False)
-        with patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
+        # AF_UNIX is only a symbol for this mocked transport; no native socket opens.
+        with patch('do_again.supervisor.macos_client.socket.AF_UNIX',1,create=True), \
+             patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
              patch('do_again.supervisor.macos_client.peer_uid',return_value=0):
             with self.assertRaises(BrokerUnavailable):_request(Path('/fixture.sock'),{'operation':'status'})
         connection.sendall.assert_called_once()
@@ -335,7 +337,8 @@ class OngoingAdmissionRecoveryTests(unittest.TestCase):
             with self.subTest(chunks=chunks):
                 connection=Mock();connection.recv.side_effect=chunks
                 manager=Mock();manager.__enter__=Mock(return_value=connection);manager.__exit__=Mock(return_value=False)
-                with patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
+                with patch('do_again.supervisor.macos_client.socket.AF_UNIX',1,create=True), \
+                     patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
                      patch('do_again.supervisor.macos_client.peer_uid',return_value=0):
                     with self.assertRaises(BrokerUnavailable):
                         check_ongoing_admission(lambda:_request(Path('/fixture.sock'),{'operation':'status'}))
@@ -349,7 +352,8 @@ class OngoingAdmissionRecoveryTests(unittest.TestCase):
             with self.subTest(length=len(chunk)):
                 connection=Mock();connection.recv.return_value=chunk
                 manager=Mock();manager.__enter__=Mock(return_value=connection);manager.__exit__=Mock(return_value=False)
-                with patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
+                with patch('do_again.supervisor.macos_client.socket.AF_UNIX',1,create=True), \
+                     patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
                      patch('do_again.supervisor.macos_client.peer_uid',return_value=0):
                     with self.assertRaises(AuthorityDenied):
                         check_ongoing_admission(lambda:_request(Path('/fixture.sock'),{'operation':'status'}))
