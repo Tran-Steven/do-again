@@ -1,4 +1,4 @@
-import copy,json,tempfile,unittest
+import copy,json,os,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from do_again.supervisor import native_publication_metadata_recovery as r
@@ -51,22 +51,26 @@ class MetadataRecoveryContractTests(unittest.TestCase):
         self.api=API();self.guard=guard or (lambda:None)
         return r.complete_metadata(self.api,self.audit,r.proposed_action(),self.guard,execute_approved_action=execute)
 
+    @unittest.skipUnless(os.name=='posix','native durable reservation requires POSIX directory fsync')
     def test_reserved_before_sole_metadata_patch_no_git_effects(self):
         self.assertEqual(self.complete()['state'],'metadata_verified')
         self.assertEqual(len(self.effects),1)
         self.assertEqual(json.loads(self.audit.read_text())['state'],'started')
 
+    @unittest.skipUnless(os.name=='posix','native durable reservation requires POSIX directory fsync')
     def test_lost_patch_reply_only_readback_can_recover(self):
         with self.assertRaises(OSError):self.complete(lost=True)
         result=r.complete_metadata(self.api,self.audit,r.proposed_action(),self.guard,execute_approved_action=True)
         self.assertEqual(result['state'],'metadata_verified');self.assertEqual(len(self.effects),1)
 
+    @unittest.skipUnless(os.name=='posix','native durable reservation requires POSIX directory fsync')
     def test_lost_reply_without_observed_metadata_never_replays(self):
         with self.assertRaises(OSError):self.complete(lost=True,mutate=False)
         with self.assertRaisesRegex(ExecutionBlocked,'no replay'):
             r.complete_metadata(self.api,self.audit,r.proposed_action(),self.guard,execute_approved_action=True)
         self.assertEqual(len(self.effects),1)
 
+    @unittest.skipUnless(os.name=='posix','native durable reservation requires POSIX directory fsync')
     def test_guard_failure_preserves_reservation_without_effect(self):
         def stop():raise ExecutionBlocked('paused')
         with self.assertRaises(ExecutionBlocked):self.complete(guard=stop)
@@ -86,6 +90,7 @@ class MetadataRecoveryContractTests(unittest.TestCase):
         self.assertEqual(result['state'],'prepared');self.assertEqual(self.audit.read_bytes(),original)
         self.assertEqual(self.effects,[])
 
+@unittest.skipUnless(os.name=='posix','native installer admission fences require POSIX fcntl')
 class FullRecoveryFlowTests(unittest.TestCase):
     def setUp(self):
         import contextlib,fcntl,importlib.util,os,sqlite3,sys
