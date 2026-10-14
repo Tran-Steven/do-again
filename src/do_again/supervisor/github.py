@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from urllib.parse import urlencode, parse_qs
 
 from .git_capabilities import SHA, _safe_relative
@@ -156,9 +157,9 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
     if owned:
         if matching and matching[0]['number']!=owned[0]['number']:
             raise ExecutionBlocked('pull request identity changed during publication')
-        matching=[api.request('GET','pulls/'+str(owned[0]['number']))]
+        matching=[wait_for_pull_head(api,owned[0]['number'],branch,export['parent'],export['head'])]
     elif matching:
-        matching=[api.request('GET','pulls/'+str(matching[0]['number']))]
+        matching=[wait_for_pull_head(api,matching[0]['number'],branch,export['parent'],export['head'])]
     if matching and (matching[0] is None or matching[0]['head']['sha']!=export['head']
                      or matching[0]['head']['ref']!=branch
                      or matching[0]['head']['repo']['full_name']!=api.repository
@@ -179,15 +180,45 @@ def publish_commit(api: GitHubRepository, export: dict, branch: str, title: str,
         matching = [pulls]
     pr = matching[0]
     if pr.get('title')!=title or pr.get('body')!=body:
+        previous_payload=(pr.get('title'),pr.get('body'))
         with effect_guard():
             api.request('PATCH','pulls/'+str(pr['number']),{'title':title,'body':body})
-        pr=api.request('GET','pulls/'+str(pr['number']))
+        pr=wait_for_pull_payload(api,pr['number'],branch,export['head'],title,body,previous_payload)
     if pr.get('title')!=title or pr.get('body')!=body or pr['head']['sha']!=export['head']:
         raise ExecutionBlocked('pull request payload acknowledgment is uncertain')
     if pr.get('html_url') != 'https://github.com/'+api.repository+'/pull/'+str(pr['number']):
         raise ExecutionBlocked('pull request URL is not exact repository evidence')
     return {'repository':api.repository,'head':export['head'],'branch':branch,
             'pull_request':pr['number'],'url':pr['html_url']}
+
+
+def wait_for_pull_head(api, number, branch, parent, head):
+    """Bounded reads of one already-bound PR; never repeat a mutation."""
+    for attempt in range(12):
+        pr=api.request('GET','pulls/'+str(number))
+        if (not isinstance(pr,dict) or pr.get('number')!=number
+                or pr.get('state')!='open' or pr.get('draft') is not True
+                or pr.get('html_url')!='https://github.com/'+api.repository+'/pull/'+str(number)
+                or pr.get('head',{}).get('ref')!=branch
+                or pr.get('head',{}).get('repo',{}).get('full_name')!=api.repository
+                or pr.get('base',{}).get('ref')!='main'
+                or pr.get('base',{}).get('repo',{}).get('full_name')!=api.repository
+                or pr.get('head',{}).get('sha') not in (parent,head)):
+            raise ExecutionBlocked('existing pull request identity diverged; no second creation')
+        if pr['head']['sha']==head:return pr
+        if attempt<11:time.sleep(0.5)
+    raise ExecutionBlocked('existing pull request update is uncertain; no second creation')
+
+
+def wait_for_pull_payload(api,number,branch,head,title,body,previous):
+    for attempt in range(12):
+        pr=wait_for_pull_head(api,number,branch,head,head)
+        observed=(pr.get('title'),pr.get('body'))
+        if observed==(title,body):return pr
+        if observed!=previous:
+            raise ExecutionBlocked('pull request payload diverged; no repeated PATCH')
+        if attempt<11:time.sleep(0.5)
+    raise ExecutionBlocked('pull request payload acknowledgment is uncertain')
 
 
 def matching_pull_requests(api: GitHubRepository, branch: str, head: str) -> list:

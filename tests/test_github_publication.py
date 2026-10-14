@@ -47,7 +47,7 @@ class FakeRepository:
         if method=='PATCH' and endpoint.startswith('pulls/'):
             self.pr.update(payload);return self.pr
         if endpoint=='pulls':
-            self.pr={'number':7,'state':'open','title':payload['title'],'body':payload['body'],
+            self.pr={'number':7,'state':'open','draft':True,'title':payload['title'],'body':payload['body'],
                      'html_url':'https://github.com/'+self.repository+'/pull/7',
                      'head':{'sha':self.head,'ref':self.branch,'repo':{'full_name':self.repository}},
                      'base':{'ref':'main','repo':{'full_name':self.repository}}}
@@ -128,7 +128,7 @@ class PublicationTests(unittest.TestCase):
 
     def existing_parent_pr(self):
         self.api.head=self.base
-        self.api.pr={'number':7,'state':'open','title':'Original task','body':'Original evidence',
+        self.api.pr={'number':7,'state':'open','draft':True,'title':'Original task','body':'Original evidence',
                      'html_url':'https://github.com/'+self.api.repository+'/pull/7',
                      'head':{'sha':self.base,'ref':self.branch,'repo':{'full_name':self.api.repository}},
                      'base':{'ref':'main','repo':{'full_name':self.api.repository}}}
@@ -157,11 +157,49 @@ class PublicationTests(unittest.TestCase):
                         return [copy.deepcopy(old)] if queries==1 else []
                     if stale_detail and method=='GET' and endpoint=='pulls/7':return copy.deepcopy(old)
                     return request(method,endpoint,payload)
-                with patch.object(self.api,'request',side_effect=stale):
+                with patch.object(self.api,'request',side_effect=stale), patch('do_again.supervisor.github.time.sleep'):
                     if stale_detail:
                         with self.assertRaisesRegex(ExecutionBlocked,'no second creation'):self.publish()
                     else:self.assertEqual(self.publish()['pull_request'],7)
                 self.assertFalse(any(endpoint=='pulls' for method,endpoint,payload in self.api.effects))
+
+    def test_stale_detail_converges_with_one_branch_update_and_one_metadata_patch(self):
+        old=self.existing_parent_pr();request=self.api.request;reads=0
+        def lag(method,endpoint,payload=None):
+            nonlocal reads
+            if method=='GET' and endpoint=='pulls/7':
+                reads+=1
+                if reads<=3:return copy.deepcopy(old)
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=lag),patch('do_again.supervisor.github.time.sleep'):
+            result=self.publish()
+        self.assertEqual(result['head'],self.head)
+        self.assertEqual(sum(e.startswith('git/refs') for m,e,p in self.api.effects),1)
+        self.assertEqual(sum(m=='PATCH' and e=='pulls/7' for m,e,p in self.api.effects),1)
+        self.assertFalse(any(e=='pulls' for m,e,p in self.api.effects))
+
+    def test_other_head_during_detail_lag_stops_immediately_without_metadata_patch(self):
+        old=self.existing_parent_pr();old['head']['sha']='f'*40;request=self.api.request
+        def diverged(method,endpoint,payload=None):
+            if method=='GET' and endpoint=='pulls/7':return old
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=diverged),patch('do_again.supervisor.github.time.sleep') as sleep:
+            with self.assertRaisesRegex(ExecutionBlocked,'identity diverged'):self.publish()
+        sleep.assert_not_called()
+        self.assertFalse(any(e=='pulls/7' and m=='PATCH' for m,e,p in self.api.effects))
+
+    def test_metadata_readback_lag_does_not_repeat_patch(self):
+        self.existing_parent_pr();request=self.api.request;old=None;reads=0
+        def lag(method,endpoint,payload=None):
+            nonlocal old,reads
+            if method=='PATCH' and endpoint=='pulls/7':old=copy.deepcopy(self.api.pr)
+            if method=='GET' and endpoint=='pulls/7' and old is not None:
+                reads+=1
+                if reads<4:return copy.deepcopy(old)
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=lag),patch('do_again.supervisor.github.time.sleep'):
+            self.publish()
+        self.assertEqual(sum(m=='PATCH' and e=='pulls/7' for m,e,p in self.api.effects),1)
 
     def test_lost_pr_response_is_uncertain_and_readback_proves_existing_effect(self):
         self.api.lose_pr_response=True
