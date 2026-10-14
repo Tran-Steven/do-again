@@ -229,7 +229,7 @@ def wait_for_supervisor_readiness(config):
     original cutover journal open for administrator reconciliation.
     """
     expected={'source_sha':config['source_sha'],
-              'projects':[{'key':p['key'],'source_sha':p['source_sha']}
+              'projects':[{'key':p['key'],'source_sha':config.get('native_head_checkpoints',{}).get(p['key'],{}).get('commit',p['source_sha'])}
                           for p in config['projects']]}
     result=subprocess.run(
         [config['python'],'-I','-S','-B','-c',_READINESS_CLIENT,
@@ -703,6 +703,66 @@ def recovery_candidate(source_sha):
     return candidate
 
 
+def complete_selected_runtime(source_sha):
+    """Explicitly reconcile readiness after a completed package selection.
+
+    No package, source, service or effect is replayed. Retain the original
+    installation ticket before marking only this verified transition complete.
+    """
+    if sys.platform!='darwin' or os.geteuid()!=0 or not re.fullmatch('[0-9a-f]{40}',source_sha):
+        raise RuntimeError('exact source and administrator authentication required')
+    current=ROOT/'current';verify_stage(current)
+    config=json.loads((current/'config.json').read_text())
+    path=ROOT/'state/installation.json'
+    info=path.lstat()
+    if path.is_symlink() or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:
+        raise RuntimeError('installation recovery ticket is untrusted')
+    original=path.read_bytes();journal=json.loads(original)
+    transition=journal.get('runtime_transition',{})
+    if (config.get('source_sha')!=source_sha or config.get('production_ready') is not False
+            or config.get('recovery_contract')!=RECOVERY_CONTRACT
+            or transition.get('phase')!='runtime_selected' or transition.get('to_source')!=source_sha
+            or transition.get('from_source')!=journal.get('source_sha')):
+        raise RuntimeError('selected runtime recovery identity or phase differs')
+    retained=Path(transition.get('retained_path',''))
+    if retained.parent!=ROOT or not retained.name.startswith('previous-'):
+        raise RuntimeError('retained runtime recovery path differs')
+    if verify_stage(retained)['source_sha']!=transition['from_source']:
+        raise RuntimeError('retained runtime recovery source differs')
+    validate_project_scope(config,json.loads((retained/'config.json').read_text()))
+    sys.path.insert(0,str(current/'package'))
+    from do_again.supervisor.authority import AuthorityRegistry
+    from do_again.supervisor.native_checkpoint import verify_checkpoints
+    registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
+    import fcntl
+    with ExitStack() as fences:
+        for project in sorted(config['projects'],key=lambda p:p['key']):
+            lock=ROOT/'state'/project['key']/'admission.lock'
+            if lock.is_symlink() or lock.stat().st_uid!=0 or lock.stat().st_mode&0o077:
+                raise RuntimeError('runtime recovery admission fence is untrusted')
+            file=fences.enter_context(lock.open('a'));fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if path.read_bytes()!=original:raise RuntimeError('runtime recovery ticket changed')
+        for project in config['projects']:
+            if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+                raise RuntimeError('active project blocks runtime recovery')
+        from do_again.supervisor.macos_execution import MacOSProcesses
+        inventory=MacOSProcesses()
+        if any(inventory.owned(p['uid']) for p in config['projects']):
+            raise RuntimeError('dedicated process blocks runtime recovery')
+        verify_worker_quiescence(config)
+        verify_checkpoints(config,config)
+        wait_for_supervisor_readiness(config)
+        backup=path.with_name('installation-before-readiness-'+hashlib.sha256(original).hexdigest()+'.json')
+        with backup.open('xb') as stream:stream.write(original);stream.flush();os.fsync(stream.fileno())
+        sync_directory(backup.parent)
+        journal['source_sha']=source_sha;journal['status']='installed_maintenance'
+        journal['runtime_transition'].update(phase='complete',readiness_recovery={
+            'source_sha':source_sha,'original_ticket_sha256':hashlib.sha256(original).hexdigest(),
+            'authenticated_maintenance_status':True,'effects_replayed':False})
+        atomic(path,journal)
+    print('SUPERVISOR_SELECTED_RUNTIME_VERIFIED')
+
+
 def install(stage, *, recovery=False, classify_canary_partial=False, partial_expected=None):
     if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
     os.umask(0o077)
@@ -907,19 +967,24 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
 if __name__=='__main__':
     parser=argparse.ArgumentParser();choice=parser.add_mutually_exclusive_group(required=True)
     choice.add_argument('--stage',type=Path);choice.add_argument('--recover-source')
+    choice.add_argument('--complete-selected-source')
     parser.add_argument('--classify-canary-partial-publication',action='store_true')
     parser.add_argument('--partial-disposition-source')
     parser.add_argument('--partial-disposition-nonce')
     args=parser.parse_args()
     if args.recover_source and args.classify_canary_partial_publication:
         parser.error('partial disposition is separate from runtime rollback')
+    if args.complete_selected_source and args.classify_canary_partial_publication:
+        parser.error('selected readiness recovery is separate from partial disposition')
     if args.classify_canary_partial_publication:
         if (not re.fullmatch('[0-9a-f]{40}',args.partial_disposition_source or '')
                 or not re.fullmatch('[0-9a-f]{24}',args.partial_disposition_nonce or '')):
             parser.error('partial disposition requires the exact approved installed source and nonce')
     elif args.partial_disposition_source or args.partial_disposition_nonce:
         parser.error('partial disposition identity requires explicit authorization')
-    if args.recover_source:
+    if args.complete_selected_source:
+        complete_selected_runtime(args.complete_selected_source)
+    elif args.recover_source:
         if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
         install(recovery_candidate(args.recover_source),recovery=True)
     else:install(args.stage.resolve(),classify_canary_partial=args.classify_canary_partial_publication,

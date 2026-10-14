@@ -169,6 +169,18 @@ else:
         self.assertIn("'operation':'status'",script)
         self.assertNotIn("'operation':'execute'",script)
 
+    def test_readiness_uses_retained_tested_head_without_changing_snapshot_pin(self):
+        config={'python':'/sealed/python3','source_sha':'a'*40,
+                'operator_uid':501,'operator_gid':20,'operator_home':'/operator',
+                'projects':[{'key':'b'*64,'source_sha':'c'*40}],
+                'native_head_checkpoints':{'b'*64:{'commit':'d'*40}}}
+        with patch.object(self.module.subprocess,'run',return_value=Mock(
+                returncode=0,stdout='SUPERVISOR_AUTHENTICATED_READY\n')) as check:
+            self.module.wait_for_supervisor_readiness(config)
+        expected=json.loads(check.call_args.args[0][-1])
+        self.assertEqual(expected['projects'],[{'key':'b'*64,'source_sha':'d'*40}])
+        self.assertEqual(config['projects'][0]['source_sha'],'c'*40)
+
     def worker_quiescence_fixture(self):
         from do_again.supervisor.macos_execution import ExecutionBlocked
         key='c'*64
