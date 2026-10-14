@@ -39,6 +39,18 @@ def publish_tested_baseline(broker, packet: dict) -> dict:
              'Exact native-tested commit: '+str(packet['expected_head'])),maintenance_baseline=True)
 
 
+def publish_tested_checkpoint(broker,packet):
+    """Fresh operator-authorized publication; never completes an old task."""
+    if set(packet)!={'operation','request_id','expected_head','expected_epoch','request_fingerprint'} or packet['operation']!='publish_tested_checkpoint':
+        raise ExecutionBlocked('checkpoint publication accepts exact identity only')
+    return publish_via_broker(broker,dict(packet,operation='git_publish',
+        title='Review native-tested development checkpoint',
+        body='AI-authored edits retained after a publication failure. Fresh, separately authorized draft publication; '
+             'the original request remains uncompleted without replay or acknowledgment. '
+             'No application submissions, deployment or automatic merge. Exact native-tested commit: '+str(packet['expected_head'])),
+        maintenance_checkpoint=True)
+
+
 def require_tested_baseline(broker, packet):
     from .candidate_transaction import KIND
     from .native_checkpoint import verify_checkpoints
@@ -56,7 +68,7 @@ def require_tested_baseline(broker, packet):
     return claim
 
 
-def publish_via_broker(broker, packet: dict, *, maintenance_baseline=False) -> dict:
+def publish_via_broker(broker, packet: dict, *, maintenance_baseline=False, maintenance_checkpoint=False) -> dict:
     from .live_canary import effect_authorized
     from .macos_server import verify_installation, worktree_authority
     if sys.platform != 'darwin' or os.geteuid() != 0:
@@ -76,13 +88,16 @@ def publish_via_broker(broker, packet: dict, *, maintenance_baseline=False) -> d
     fingerprint = hashlib.sha256(canonical_json(packet)).hexdigest()
     with broker.lock:
         verify_installation(broker.config)
-        if maintenance_baseline:
-            require_tested_baseline(broker,packet)
+        if maintenance_baseline or maintenance_checkpoint:
+            from .native_checkpoint import STAGED_KIND
+            claim=require_tested_baseline(broker,packet)
+            if bool(claim.get('kind')==STAGED_KIND)!=bool(maintenance_checkpoint):
+                raise ExecutionBlocked('publication classification differs from native checkpoint kind')
         def gate():
             status = broker.registry.status(broker.project.repo)
             branch = 'do-again/task-' + hashlib.sha256((broker.project.key+':'+str(status.get('goal_revision'))).encode()).hexdigest()[:20]
             authority = worktree_authority(broker.project.worktree)
-            if (status['intent']!=('maintenance' if maintenance_baseline else 'active') or status['epoch']!=packet['expected_epoch']
+            if (status['intent']!=('maintenance' if maintenance_baseline or maintenance_checkpoint else 'active') or status['epoch']!=packet['expected_epoch']
                     or not status.get('goal_revision') or not effect_authorized(broker)
                     or not broker._verified() or authority != {'repo_head':packet['expected_head'],'repo_branch':branch}):
                 raise ExecutionBlocked('authority or broker-owned branch blocks publication')
@@ -98,18 +113,19 @@ def publish_via_broker(broker, packet: dict, *, maintenance_baseline=False) -> d
                             'branch':branch,'source_sha':broker.config['source_sha'],
                             'title':packet['title'],'body':packet['body'],
                             'request_fingerprint':packet['request_fingerprint'],
-                            'classification':'operator_approved_tested_baseline' if maintenance_baseline else 'development_publication'})
-        root = EXECUTION_ROOT / broker.project.key / 'requests' / packet['request_id']
-        scratch, cache = root/'scratch',root/'cache'
-        for path in (scratch,cache):
-            path.mkdir(parents=True,mode=0o700);os.chown(path,broker.project.uid,broker.project.gid)
-        for path in (root,root.parent):path.chmod(0o711)
-        @contextmanager
-        def admission():
-            with broker.admission():
-                gate()
-                yield
+                            'classification':('operator_approved_tested_checkpoint' if maintenance_checkpoint else
+                                              'operator_approved_tested_baseline' if maintenance_baseline else 'development_publication')})
         try:
+            root = EXECUTION_ROOT / broker.project.key / 'requests' / packet['request_id']
+            scratch, cache = root/'scratch',root/'cache'
+            for path in (scratch,cache):
+                path.mkdir(parents=True,mode=0o700);os.chown(path,broker.project.uid,broker.project.gid)
+            for path in (root,root.parent):path.chmod(0o711)
+            @contextmanager
+            def admission():
+                with broker.admission():
+                    gate()
+                    yield
             code = ('import sys;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
                     'from do_again.supervisor.git_export import export_commit;from pathlib import Path;import json;'
                     'print(json.dumps(export_commit(Path(sys.argv[1]),Path(sys.argv[2]),sys.argv[3])))')
@@ -152,6 +168,13 @@ def reconcile_publication(broker, packet: dict) -> dict:
         if intent is None or intent.get('operation')!='git_publish':
             raise ExecutionBlocked('original publication intent is unavailable')
         if packet['request_id'] not in pending:
+            from .publication_quarantine import has_quarantine
+            import sqlite3
+            from contextlib import closing
+            with closing(sqlite3.connect(broker.ledger.path.as_uri()+'?mode=ro',uri=True)) as db:
+                quarantined=has_quarantine(db,broker.project.key,packet['request_id'])
+            if quarantined:
+                return {'state':'quarantined_unresolved','replay':False,'terminal_success':False}
             return {'state':'terminal','replay':False}
         configured=next(p for p in broker.config['projects'] if p['key']==broker.project.key)
         if configured.get('github_repository')!=intent['repository']:

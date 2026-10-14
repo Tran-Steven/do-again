@@ -692,6 +692,30 @@ else:
                     with self.module.preview_cutover(config,registry,live):self.fail('unsafe cutover admitted')
             run.assert_not_called()
 
+    def test_preview_cutover_rejects_orphan_quarantine_in_unknown_project(self):
+        import sqlite3
+        from contextlib import closing
+        from do_again.supervisor.macos_execution import ExecutionLedger,ExecutionBlocked
+        from do_again.supervisor.publication_quarantine import append_quarantine
+        config={'production_ready':False,'projects':[{'repo':'/synthetic','key':'configured','uid':401,
+            'gid':401,'account':'_doagain_da','worktree':'/synthetic/work','source_sha':'approved'}]}
+        (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))
+        (self.root/'state/configured').mkdir(parents=True)
+        path=self.root/'authority.sqlite';ledger=ExecutionLedger(path)
+        intent={'operation':'git_publish','source_sha':'b'*40,'request_fingerprint':'c'*64}
+        ledger.reserve('unknown-orphan-project','original-publish-1','a'*64,intent=intent)
+        with closing(sqlite3.connect(path)) as db:
+            append_quarantine(db,'unknown-orphan-project','original-publish-1',expected_intent=intent,
+                approval_reference='disposable operator fixture')
+            db.execute("DELETE FROM execution WHERE project='unknown-orphan-project'");db.commit()
+        registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'), \
+             patch.object(self.module,'validate_project_scope',return_value=False),patch.object(self.module,'run') as run:
+            for live in (True,False):
+                with self.subTest(supervisor_running=live),self.assertRaises(ExecutionBlocked):
+                    with self.module.preview_cutover(config,registry,live):self.fail('orphan audit was admitted')
+            run.assert_not_called()
+
     def test_worker_cutover_requires_absence_and_preserves_ambiguous_deployment(self):
         config={'operator_uid':501,'operator_gid':20,'operator_home':'/synthetic',
                 'projects':[{'key':'a'*64}]}

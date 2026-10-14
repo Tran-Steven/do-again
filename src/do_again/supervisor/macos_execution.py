@@ -256,12 +256,27 @@ class ExecutionLedger:
 
     def pending(self, project: str) -> list[dict[str, str]]:
         with closing(sqlite3.connect(self.path)) as db:
-            rows = db.execute("SELECT request,fingerprint FROM execution WHERE project=? AND state='started'",
-                              (project,)).fetchall()
+            from .publication_quarantine import pending_rows
+            rows = pending_rows(db,project)
         return [{'request_id':row[0],'fingerprint':row[1],'state':'started'} for row in rows]
+
+    def quarantined_publications(self, project: str) -> list[dict]:
+        from .publication_quarantine import TABLE,pending_rows
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            pending_rows(db,project)  # Refuse any audit whose original changed.
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone():return []
+            rows=db.execute('SELECT request,source_sha,task_fingerprint,approval_reference FROM publication_quarantine '
+                'WHERE project=? ORDER BY request',(project,)).fetchall()
+        return [{'request_id':rid,'source_sha':source,'request_fingerprint':fp,'approval_reference':approval,
+                 'state':'quarantined_unresolved','original_state':'started','terminal_success':False,'replay_permitted':False}
+                for rid,source,fp,approval in rows]
 
     def lookup(self, project: str, request: str, fingerprint: str) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db:
+            from .publication_quarantine import pending_rows,has_quarantine
+            pending_rows(db,project)
+            if has_quarantine(db,project,request):
+                raise ExecutionBlocked('quarantined publication cannot be completed or replayed')
             row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
                              (project,request)).fetchone()
         if row is None:
@@ -277,6 +292,8 @@ class ExecutionLedger:
         if not isinstance(original_fingerprint,str) or not re.fullmatch('[0-9a-f]{64}',original_fingerprint):
             raise ExecutionBlocked('invalid original request fingerprint')
         with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            from .publication_quarantine import pending_rows
+            pending_rows(db,project)
             row=db.execute('SELECT e.state,e.result,i.payload FROM execution e '
                 'LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request '
                 'WHERE e.project=? AND e.request=?',(project,request)).fetchone()
@@ -300,6 +317,10 @@ class ExecutionLedger:
                 parent_request: str | None = None) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')
+            from .publication_quarantine import pending_rows,has_quarantine
+            pending_rows(db,project)
+            if has_quarantine(db,project,request):
+                raise ExecutionBlocked('quarantined publication cannot be completed or replayed')
             row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
                              (project, request)).fetchone()
             if row:
@@ -308,7 +329,8 @@ class ExecutionLedger:
                 if row[1] == 'terminal':
                     return json.loads(row[2])
                 raise ExecutionBlocked('ambiguous started execution cannot replay')
-            pending = db.execute("SELECT request FROM execution WHERE project=? AND state='started'", (project,)).fetchall()
+            from .publication_quarantine import pending_rows
+            pending = [(rid,) for rid,fp in pending_rows(db,project)]
             if parent_request is not None:
                 parent = db.execute('SELECT payload FROM capability_intent WHERE project=? AND request=?',
                                     (project,parent_request)).fetchone()
@@ -335,6 +357,11 @@ class ExecutionLedger:
 
     def finish(self, project: str, request: str, result: dict[str, Any]) -> None:
         with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            from .publication_quarantine import has_quarantine,pending_rows
+            pending_rows(db,project)
+            if has_quarantine(db,project,request):
+                raise ExecutionBlocked('quarantined publication cannot be completed or replayed')
             db.execute('UPDATE execution SET state=?,result=? WHERE project=? AND request=? AND state=?',
                        ('terminal', json.dumps(result), project, request, 'started'))
 

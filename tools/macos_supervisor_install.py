@@ -571,6 +571,24 @@ def verify_worker_quiescence(config, *, reconcile=True):
 
 
 @contextmanager
+def installation_fences(config):
+    """Observe and lock existing protected admission files without creating them."""
+    import fcntl
+    from do_again.supervisor.macos_execution import private_root_file
+    with ExitStack() as stack:
+        for project in sorted(config['projects'],key=lambda p:p['key']):
+            path=ROOT/'state'/project['key']/'admission.lock'
+            private_root_file(path)
+            descriptor=os.open(path,os.O_RDONLY | os.O_NOFOLLOW)
+            stream=stack.enter_context(os.fdopen(descriptor,'rb'))
+            info=os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:
+                raise RuntimeError('publication recovery admission fence is untrusted')
+            fcntl.flock(stream.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
+@contextmanager
 def preview_cutover(config, registry, live):
     """Upgrade only this sealed, maintenance-only helper under admission fences.
 
@@ -602,9 +620,15 @@ def preview_cutover(config, registry, live):
                     raise
                 if status['intent']=='active':
                     raise RuntimeError('authority admits execution; cutover deferred')
-            with sqlite3.connect(registry.path) as db:
-                if db.execute("SELECT 1 FROM execution WHERE state='started' LIMIT 1").fetchone():
-                    raise RuntimeError('ambiguous execution blocks cutover')
+            from do_again.supervisor.macos_execution import ExecutionLedger
+            ledger=ExecutionLedger.__new__(ExecutionLedger);ledger.path=Path(registry.path)
+            with closing(sqlite3.connect(registry.path)) as db:
+                projects={row[0] for row in db.execute('SELECT DISTINCT project FROM execution')}
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='publication_quarantine'").fetchone():
+                    projects.update(row[0] for row in db.execute('SELECT DISTINCT project FROM publication_quarantine'))
+                projects.update(p['key'] for p in config['projects'])
+            if any(ledger.pending(project) for project in projects):
+                raise RuntimeError('ambiguous execution blocks cutover')
             from do_again.supervisor.macos_execution import MacOSProcesses
             inventory=MacOSProcesses()
             if any(inventory.owned(p['uid']) for p in config['projects']):

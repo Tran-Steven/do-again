@@ -334,7 +334,7 @@ class NativeControllerEffects:
             broker.ledger.finish(broker.project.key,sid,result);return result
         if stage=='publication':
             # Recheck current source after test and before existing native Git export.
-            manifest=self.manifest(sid,head);self.measure(head,manifest)
+            manifest=self.manifest(sid+'-inspection',head);self.measure(head,manifest)
             return broker._dispatch({'operation':'git_publish','request_id':sid,'expected_head':head,
                 'expected_epoch':epoch,'title':'Do Again tested offline proposal '+request['request_id'],
                 'body':'Offline development only; exact head '+head+'. Native test evidence recorded in the control receipt.',
