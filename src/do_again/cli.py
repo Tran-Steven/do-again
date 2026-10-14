@@ -34,7 +34,8 @@ from .browser import (
 from .browser import cdp
 from .platforms.detect import detect_platform
 from .browser.runtime import send_message, use_background_fallback, _find_chatgpt_target, _assistant_snapshot
-from .core.schema import REQUEST_ID_RE, request_fingerprint
+from .core.schema import OperatorError, REQUEST_ID_RE, request_fingerprint
+from .service.isolated_cycle import FIXED_TEST_SUITES
 from .service.rollout import staged_upgrade
 from .service.session_summary import build_summary, render_summary, save_summary, session_start
 from .service.runtime import (
@@ -340,6 +341,13 @@ def setup_project(
 ) -> int:
     try:
         repo = find_repo(path)
+        if install_background:
+            # Never log in, create chats, mutate project configuration or
+            # claim setup success when the shipped background executor is
+            # intentionally disabled. This is a readiness check, not a
+            # fallback to the unsafe legacy runner.
+            from .supervisor.admission import reject_legacy_runtime
+            reject_legacy_runtime(repo)
         init_project(str(repo))
         _set_browser_enabled(repo, browser)
         layout = runtime_layout(repo)
@@ -373,6 +381,7 @@ def setup_project(
         ServiceError,
         BrowserError,
         BrowserAuthRequired,
+        OperatorError,
         subprocess.TimeoutExpired,
     ) as exc:
         print(f"do-again: setup failed: {exc}", file=sys.stderr)
@@ -997,7 +1006,15 @@ def list_projects() -> int:
                 record = project_record(repo)
                 shared = browser_status(verify_session=False)
                 if record.get("chat_url") and shared.get("running"):
-                    browser = str(shared.get("mode") or "running")
+                    # A running, authenticated browser is NOT proof that this
+                    # project's bound conversation exists. This check is
+                    # read-only and never creates a tab or sends a message.
+                    try:
+                        target = _find_chatgpt_target(
+                            int(shared["port"]), str(record["chat_url"]))
+                        browser = str(shared.get("mode") or "running") if target else "tab-missing"
+                    except (BrowserError, KeyError, OSError, TypeError, ValueError):
+                        browser = "unavailable"
                 elif record.get("chat_url"):
                     browser = "stopped"
                 else:
@@ -1403,9 +1420,296 @@ def main() -> int:
     )
     browser_login.add_argument("--skip-test", action="store_true")
 
+    cycle_parser = sub.add_parser(
+        "isolated-cycle",
+        help="Explicit offline patch+test experiment (not autonomous planning)",
+    )
+    cycle_parser.add_argument("manifest", type=Path)
+    cycle_parser.add_argument("--repo", type=Path, default=Path("."))
+    cycle_parser.add_argument("--image", required=True,
+                              help="Preinstalled container image pinned to @sha256 digest")
+    cycle_parser.add_argument("--output", type=Path, required=True)
+
+    worker_parser = sub.add_parser(
+        "isolated-worker",
+        help="Run isolated patch-only requests from a dedicated Git control branch",
+    )
+    worker_parser.add_argument("--repo", type=Path, required=True)
+    worker_parser.add_argument("--control-worktree", type=Path, required=True)
+    worker_parser.add_argument("--state-dir", type=Path, required=True)
+    worker_parser.add_argument("--branch", required=True)
+    worker_parser.add_argument("--image", required=True)
+    worker_parser.add_argument("--once", action="store_true",
+                               help="Run one queue scan and exit (default: keep polling)")
+
+    plan_parser = sub.add_parser(
+        "isolated-plan", help="Plan one fenced patch in the existing ChatGPT project conversation",
+    )
+    plan_parser.add_argument("--repo", type=Path, required=True)
+    plan_parser.add_argument("--control-worktree", type=Path, required=True)
+    plan_parser.add_argument("--state-dir", type=Path, required=True)
+    plan_parser.add_argument("--branch", required=True)
+    plan_parser.add_argument("--image", required=True)
+    plan_parser.add_argument("--goal", required=True)
+    plan_parser.add_argument("--file", action="append", required=True,
+                             help="Explicit approved source path (1-5)")
+    plan_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
+
+    receipt_parser = sub.add_parser(
+        "isolated-report", help="Deliver one verified Git execution receipt to its bound ChatGPT conversation",
+    )
+    receipt_parser.add_argument("--repo", type=Path, required=True)
+    receipt_parser.add_argument("--control-worktree", type=Path, required=True)
+    receipt_parser.add_argument("--state-dir", type=Path, required=True)
+    receipt_parser.add_argument("--branch", required=True)
+    receipt_parser.add_argument("--image", required=True)
+    receipt_parser.add_argument("--request-id", required=True)
+
+    once_parser = sub.add_parser(
+        "isolated-once", help="Run one bounded ChatGPT plan, isolated execution, and receipt acknowledgment",
+    )
+    once_parser.add_argument("--repo", type=Path, required=True)
+    once_parser.add_argument("--control-worktree", type=Path, required=True)
+    once_parser.add_argument("--state-dir", type=Path, required=True)
+    once_parser.add_argument("--branch", required=True)
+    once_parser.add_argument("--image", required=True)
+    once_parser.add_argument("--goal", required=True)
+    once_parser.add_argument("--file", action="append", required=True)
+    once_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
+
+    sandbox_parser = sub.add_parser(
+        "isolated-sandbox", help="Create a private isolated source snapshot without changing the original",
+    )
+    sandbox_parser.add_argument("--source", type=Path, required=True)
+    sandbox_parser.add_argument("--state-dir", type=Path, required=True)
+
+    advance_parser = sub.add_parser(
+        "isolated-advance", help="Commit an acknowledged tested patch only into the private snapshot",
+    )
+    advance_parser.add_argument("--repo", type=Path, required=True)
+    advance_parser.add_argument("--control-worktree", type=Path, required=True)
+    advance_parser.add_argument("--state-dir", type=Path, required=True)
+    advance_parser.add_argument("--branch", required=True)
+    advance_parser.add_argument("--image", required=True)
+    advance_parser.add_argument("--request-id", required=True)
+
+    auto_parser = sub.add_parser(
+        "isolated-auto", help="Run 1-10 bounded autonomous coding cycles in a private source snapshot",
+    )
+    auto_parser.add_argument("--source", type=Path, required=True)
+    auto_parser.add_argument("--control-worktree", type=Path, required=True)
+    auto_parser.add_argument("--state-dir", type=Path, required=True)
+    auto_parser.add_argument("--branch", required=True)
+    auto_parser.add_argument("--image", required=True)
+    auto_parser.add_argument("--goal", required=True)
+    auto_parser.add_argument("--file", action="append", required=True)
+    auto_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
+    auto_parser.add_argument("--cycles", type=int, default=3)
+
+    enroll_parser = sub.add_parser(
+        "isolated-enroll", help="Prepare a separate, restricted Git control branch and private project config",
+    )
+    enroll_parser.add_argument("--source", type=Path, default=Path("."))
+    enroll_parser.add_argument("--image", required=True)
+    enroll_parser.add_argument("--goal", required=True)
+    enroll_parser.add_argument("--file", action="append", required=True)
+    enroll_parser.add_argument("--test-suite", choices=tuple(FIXED_TEST_SUITES), required=True)
+    enroll_parser.add_argument("--cycles", type=int, default=10)
+
+    enrolled_run_parser = sub.add_parser(
+        "isolated-run-enrolled", help="Run the bounded isolated coding workflow from private enrollment",
+    )
+    enrolled_run_parser.add_argument("--source", type=Path, default=Path("."))
+
+    enrolled_status_parser = sub.add_parser(
+        "isolated-enrollment-status", help="Inspect private isolated enrollment without sending ChatGPT messages",
+    )
+    enrolled_status_parser.add_argument("--source", type=Path, default=Path("."))
+
+    for service_action in (
+        "isolated-install", "isolated-start", "isolated-stop",
+        "isolated-service-status", "isolated-service-run",
+    ):
+        isolated_service_parser = sub.add_parser(service_action)
+        isolated_service_parser.add_argument(
+            "--source", type=Path, default=Path("."))
+
     args = parser.parse_args()
     if args.command is None:
         parser.print_help()
+        return 0
+    if args.command == "isolated-report":
+        from .service.isolated_receipts import report_isolated_receipt
+        try:
+            result = report_isolated_receipt(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                request_id=args.request_id)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated receipt blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-once":
+        from .service.isolated_flow import run_isolated_once
+        command = list(FIXED_TEST_SUITES[args.test_suite])
+        try:
+            result = run_isolated_once(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                goal=args.goal, files=args.file, test_command=command)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated cycle blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["state"] == "completed" else 2
+    if args.command == "isolated-sandbox":
+        from .service.isolated_sandbox import create_isolated_sandbox
+        try:
+            result = create_isolated_sandbox(
+                source_repo=args.source, state_dir=args.state_dir)
+        except (OperatorError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated sandbox blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-advance":
+        from .service.isolated_worker import create_isolated_worker
+        from .service.isolated_sandbox import advance_isolated_sandbox
+        try:
+            agent = create_isolated_worker(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image)
+            result = advance_isolated_sandbox(
+                agent, request_id=args.request_id)
+        except (OperatorError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated advance blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-auto":
+        from .service.isolated_auto import run_isolated_auto
+        command = list(FIXED_TEST_SUITES[args.test_suite])
+        try:
+            result = run_isolated_auto(
+                source_repo=args.source, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                goal=args.goal, files=args.file, test_command=command,
+                cycles=args.cycles)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated auto blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["state"] in {"completed_bounded_cycles", "model_declared_complete"} else 2
+    if args.command == "isolated-enroll":
+        from .service.isolated_enrollment import enroll_isolated_project
+        try:
+            result = enroll_isolated_project(
+                source_repo=args.source, image=args.image, goal=args.goal,
+                files=args.file, test_suite=args.test_suite, cycles=args.cycles)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated enrollment blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-run-enrolled":
+        from .service.isolated_enrollment import run_enrolled_isolated
+        try:
+            result = run_enrolled_isolated(args.source)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated run blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result["state"] in {
+            "completed_bounded_cycles", "model_declared_complete",
+        } else 2
+    if args.command == "isolated-enrollment-status":
+        from .service.isolated_enrollment import enrolled_config
+        try:
+            layout, config = enrolled_config(args.source)
+            enrollment_state = {
+                "state": "configured",
+                "source_repo": str(layout["source_repo"]),
+                "branch": config["branch"],
+                "control_worktree": config["control_worktree"],
+                "state_dir": config["state_dir"],
+                "cycles": config["cycles"],
+                "automatic_merge": False,
+                "production_deployed": False,
+            }
+            progress = layout["state_dir"] / "isolated-auto.json"
+            if progress.is_file() and not progress.is_symlink():
+                enrollment_state["progress"] = json.loads(progress.read_text(encoding="utf-8"))
+        except (OperatorError, OSError, ValueError) as exc:
+            print(f"do-again: isolated status blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(enrollment_state, indent=2, sort_keys=True))
+        return 0
+    if args.command in {
+        "isolated-install", "isolated-start", "isolated-stop",
+        "isolated-service-status", "isolated-service-run",
+    }:
+        from .service.isolated_launchd import (
+            install_isolated_service, start_isolated_service,
+            stop_isolated_service, isolated_service_status,
+            serve_isolated_enrollment,
+        )
+        functions = {
+            "isolated-install": install_isolated_service,
+            "isolated-start": start_isolated_service,
+            "isolated-stop": stop_isolated_service,
+            "isolated-service-status": isolated_service_status,
+            "isolated-service-run": serve_isolated_enrollment,
+        }
+        try:
+            value = functions[args.command](args.source)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated service blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(value, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-plan":
+        from .service.isolated_planner import plan_isolated_request
+        command = list(FIXED_TEST_SUITES[args.test_suite])
+        try:
+            result = plan_isolated_request(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image,
+                goal=args.goal, files=args.file, test_command=command)
+        except (OperatorError, BrowserError, OSError, ValueError,
+                subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated plan blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.command == "isolated-worker":
+        from .service.isolated_worker import create_isolated_worker
+        try:
+            agent = create_isolated_worker(
+                repo=args.repo, control_worktree=args.control_worktree,
+                state_dir=args.state_dir, branch=args.branch, image=args.image)
+            return agent.run(once=args.once)
+        except (OSError, ValueError, OperatorError, subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated worker blocked: {exc}", file=sys.stderr)
+            return 1
+    if args.command == "isolated-cycle":
+        from .service.isolated_cycle import run_isolated_cycle
+        try:
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            result = run_isolated_cycle(
+                args.repo, manifest, image=args.image, output_dir=args.output)
+        except (OSError, ValueError, OperatorError, subprocess.SubprocessError) as exc:
+            print(f"do-again: isolated cycle blocked: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "doctor":
         return doctor(args.path, fix=args.fix)

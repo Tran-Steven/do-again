@@ -54,6 +54,27 @@ class CliOnboardingTests(unittest.TestCase):
         git(repo, "push", "-u", "origin", "main")
         return repo
 
+    def test_full_setup_rejects_unavailable_executor_without_mutations(self) -> None:
+        from do_again.core.schema import OperatorError
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = self.make_repo(Path(tmp))
+            errors = io.StringIO()
+            output = io.StringIO()
+            with patch("do_again.supervisor.admission.reject_legacy_runtime",
+                       side_effect=OperatorError("legacy execution disabled")) as admission, \
+                 patch("do_again.cli.setup_browser") as browser, \
+                 patch("do_again.cli.install_service") as install, \
+                 redirect_stderr(errors), redirect_stdout(output):
+                result = setup_project(str(repo), install_background=True, browser=True)
+            self.assertEqual(result, 1)
+            admission.assert_called_once_with(repo.resolve())
+            browser.assert_not_called()
+            install.assert_not_called()
+            self.assertFalse((repo / "do-again.toml").exists())
+            self.assertFalse((repo / "do-again-policy.json").exists())
+            self.assertIn("legacy execution disabled", errors.getvalue())
+            self.assertNotIn("SETUP_CONFIGURED", output.getvalue())
+
     def test_setup_no_service_is_one_command_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))
@@ -73,7 +94,7 @@ class CliOnboardingTests(unittest.TestCase):
     def test_setup_background_reports_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = self.make_repo(Path(tmp))
-            with patch(
+            with patch("do_again.supervisor.admission.reject_legacy_runtime"), patch(
                 "do_again.cli.install_service",
                 return_value={"installed": True, "running": True},
             ):
@@ -107,7 +128,7 @@ class CliOnboardingTests(unittest.TestCase):
             repo = self.make_repo(Path(tmp))
             error = io.StringIO()
             output = io.StringIO()
-            with patch("do_again.cli.install_service", return_value={"installed": True, "running": False}), redirect_stderr(error), redirect_stdout(output):
+            with patch("do_again.supervisor.admission.reject_legacy_runtime"), patch("do_again.cli.install_service", return_value={"installed": True, "running": False}), redirect_stderr(error), redirect_stdout(output):
                 rc = setup_project(str(repo), browser=False)
             self.assertEqual(rc, 1)
             self.assertNotIn("SETUP_OK", output.getvalue())
@@ -120,7 +141,7 @@ class CliOnboardingTests(unittest.TestCase):
             repo = self.make_repo(Path(tmp))
             error = io.StringIO()
             output = io.StringIO()
-            with patch("do_again.cli.setup_browser", return_value={"running": True}), patch("do_again.cli.ensure_project_chat", return_value={"chat_url": "https://chatgpt.com/c/project"}), patch("do_again.cli.install_service", return_value={"installed": True, "running": True}), patch("do_again.cli.ensure_browser_running", side_effect=BrowserError("browser failed after service restart")), redirect_stderr(error), redirect_stdout(output):
+            with patch("do_again.supervisor.admission.reject_legacy_runtime"), patch("do_again.cli.setup_browser", return_value={"running": True}), patch("do_again.cli.ensure_project_chat", return_value={"chat_url": "https://chatgpt.com/c/project"}), patch("do_again.cli.install_service", return_value={"installed": True, "running": True}), patch("do_again.cli.ensure_browser_running", side_effect=BrowserError("browser failed after service restart")), redirect_stderr(error), redirect_stdout(output):
                 rc = setup_project(str(repo), browser=True)
             self.assertEqual(rc, 1)
             self.assertNotIn("SETUP_OK", output.getvalue())
@@ -574,7 +595,11 @@ class CliOnboardingTests(unittest.TestCase):
                 ),
                 patch(
                     "do_again.cli.browser_status",
-                    return_value={"running": True, "mode": "headless"},
+                    return_value={"running": True, "mode": "headless", "port": 9223},
+                ),
+                patch(
+                    "do_again.cli._find_chatgpt_target",
+                    return_value=object(),
                 ),
                 redirect_stdout(output),
             ):

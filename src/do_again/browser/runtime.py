@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from functools import wraps
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..platforms.process import pid_alive
 from . import cdp
@@ -1101,7 +1101,7 @@ def send_message(
     *,
     timeout: float = 180.0,
     wait_for_response: bool = True,
-    before_dispatch: Any = None,
+    before_dispatch: Callable[[], None] | None = None,
     response_observer: Any = None,
 ) -> dict[str, Any]:
     _require_send_target_focus(target)

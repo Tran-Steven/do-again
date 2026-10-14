@@ -197,7 +197,8 @@ else:
             return value
         def root_fstat(fd):
             values=list(original_fstat(fd));values[4]=0;return os.stat_result(values)
-        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.os,'geteuid',return_value=0),\
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.sys,'platform','darwin'),\
+                patch.object(self.module.os,'geteuid',return_value=0),\
                 patch.object(Path,'lstat',owned),patch.object(self.module.os,'fstat',root_fstat),patch.object(self.module,'verify_stage',side_effect=lambda p:{
                     'source_sha':json.loads((p/'config.json').read_text())['source_sha']}),\
                 patch.object(self.module,'validate_project_scope'),patch.object(self.module,'verify_worker_quiescence'),\
