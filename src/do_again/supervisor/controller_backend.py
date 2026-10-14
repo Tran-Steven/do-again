@@ -146,10 +146,13 @@ def planning_goal(goal, profile=None):
         value['execution_contract'] = {
             'editable_paths': profile['allowed_paths'],
             'immutable_test_files': profile['test_files'],
+            'immutable_test_file_hash_algorithm': 'git-blob-sha1',
             'mandatory_test_cases': profile['test_cases'],
             'language': 'python',
             'instructions': 'Return a Python script that edits only editable_paths. '
-                'Never modify immutable tests. Create missing editable regression files. '
+                'Never modify immutable tests. Their hashes are Git blob SHA-1 identities, '
+                'not SHA-1 or SHA-256 of raw file bytes; the broker verifies them. '
+                'Create missing editable regression files. '
                 'The isolated worker runs every mandatory test independently before committing. '
                 'Use public fixtures only. No network, applications, deployments or merges.'}
     if profile is not None and profile.get('kind') == 'native-development-local-v2':

@@ -16,7 +16,7 @@ from typing import Any
 
 from ..core.schema import OperatorError
 from .macos_execution import INSTALL_ROOT, EXECUTION_ROOT, private_root_file
-from .macos_client import broker_request
+from .macos_client import broker_request, BrokerUnavailable
 
 PROJECT_ACCOUNTS = {"do-again": "_doagain_da", "jobpipe": "_doagain_jp", "Sonary": "_doagain_so"}
 REQUIRED_ACCOUNTS = frozenset({"_doagain_da", "_doagain_jp"})
@@ -175,6 +175,19 @@ def read_admission_status(repo: Path) -> dict[str, Any]:
     return broker_request(repo, {'operation':'status'}) if pending else status
 
 
+def check_ongoing_admission(check):
+    """Temporary transport loss denies effects without pretending pause authority."""
+    from .authority import AuthorityDenied
+    try:
+        return check()
+    except BrokerUnavailable:
+        # Agent's polling loop may retry admission, never a mutation. Startup
+        # propagates nonzero so the guarded persistent service can restart.
+        raise
+    except OperatorError as exc:
+        raise AuthorityDenied(str(exc)) from exc
+
+
 def native_dual_sibling_statuses(config: dict, project: dict, own_status: dict) -> dict | None:
     """Gather other parents' authenticated broker status only under dual scope."""
     grant = config.get('development_scope')
@@ -270,8 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     # Daemon repeats admission before browser/Git effects. All model-selected
     # commands are routed through the authenticated broker executor.
     def admission_check():
-        from .authority import AuthorityDenied
-        try:
+        def check():
             current = read_admission_status(repo)
             validate_worker_context(args.project,config,current,policy,
                 installed_root=INSTALL_ROOT,module_path=Path(__file__),
@@ -279,8 +291,7 @@ def main(argv: list[str] | None = None) -> int:
                 sibling_statuses=native_dual_sibling_statuses(config,project,current))
             if any(current.get(k) != status.get(k) for k in ('epoch','goal_revision')):
                 raise OperatorError('worker admission epoch or goal changed')
-        except OperatorError as exc:
-            raise AuthorityDenied(str(exc)) from exc
+        return check_ongoing_admission(check)
     from ..core.control_transport import BrokerControlHistory
     transport=BrokerControlHistory(repo,control,status["epoch"])
     def browser_effect():

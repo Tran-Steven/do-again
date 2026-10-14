@@ -284,3 +284,73 @@ class BrowserAdmissionRecoveryTests(unittest.TestCase):
         with patch.object(worker,'broker_request',return_value=status) as rpc:
             self.assertEqual(worker.read_admission_status(Path('/trusted/do-again')),status)
             self.assertEqual([call.args[1]['operation'] for call in rpc.call_args_list],['status','status'])
+
+class OngoingAdmissionRecoveryTests(unittest.TestCase):
+    def test_transport_failure_preserves_type_and_authority_loss_stops(self):
+        from do_again.supervisor.immutable_worker import check_ongoing_admission
+        from do_again.supervisor.macos_client import BrokerUnavailable
+        from do_again.supervisor.authority import AuthorityDenied
+        for error,expected in [(BrokerUnavailable('temporary transport delay'),BrokerUnavailable),
+                               (OperatorError('epoch changed'),AuthorityDenied)]:
+            with self.subTest(error=type(error).__name__):
+                with self.assertRaises(expected):check_ongoing_admission(Mock(side_effect=error))
+        self.assertEqual(check_ongoing_admission(lambda:'authorized'),'authorized')
+
+    def test_worker_retries_admission_only_after_transport_delay(self):
+        from do_again.core.agent import Agent
+        from do_again.supervisor.macos_client import BrokerUnavailable
+        from do_again.supervisor.authority import AuthorityDenied
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            worker=object.__new__(Agent)
+            worker.ledger_dir=Path(tmp);worker.stop_requested=False;worker.poll_seconds=3
+            worker.publish_status=Mock();worker.request_paths=Mock(return_value=[])
+            worker.admission_check=Mock(side_effect=[None,BrokerUnavailable('temporary'),None])
+            def sync():worker.stop_requested=True
+            worker.sync=Mock(side_effect=sync)
+            with patch('do_again.core.agent.time.sleep') as sleep:
+                self.assertEqual(worker.run(),0)
+            self.assertEqual(worker.admission_check.call_count,3)
+            worker.sync.assert_called_once();self.assertEqual(sleep.call_count,2)
+            worker.stop_requested=False;worker.sync.reset_mock()
+            worker.admission_check=Mock(side_effect=[None,AuthorityDenied('paused')])
+            self.assertEqual(worker.run(),0);worker.sync.assert_not_called()
+            worker.admission_check=Mock(side_effect=BrokerUnavailable('startup unavailable'))
+            with self.assertRaises(BrokerUnavailable):worker.run()
+            worker.sync.assert_not_called()
+
+    def test_socket_timeout_does_not_claim_authority_loss(self):
+        from do_again.supervisor.macos_client import _request,BrokerUnavailable
+        connection=Mock();connection.recv.side_effect=TimeoutError('delayed broker')
+        manager=Mock();manager.__enter__=Mock(return_value=connection);manager.__exit__=Mock(return_value=False)
+        with patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
+             patch('do_again.supervisor.macos_client.peer_uid',return_value=0):
+            with self.assertRaises(BrokerUnavailable):_request(Path('/fixture.sock'),{'operation':'status'})
+        connection.sendall.assert_called_once()
+
+    def test_eof_and_partial_frame_closure_allow_admission_retry_only(self):
+        from do_again.supervisor.macos_client import _request,BrokerUnavailable
+        from do_again.supervisor.immutable_worker import check_ongoing_admission
+        for chunks in ([b''],[b'{"ok":',b'']):
+            with self.subTest(chunks=chunks):
+                connection=Mock();connection.recv.side_effect=chunks
+                manager=Mock();manager.__enter__=Mock(return_value=connection);manager.__exit__=Mock(return_value=False)
+                with patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
+                     patch('do_again.supervisor.macos_client.peer_uid',return_value=0):
+                    with self.assertRaises(BrokerUnavailable):
+                        check_ongoing_admission(lambda:_request(Path('/fixture.sock'),{'operation':'status'}))
+                connection.sendall.assert_called_once()
+
+    def test_malformed_and_oversized_authenticated_responses_still_stop(self):
+        from do_again.supervisor.macos_client import _request,MAX_OUTPUT
+        from do_again.supervisor.immutable_worker import check_ongoing_admission
+        from do_again.supervisor.authority import AuthorityDenied
+        for chunk in [b'invalid json\n',b'a'*(12*MAX_OUTPUT+65537)]:
+            with self.subTest(length=len(chunk)):
+                connection=Mock();connection.recv.return_value=chunk
+                manager=Mock();manager.__enter__=Mock(return_value=connection);manager.__exit__=Mock(return_value=False)
+                with patch('do_again.supervisor.macos_client.socket.socket',return_value=manager), \
+                     patch('do_again.supervisor.macos_client.peer_uid',return_value=0):
+                    with self.assertRaises(AuthorityDenied):
+                        check_ongoing_admission(lambda:_request(Path('/fixture.sock'),{'operation':'status'}))
+                connection.sendall.assert_called_once()

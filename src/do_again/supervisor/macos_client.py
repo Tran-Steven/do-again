@@ -7,6 +7,10 @@ from .macos_execution import ExecutionBlocked, MAX_PACKET, MAX_OUTPUT, SOCKET_RO
 from ..core.schema import canonical_json
 
 
+class BrokerUnavailable(ExecutionBlocked):
+    """Transport failed; it does not attest authority loss or effect outcome."""
+
+
 def broker_request(repo: Path, packet: dict) -> dict:
     """Project is selected by the trusted daemon's socket, never packet content."""
     path = SOCKET_ROOT / f'{project_identity(repo)[:24]}.sock'
@@ -39,12 +43,16 @@ def _request(path: Path, packet: dict) -> dict:
             data = bytearray()
             while b'\n' not in data:
                 part = connection.recv(65536)
-                if not part or len(data) + len(part) > 12 * MAX_OUTPUT + 65536:
-                    raise ExecutionBlocked('invalid or incomplete broker response')
+                if not part:
+                    raise BrokerUnavailable('broker connection closed before a complete response; execution remains blocked')
+                if len(data) + len(part) > 12 * MAX_OUTPUT + 65536:
+                    raise ExecutionBlocked('broker response exceeds size bound')
                 data.extend(part)
             response = json.loads(bytes(data).split(b'\n', 1)[0])
-        except (OSError, ValueError) as exc:
-            raise ExecutionBlocked('supervisor unavailable; execution remains blocked') from exc
+        except OSError as exc:
+            raise BrokerUnavailable('supervisor unavailable; execution remains blocked') from exc
+        except ValueError as exc:
+            raise ExecutionBlocked('invalid broker response; execution remains blocked') from exc
     if response.get('ok') is not True:
         raise ExecutionBlocked(response.get('error', 'supervisor refused execution'))
     return response['result']

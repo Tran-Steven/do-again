@@ -158,6 +158,8 @@ class OriginalReplyTests(unittest.TestCase):
         result=planning_goal(goal,profile)
         self.assertEqual(result['execution_contract']['editable_paths'],['code.py'])
         self.assertEqual(result['execution_contract']['immutable_test_files'],['immutable.py'])
+        self.assertEqual(result['execution_contract']['immutable_test_file_hash_algorithm'],'git-blob-sha1')
+        self.assertIn('not SHA-1 or SHA-256 of raw file bytes',result['execution_contract']['instructions'])
         self.assertNotIn('execution_contract',goal)
 
 class NativeLifecycleRecoveryTests(unittest.TestCase):
