@@ -82,19 +82,21 @@ class CandidateTransaction:
     def freeze(self):
         state=self._state()
         if 'candidate_manifest' in state:return self.measure()
-        manifest={k:dict(v) for k,v in self.manifest.items()};changed=[]
+        manifest={k:dict(v) for k,v in self.manifest.items()};changed=[];candidate_files={}
         for name,original in state['files'].items():
             data,info=self._read(name)
             if original is not None and (info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode))!=(original['uid'],original['gid'],original['mode']):
                 raise ExecutionBlocked('candidate source ownership or mode changed')
             blob=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
             mode='100755' if info.st_mode & 0o111 else '100644'
+            candidate_files[name]={'sha256':hashlib.sha256(data).hexdigest(),
+                'mode':stat.S_IMODE(info.st_mode),'uid':info.st_uid,'gid':info.st_gid}
             manifest[name]={'blob_sha':blob,'mode':mode}
             if manifest[name]!=self.manifest.get(name):changed.append(name)
         if not set(changed)&set(self.profile['implementation_paths']):
             raise ExecutionBlocked('candidate has no independently measured implementation change')
         measured=measure_committed_tree(self.root,commit=self.head,manifest=manifest,read_authority=self.read_authority)
-        state.update(candidate_manifest=manifest,candidate_measurement=measured,changed_paths=changed,state='frozen')
+        state.update(candidate_manifest=manifest,candidate_measurement=measured,candidate_files=candidate_files,changed_paths=changed,state='frozen')
         atomic_json(self.path,state);return measured
 
     def measure(self):
@@ -115,6 +117,26 @@ class CandidateTransaction:
     def rollback(self):
         state=self._state()
         if self.read_authority()!=self.head:raise ExecutionBlocked('candidate Git authority changed; no automatic rollback')
+        # Admission has drained the confined writer. Verify the entire tree and
+        # every target before touching any path; an unknown later edit is never
+        # evidence that this transaction owns the bytes being restored.
+        if 'candidate_manifest' in state:
+            self.measure()
+            expected=state.get('candidate_files')
+            if not isinstance(expected,dict) or set(expected)!=set(state['files']):
+                raise ExecutionBlocked('candidate recovery measurement absent; preserve for review')
+        else:
+            measured=measure_committed_tree(self.root,commit=self.head,manifest=self.manifest,read_authority=self.read_authority)
+            if measured!=state['before']:
+                raise ExecutionBlocked('unfrozen candidate recovery differs; preserve for review')
+            expected=state['files']
+        for name,entry in expected.items():
+            try:data,info=self._read(name)
+            except FileNotFoundError:
+                if entry is None:continue
+                raise ExecutionBlocked('candidate recovery target missing; preserve for review')
+            if entry is None or (hashlib.sha256(data).hexdigest(),stat.S_IMODE(info.st_mode),info.st_uid,info.st_gid)!=(entry['sha256'],entry['mode'],entry['uid'],entry['gid']):
+                raise ExecutionBlocked('candidate recovery target changed; preserve for review')
         for name,entry in state['files'].items():
             try:parent,leaf=self._parent(name)
             except FileNotFoundError:

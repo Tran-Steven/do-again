@@ -49,6 +49,22 @@ class CandidateTests(unittest.TestCase):
     def test_changed_git_authority_never_rolls_back(self):
         self.edit();self.txn.freeze();self.git('add','.');self.git('commit','-qm','Candidate')
         with self.assertRaisesRegex(ExecutionBlocked,'Git authority changed'):self.txn.rollback()
+    def test_later_approved_edit_blocks_recovery_without_touching_any_file(self):
+        self.edit();self.txn.freeze()
+        (self.repo/'code.py').write_text('independent later edit\n')
+        before={p.name:p.read_bytes() for p in self.repo.iterdir() if p.is_file()}
+        with self.assertRaises(ExecutionBlocked):self.txn.rollback()
+        self.assertEqual(before,{p.name:p.read_bytes() for p in self.repo.iterdir() if p.is_file()})
+    def test_later_outside_edit_blocks_recovery_before_any_restoration(self):
+        self.edit();self.txn.freeze()
+        (self.repo/'baseline.py').write_text('independent outside edit\n')
+        before={p.name:p.read_bytes() for p in self.repo.iterdir() if p.is_file()}
+        with self.assertRaises(ExecutionBlocked):self.txn.rollback()
+        self.assertEqual(before,{p.name:p.read_bytes() for p in self.repo.iterdir() if p.is_file()})
+    def test_later_permission_change_blocks_recovery(self):
+        self.edit();self.txn.freeze();(self.repo/'code.py').chmod(0o600)
+        with self.assertRaisesRegex(ExecutionBlocked,'target changed'):self.txn.rollback()
+        self.assertTrue((self.repo/'new_test.py').exists())
     def test_promoted_commit_must_match_tested_bytes(self):
         self.edit();tested=self.txn.freeze();self.git('add','.');self.git('commit','-qm','Tested candidate')
         head=self.git('rev-parse','HEAD');manifest=tree_manifest(Path('/usr/bin/git'),self.repo/'.git',head)
