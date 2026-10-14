@@ -123,7 +123,8 @@ class NativeControllerEffects:
                 'status=pytest.main(["-q","-p","no:cacheprovider","--strict-markers",sys.argv[1]],plugins=[observer]);'
                 'print("DO_AGAIN_NATIVE_TEST_COUNTS "+json.dumps(dict(counts,pytest_exit_code=int(status)),sort_keys=True));'
                 'sys.exit(0 if status==0 and counts["passed"]>0 and counts["skipped"]==0 else 1)')
-        result=self.capture(sid,[self.broker.config['python'],'-I','-S','-B','-c',code,case],60)
+        result=self.capture(sid,[self.broker.config['python'],'-I','-S','-B','-c',code,case],60,
+            **({'read_only_source':True} if self.profile.get('kind')=='native-development-autonomous-v1' else {}))
         if self.profile['test_runner']=='pytest':
             lines=result.get('stdout','').splitlines()
             if lines and lines[-1].startswith('DO_AGAIN_NATIVE_TEST_COUNTS '):
@@ -132,7 +133,7 @@ class NativeControllerEffects:
                         or any(type(v) is not int or v<0 for v in counts.values())):
                     raise ExecutionBlocked('sealed pytest capture counts malformed')
                 result['native_test_counts']=counts
-            elif self.profile.get('kind')=='native-development-local-v2':
+            elif self.profile.get('kind') in {'native-development-local-v2','native-development-autonomous-v1'}:
                 raise ExecutionBlocked('sealed pytest capture counts absent')
         return result
 
@@ -160,7 +161,7 @@ class NativeControllerEffects:
                 'stdout_sha256':hashlib.sha256(outcome['stdout'].encode()).hexdigest(),
                 'stderr_sha256':hashlib.sha256(outcome['stderr'].encode()).hexdigest()})
         if before!=self.measure(head,manifest):raise ExecutionBlocked('planning probes changed source')
-        sources={};budget=16384
+        sources={};budget=24576 if self.profile.get("kind")=="native-development-autonomous-v1" else 16384
         for path in dict.fromkeys([*self.profile['allowed_paths'], *self.profile['test_files']]):
             if path not in manifest:continue
             data=(broker.project.worktree/path).read_bytes();budget-=len(data)
@@ -185,12 +186,53 @@ class NativeControllerEffects:
         return SourceTransaction(self.broker.project.worktree,directory,self.profile,
             head=request['expected']['repo_head'],manifest=manifest,read_authority=self.head)
 
+    def candidate_transaction(self,rid,request):
+        from .candidate_transaction import CandidateTransaction
+        directory=self.broker.state/(rid+'-candidate')
+        path=directory/'candidate.json'
+        manifest=json.loads(path.read_text())['original_manifest'] if path.exists() else self.manifest(rid+'-baseline',request['expected']['repo_head'])
+        return CandidateTransaction(self.broker.project.worktree,directory,self.profile,
+            head=request['expected']['repo_head'],manifest=manifest,read_authority=self.head)
+
     def __call__(self,stage,sid,request,stages):
         broker=self.broker;fp=request_fingerprint(request);base=request['expected']['repo_head']
         from ..service.offline_continuation import persistent_scope
         epoch=broker.config['controller_scope']['epoch']+1
         if persistent_scope(broker.config['controller_scope']):
             epoch=broker.registry.status(broker.project.repo)['epoch']
+        from .candidate_transaction import KIND as AUTONOMOUS_KIND
+        if self.profile.get('kind')==AUTONOMOUS_KIND:
+            rid=request['request_id'];txn=self.candidate_transaction(rid,request)
+            if stage=='snapshot':
+                with self.admission():
+                    broker.ledger.reserve(broker.project.key,sid,fp,intent={'operation':'execute',
+                        'source_sha':broker.config['source_sha'],'request_fingerprint':fp,'aggregate':True})
+                result={'returncode':0,'timed_out':False,'source_sha':broker.config['source_sha'],'baseline':txn.prepare()}
+                broker.ledger.finish(broker.project.key,sid,result);return result
+            if stage=='test':
+                txn.freeze()
+                with self.admission():
+                    broker.ledger.reserve(broker.project.key,sid,fp,intent={'operation':'execute',
+                        'source_sha':broker.config['source_sha'],'request_fingerprint':fp})
+                run=observe_tests(expected_head=base,cases=tuple(self.select_tests(request)),
+                    measure=txn.measure,execute=lambda case:self.run_case(sid,case),allow_failures=True)
+                result={'returncode':int(any(c['exit_code']!=0 for c in run['cases'])),
+                    'timed_out':False,'source_sha':broker.config['source_sha'],'native_test_run':run}
+                broker.ledger.finish(broker.project.key,sid,result);return result
+            if stage=='commit':
+                tested=txn.measure()
+                result=broker._dispatch({'operation':'git_commit','request_id':sid,
+                    'expected_head':base,'expected_epoch':epoch,'paths':self.profile['allowed_paths'],
+                    'message':'Do Again verified development '+rid,'tested_tree_sha256':tested['tree_sha256'],
+                    'request_fingerprint':fp},broker.config['operator_uid'])
+                if result.get('returncode')==0:
+                    head=result['authority']['repo_head'];txn.committed(head,self.manifest(rid+'-committed',head))
+                return result
+            if stage=='failure_observation':
+                from .macos_execution import MacOSProcesses
+                with broker.admission():
+                    MacOSProcesses().drain(broker.project.uid)
+                    return txn.rollback()
         if self.profile.get('kind') == 'native-development-local-v2':
             rid = sid.rsplit('-',1)[0] if stage in {'regression_baseline','implementation','test','commit'} else sid
             if stage=='source_snapshot':

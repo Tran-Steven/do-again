@@ -150,7 +150,7 @@ def planning_goal(goal, profile=None):
             'language': 'python',
             'instructions': 'Return a Python script that edits only editable_paths. '
                 'Never modify immutable tests. Create missing editable regression files. '
-                'The isolated worker commits and runs every mandatory test independently. '
+                'The isolated worker runs every mandatory test independently before committing. '
                 'Use public fixtures only. No network, applications, deployments or merges.'}
     if profile is not None and profile.get('kind') == 'native-development-local-v2':
         value['execution_contract'].update(original_task=profile['original_task'],

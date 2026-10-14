@@ -344,6 +344,13 @@ def provision_worktree(config, project, current):
     for name in ('requests','probes'):secure_directory(target.parent/name,0o711)
     partial = target.exists()
     if partial:
+        if project['key'] in config.get('native_head_checkpoints',{}):
+            # Admission already verified the original root terminal receipt and
+            # clean tested tree. Repeat before accepting the existing directory.
+            from do_again.supervisor.native_checkpoint import verify_checkpoints
+            verified=verify_checkpoints(config,config)
+            if project['key'] not in verified:raise RuntimeError('native checkpoint not verified')
+            return
         if target.is_symlink():raise RuntimeError('existing worktree is aliased')
         if target.stat().st_uid==project['uid']:
             metadata=target/'.git';head=metadata/'HEAD'
@@ -729,6 +736,8 @@ def install(stage, *, recovery=False, classify_canary_partial=False, partial_exp
     # Refuse a dirty or ambiguous protected source before any account/runtime
     # effect. The same check repeats immediately before the fenced rename.
     verify_jobpipe_migration_preflight(config,previous_config)
+    from do_again.supervisor.native_checkpoint import verify_checkpoints
+    verify_checkpoints(config,previous_config)
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
     secure_directory(ROOT)
     secure_directory(ROOT/'state',0o700)

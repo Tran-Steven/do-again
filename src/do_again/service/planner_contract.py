@@ -17,7 +17,7 @@ def completed_changes(state):
             and record['request']['request_id'] in acknowledged]
 
 
-def planning_prompt(goal, evidence, state):
+def planning_prompt(goal, evidence, state, *, max_bytes=MAX_PROMPT_BYTES):
     """Only previously redacted public evidence may be passed by the caller."""
     if not isinstance(state, dict) or not isinstance(state.get('acknowledged'), list):
         raise ExecutionBlocked('planning state is not a verified continuation')
@@ -26,10 +26,13 @@ def planning_prompt(goal, evidence, state):
         'completed_request_ids': state['acknowledged'][-8:],
         'completed_changes': completed_changes(state),
         'failed_changes': [{'request_id': r['request']['request_id'],
-            'failure': r['verified_failure'], 'receipt_sha256': r['receipt_sha256']}
-            for r in state.get('requests', [])[-8:] if r.get('phase') == 'failed'],
+            'failure': {k:v for k,v in r['verified_failure'].items() if k!='test_cases'} | {
+                'failed_test_cases': [{'case':c['case'],'exit_code':c['exit_code']}
+                    for c in r['verified_failure'].get('test_cases',[]) if c['exit_code']!=0][:8]},
+            'receipt_sha256': r['receipt_sha256']}
+            for r in state.get('requests', [])[-3:] if r.get('phase') == 'failed'],
     }).decode()
-    if len(prompt.encode()) > MAX_PROMPT_BYTES:
+    if max_bytes not in {32768,65536} or len(prompt.encode()) > max_bytes:
         raise ExecutionBlocked('planning prompt exceeds authorized exposure budget')
     return prompt
 
@@ -84,7 +87,7 @@ class AuthorizedTransportPlanner:
 
     def select(self, *, goal, evidence, state, now):
         grant = self._validated_grant(now)
-        prompt = planning_prompt(goal, evidence, state)
+        prompt = planning_prompt(goal, evidence, state, max_bytes=grant.get("max_prompt_bytes",MAX_PROMPT_BYTES))
         schema = planning_schema()
         persistent = grant.get('kind') == 'browser-planning-persistent-v1'
         completed = completed_changes(state)

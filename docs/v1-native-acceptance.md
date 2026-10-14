@@ -340,3 +340,30 @@ no-network/read-only tests, service/worker probes and the genuine root-backed
 receipt require the later approved installation. This first amended task is
 necessary evidence and **is not V1 completion**, an autonomous two-task
 continuation, a four-hour soak, package onboarding or production authorization.
+
+
+### Autonomous continuation candidate after the reviewed task
+
+The retained reviewed native success at `71c15f7a0469aad4fa1b462e0d8efe397c460a6e`
+is a prerequisite, not an autonomous cycle. A separately selected operating
+scope may preserve this tested head through a root-verified checkpoint: the
+original protected terminal receipt, authoritative Git head and whole-tree
+measurement must agree before runtime cutover and again before accepting the
+existing worktree. The old source pin, original requests, snapshots, receipts
+and ambiguous planning calls remain unchanged.
+
+`native-development-autonomous-v1` permits bounded model edits to explicit
+paths while independently preserving immutable baseline tests. It snapshots
+original bytes before implementation, freezes the candidate tree, executes
+all mandatory cases with source writes denied, and promotes a Git commit only
+when its complete tree equals the independently tested candidate. A tests-only
+change or a no-op cannot qualify as an implementation task. Positively terminal
+local failures restore approved files to the exact baseline and report a failed
+receipt; an unknown effect, off-scope edit or changed Git authority still blocks
+without replay. Future proposals receive bounded original failure diagnostics.
+
+The operator can explicitly create a separate ChatGPT planner conversation
+with `do-again browser planner-setup`. Setup journals its one Send before the
+gesture, verifies the exact readiness marker, and keeps the ordinary project
+conversation binding intact. An unresolved setup Send cannot create a second
+attempt. The dedicated setup is zero completed coding cycles.

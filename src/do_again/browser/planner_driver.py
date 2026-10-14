@@ -29,7 +29,7 @@ class ChatGPTPlannerDriver:
             raise ExecutionBlocked('browser planner needs profile attestation and durable dispatch journal')
         if self.profile_attestor() != profile_sha256:
             raise ExecutionBlocked('browser profile identity changed')
-        record = runtime.project_record(self.repo)
+        record = {} if self.conversation_url else runtime.project_record(self.repo)
         bound = self.conversation_url or str(record.get('chat_url') or '')
         if (not bound.startswith('https://chatgpt.com/c/')
                 or runtime._chat_id(bound) != conversation_id):
@@ -81,7 +81,7 @@ class ChatGPTPlannerDriver:
         # tab creation, focus changes, authentication gestures, or Send.
         if os.geteuid() != 501 or self.profile_attestor() != profile_sha256:
             raise ExecutionBlocked('original reply observer profile differs')
-        record = runtime.project_record(self.repo)
+        record = {} if self.conversation_url else runtime.project_record(self.repo)
         url = self.conversation_url or str(record.get('chat_url') or '')
         if runtime._chat_id(url) != conversation_id:
             raise ExecutionBlocked('original reply observer conversation differs')

@@ -31,10 +31,21 @@ def validate_controller_configuration(config, *, now=None, epoch=None):
         'epoch':scope.get('epoch') if epoch is None else epoch}, now=now)
     fields={'kind','allowed_paths','test_cases','test_files','test_runner','public_evidence','offline_tasks'}
     from .source_transaction import LOCAL_KIND, validate_source_contract
+    from .candidate_transaction import KIND as AUTONOMOUS_KIND
+    autonomous=isinstance(profile,dict) and profile.get('kind')==AUTONOMOUS_KIND
+    if autonomous:fields |= {'implementation_paths'}
     local = isinstance(profile, dict) and profile.get('kind') == LOCAL_KIND
     if local: fields |= {'source_contract', 'original_task'}
-    if not isinstance(profile, dict) or set(profile) != fields or profile['kind'] not in {'native-development-v1', LOCAL_KIND}:
+    if not isinstance(profile, dict) or set(profile) != fields or profile['kind'] not in {'native-development-v1', LOCAL_KIND, AUTONOMOUS_KIND}:
         raise ExecutionBlocked('sealed development profile absent or unknown capabilities')
+    if autonomous:
+        if (not persistent or reviewed is not None or profile.get('offline_tasks')!=[]
+                or not isinstance(profile.get('implementation_paths'),list)
+                or not profile['implementation_paths']
+                or any(not isinstance(p,str) for p in profile['implementation_paths'])
+                or len(set(profile['implementation_paths']))!=len(profile['implementation_paths'])
+                or any(p not in profile.get('allowed_paths',[]) or p.startswith('tests/') for p in profile['implementation_paths'])):
+            raise ExecutionBlocked('autonomous precommit profile requires actual scoped implementation changes')
     if profile['test_runner'] not in {'unittest','pytest'}:
         raise ExecutionBlocked('test runner not explicitly approved')
     paths=profile['allowed_paths']; cases=profile['test_cases']; tests=profile['test_files']

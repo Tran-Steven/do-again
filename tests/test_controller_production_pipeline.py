@@ -96,7 +96,7 @@ class ProductionPipelineTests(unittest.TestCase):
     def git(self,*args):
         return subprocess.run(['git','-C',str(self.repo),*args],check=True,capture_output=True).stdout.decode().strip()
 
-    def capture(self,sid,argv,timeout):
+    def capture(self,sid,argv,timeout,**kwargs):
         if 'tree_manifest' in ' '.join(argv):
             head=argv[-1];return {'returncode':0,'timed_out':False,'network_denied':True,
                 'stdout':json.dumps(tree_manifest(Path('/usr/bin/git'),self.repo/'.git',head)),'stderr':''}
@@ -123,6 +123,7 @@ class ProductionPipelineTests(unittest.TestCase):
         else:
             self.assertEqual(op,'git_publish')
             result={'returncode':0,'head':packet['expected_head'],'branch':'do-again/task-fixture','repository':'Tran-Steven/jobpipe'}
+        if 'tested_tree_sha256' in packet:result['tested_tree_sha256']=packet['tested_tree_sha256']
         result['source_sha']='a'*40;self.ledger.finish('fixture',rid,result);return result
 
     def receipt(self,record,result):
@@ -322,6 +323,37 @@ class ProductionPipelineTests(unittest.TestCase):
         self.assertEqual((self.repo/'product.py').read_text(),'partial edit')
         self.assertEqual(self.backend.controller.status(self.now)['state'],'blocked')
         self.assertEqual(self.ledger.observe_request('fixture',record['request']['request_id'],record['fingerprint'])['state'],'not_started')
+
+    def autonomous_profile(self):
+        from do_again.supervisor.candidate_transaction import KIND
+        self.config['controller_profile'].update(kind=KIND,implementation_paths=['product.py'],offline_tasks=[])
+        self.broker.admission=nullcontext;self.broker.project.uid=402
+
+    def test_autonomous_runs_every_test_before_git_commit_and_attests_exact_tree(self):
+        script='from pathlib import Path\nPath("product.py").write_text("def recover(x): return x\\ndef dedupe(x): return list(dict.fromkeys(x))\\ndef handoff(x,y): return x and y\\n")'
+        record=self.persistent_request(script);self.autonomous_profile()
+        result=self.worker_execute(record['request'])
+        self.assertEqual(result['returncode'],0)
+        commit_index=next(i for i,e in enumerate(self.events) if e[0]=='git_commit')
+        test_indices=[i for i,e in enumerate(self.events) if e[0]=='test']
+        self.assertEqual(len(test_indices),3);self.assertTrue(all(i<commit_index for i in test_indices))
+        self.assertEqual(result['development']['implementation_commit'],self.git('rev-parse','HEAD'))
+        self.assertEqual(result['development']['test_commit'],self.git('rev-parse','HEAD'))
+        self.assertEqual(result['development']['tests_executed'],3)
+
+    def test_autonomous_failed_tests_restore_source_before_fresh_task_without_commit(self):
+        original=(self.repo/'product.py').read_bytes()
+        record=self.persistent_request('from pathlib import Path\nPath("product.py").write_text("def recover(x): return x\\ndef dedupe(x): return x\\ndef handoff(x,y): return x\\n")')
+        self.autonomous_profile()
+        with patch('do_again.supervisor.macos_execution.MacOSProcesses') as processes:
+            result=self.worker_execute(record['request'])
+        self.assertEqual(result['returncode'],1)
+        self.assertEqual(result['verified_failure']['failed_stage'],'test')
+        self.assertEqual(result['verified_failure']['current_commit'],self.base)
+        self.assertEqual((self.repo/'product.py').read_bytes(),original)
+        self.assertEqual(self.git('status','--porcelain'),'')
+        self.assertFalse(any(e[0] in {'git_commit','git_publish'} for e in self.events))
+        processes.return_value.drain.assert_called_once_with(402)
 
     def test_unreserved_request_and_direct_execution_denied(self):
         with self.assertRaises(ExecutionBlocked):self.backend.guard_packet({'operation':'execute'})

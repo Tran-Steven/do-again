@@ -64,7 +64,7 @@ def validate_browser_planner_grant(grant, *, source_sha, goal_sha256, epoch, now
         raise ExecutionBlocked('browser planner conversation or profile identity differs')
     if (type(grant['max_calls']) is not int or not (1 <= grant['max_calls'] <= MAX_PERSISTENT_CYCLES if persistent else grant['max_calls'] == 3)
             or type(grant['max_prompt_bytes']) is not int
-            or grant['max_prompt_bytes'] != 32768
+            or grant['max_prompt_bytes'] not in ({32768,65536} if persistent else {32768})
             or type(grant['max_answer_bytes']) is not int
             or grant['max_answer_bytes'] != 65536
             or any(grant[key] is not False for key in

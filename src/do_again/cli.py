@@ -1386,6 +1386,8 @@ def main() -> int:
         help="Advanced browser runtime diagnostics and controls",
     )
     browser_sub = browser_parser.add_subparsers(dest="browser_command", required=True)
+    planner_setup=browser_sub.add_parser("planner-setup", help="Create the dedicated native planner conversation once")
+    planner_setup.add_argument("path",nargs="?",default=".")
     browser_sub.add_parser("status", help="Inspect browser/session health")
     browser_sub.add_parser("start", help="Start the shared automation browser")
     browser_sub.add_parser("stop", help="Stop the shared automation browser")
@@ -1522,6 +1524,15 @@ def main() -> int:
             expected_head=getattr(args, "head", None),
         )
     if args.command == "browser":
+        if args.browser_command == "planner-setup":
+            from .browser.native_planner_binding import prepare_planner_chat
+            from .supervisor.macos_execution import ExecutionBlocked
+            try:
+                print(json.dumps(prepare_planner_chat(find_repo(args.path)),indent=2,sort_keys=True))
+                return 0
+            except (ExecutionBlocked, BrowserError, OSError, ValueError) as exc:
+                print('do-again: '+str(exc),file=sys.stderr)
+                return 1
         return _browser_action(
             args.browser_command,
             mode=getattr(args, "mode", "auto"),

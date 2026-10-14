@@ -212,7 +212,7 @@ def validate_planner_authorization_preflight(source_sha, uid, gid, controller_gr
     apply_controller_grant(candidate,proposal,hosted,browser=browser)
 
 
-def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_persistent_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None):
+def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, ids=None, dependency_lock=None, canary_grant=None, codex_grant=None, classify_canary_partial=False, sonary_repo: Path | None = None, jobpipe_offline_development=False, jobpipe_persistent_development=False, jobpipe_migration_sha=None, controller_grant=None, hosted_planner_grant=None, codex_native_payload=None, controller_test_wheels=None, browser_planner_grant=None, native_head_checkpoint=None):
     if jobpipe_persistent_development:
         if (not jobpipe_offline_development or controller_grant is None
                 or json.loads(private_proposal_preflight(controller_grant).read_text())['scope'].get('kind') != 'jobpipe-native-controller-v1'):
@@ -473,6 +473,13 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         if controller_test_wheels is not None:
             prepare_test_wheels(payload,config,controller_test_wheels)
         validate_controller_stage(payload,config)
+    if native_head_checkpoint is not None:
+        if not jobpipe_persistent_development or installed is None:
+            raise ValueError('retaining a tested native head requires an existing persistent installation')
+        claim=json.loads(private_proposal_preflight(native_head_checkpoint).read_text())
+        if not isinstance(claim,dict) or set(claim)!={'request_id','request_fingerprint','source_sha','commit','tree_sha256'}:
+            raise ValueError('native checkpoint claim fields differ')
+        config['native_head_checkpoints']={project_key(jobpipe):claim}
     selected_grant=canary_grant if canary_grant is not None else codex_grant
     if selected_grant is not None:
         grant_path=Path(selected_grant).resolve(strict=True)
@@ -547,6 +554,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
+    parser.add_argument('--native-head-checkpoint',type=Path,help='Private exact original tested head to retain during upgrade')
     parser.add_argument('--source',type=Path,default=Path(__file__).resolve().parents[1])
     parser.add_argument('--do-again-repo',type=Path,required=True)
     parser.add_argument('--jobpipe-repo',type=Path,required=True)
@@ -574,4 +582,4 @@ if __name__=='__main__':
                               jobpipe_offline_development=args.jobpipe_offline_development,
                               jobpipe_persistent_development=args.jobpipe_persistent_development,
                               jobpipe_migration_sha=args.jobpipe_migration_sha,controller_grant=args.controller_grant,
-                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels,browser_planner_grant=args.browser_planner_grant),indent=2))
+                              hosted_planner_grant=args.hosted_planner_grant,codex_native_payload=args.codex_native_payload,controller_test_wheels=args.controller_test_wheels,browser_planner_grant=args.browser_planner_grant,native_head_checkpoint=args.native_head_checkpoint),indent=2))

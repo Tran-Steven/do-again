@@ -105,12 +105,14 @@ def produce_attestation(*, ledger, store, project, request_id, fingerprint,
     authority = commit.get('authority', {})
     head, branch = authority.get('repo_head'), authority.get('repo_branch')
     run = test.get('native_test_run')
+    precommit=(isinstance(run,dict) and run.get('commit_before')==base_commit
+        and run.get('commit_after')==base_commit and commit.get('tested_tree_sha256')==run.get('tree_before'))
     if (not isinstance(head, str) or not re.fullmatch('[0-9a-f]{40}', head)
             or head == base_commit or not isinstance(branch, str)
             or not branch.startswith('do-again/task-')
             or commit.get('base_sha') != base_commit or not commit.get('paths')
-            or not isinstance(run, dict) or run.get('commit_before') != head
-            or run.get('commit_after') != head
+            or not isinstance(run, dict) or (not precommit and (run.get('commit_before') != head
+            or run.get('commit_after') != head))
             or run.get('tree_before') != run.get('tree_after')
             or not isinstance(run.get('tree_before'), str)
             or not re.fullmatch('[0-9a-f]{64}', run['tree_before'])

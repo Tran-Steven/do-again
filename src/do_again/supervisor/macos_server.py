@@ -280,7 +280,7 @@ class ProjectBroker:
             from .source_transaction import LOCAL_KIND
             sealed_profile = self.config.get('controller_profile', {})
             write_paths = (tuple(sealed_profile['allowed_paths'])
-                           if sealed_profile.get('kind') == LOCAL_KIND else None)
+                           if sealed_profile.get('kind') in {LOCAL_KIND,'native-development-autonomous-v1'} else None)
             spec = launch_spec(self.project, packet, scratch, cache,
                                source_write_paths=write_paths)
             fingerprint = hashlib.sha256(canonical_json(packet)).hexdigest()

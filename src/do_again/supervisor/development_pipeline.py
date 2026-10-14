@@ -59,9 +59,13 @@ class DevelopmentPipeline:
             if observed.get('state')!='terminal' or observed['result']!=job['result']:
                 raise ExecutionBlocked('pipeline terminal ledger differs')
             return job['result']
+        from .candidate_transaction import KIND as AUTONOMOUS_KIND
+        autonomous=self.profile is not None and self.profile.get('kind')==AUTONOMOUS_KIND
+        order=('snapshot','implementation','test','commit','publication') if autonomous else ('implementation','commit','test','publication')
+        if autonomous:job['stage_ids'].setdefault('snapshot',rid+'-snapshot')
         atomic_json(path,job)
         try:
-            for stage in ('implementation','commit','test','publication'):
+            for stage in order:
                 current=datetime.now(timezone.utc)
                 if current >= parse_utc(request['expires_at_utc']):
                     raise ExecutionBlocked('original request expired before next stage')
