@@ -4,6 +4,7 @@ No replay, test result, task acknowledgment or retrospective completion.
 """
 import hashlib,importlib.util,json,os,sqlite3,sys
 from pathlib import Path
+from contextlib import closing
 from .macos_execution import INSTALL_ROOT,ExecutionBlocked,ExecutionLedger,MacOSProcesses,private_root_file
 from .native_checkpoint import verify_checkpoints
 from .planning_probe_quarantine import append,exists
@@ -83,7 +84,7 @@ def recover(stage,*,execute_approved_action=False):
         intent=ledger.intent(project['key'],REQUEST)
         if intent!={'operation':'execute','source_sha':SOURCE,'request_fingerprint':FP}:raise ExecutionBlocked('original read-only probe intent differs')
         before=ledger.evidence(project['key'])
-        with sqlite3.connect(ledger.path) as db:
+        with closing(sqlite3.connect(ledger.path)) as db:
             if exists(db,project['key'],REQUEST):
                 ledger.pending(project['key'])
                 if db.execute('SELECT approval_reference FROM planning_probe_quarantine WHERE project=? AND request=?',(project['key'],REQUEST)).fetchone()!=('explicit-operator-approval:'+REFERENCE,):raise ExecutionBlocked('original probe approval reference differs')

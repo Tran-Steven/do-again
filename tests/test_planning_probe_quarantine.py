@@ -1,5 +1,6 @@
 import json,sqlite3,tempfile,unittest
 from pathlib import Path
+from contextlib import closing
 from do_again.supervisor.macos_execution import ExecutionLedger,ExecutionBlocked
 from do_again.supervisor.planning_probe_quarantine import append
 
@@ -10,7 +11,7 @@ class ProbeDispositionTests(unittest.TestCase):
         self.intent={'operation':'execute','source_sha':'b'*40,'request_fingerprint':'c'*64}
         self.ledger.reserve(self.project,self.rid,'d'*64,intent=self.intent)
     def disposition(self,**kwargs):
-        with sqlite3.connect(self.ledger.path) as db:return append(db,self.project,self.rid,expected_intent=self.intent,approval_reference='explicit operator approval',**kwargs)
+        with closing(sqlite3.connect(self.ledger.path)) as db:return append(db,self.project,self.rid,expected_intent=self.intent,approval_reference='explicit operator approval',**kwargs)
     def test_append_preserves_original_and_denies_replay_finish(self):
         before=self.ledger.evidence(self.project);original=self.ledger.observe_request(self.project,self.rid,'c'*64)
         proof=self.disposition();self.assertFalse(proof['terminal_success']);self.assertFalse(proof['tests_claimed_passed'])
@@ -28,8 +29,8 @@ class ProbeDispositionTests(unittest.TestCase):
                     "UPDATE execution SET fingerprint='changed'", "UPDATE capability_intent SET payload='{}'"]:
             with self.subTest(sql=sql),tempfile.TemporaryDirectory() as tmp:
                 backup=Path(tmp)/'backup.sqlite'
-                with sqlite3.connect(self.ledger.path) as db,sqlite3.connect(backup) as target:db.backup(target)
+                with closing(sqlite3.connect(self.ledger.path)) as db,closing(sqlite3.connect(backup)) as target:db.backup(target)
                 self.disposition()
-                with sqlite3.connect(self.ledger.path) as db:db.execute(sql);db.commit()
+                with closing(sqlite3.connect(self.ledger.path)) as db:db.execute(sql);db.commit()
                 with self.assertRaises(ExecutionBlocked):self.ledger.pending(self.project)
                 self.ledger.path.unlink();backup.replace(self.ledger.path)
