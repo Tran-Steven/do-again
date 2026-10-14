@@ -107,7 +107,15 @@ def load_configuration(path: Path) -> dict[str, Any]:
     operator = pwd.getpwuid(config['operator_uid'])
     if operator.pw_gid != config['operator_gid'] or operator.pw_dir != config['operator_home']:
         raise ExecutionBlocked('operator identity changed')
+    if config.get('development_scope') is not None:
+        from .jobpipe_development import require_jobpipe_grant
+        candidate = next((p for p in projects if p.get('account') == '_doagain_jp'), None)
+        if candidate is None:
+            raise ExecutionBlocked('offline development project is missing')
+        require_jobpipe_grant(config, project_from_dict(candidate))
     for item in projects:
+        from .github import validate_control_branch
+        validate_control_branch(item.get('control_branch', 'operator-control'))
         project = project_from_dict(item)
         project.validate(config['operator_uid'])
         account = pwd.getpwuid(project.uid)
@@ -124,7 +132,7 @@ def project_from_dict(item: dict[str, Any]) -> ProjectExecution:
                             tuple(Path(p) for p in item['executables']))
 
 
-def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
+def profile(project: ProjectExecution, scratch: Path, cache: Path, *, source_write_paths=None) -> str:
     # Imported OS rules supply loader/secinit support. Restrict their IPC and
     # network grants explicitly. UID separation protects the operator's launchd
     # domain even where Seatbelt alone does not check existing service mutations.
@@ -147,6 +155,21 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
              Path('/bin'), Path('/usr/bin'), INSTALL_ROOT / 'current/runtimes',
              INSTALL_ROOT / 'current/package')
     subpaths = lambda paths: ' '.join(f'(subpath {json.dumps(str(p))})' for p in paths)
+    writes = subpaths(roots)
+    if source_write_paths is not None:
+        if not isinstance(source_write_paths, tuple) or len(source_write_paths) > 16:
+            raise ExecutionBlocked('invalid sealed source write scope')
+        exact = []
+        for name in source_write_paths:
+            path = Path(name)
+            if (not isinstance(name, str) or path.is_absolute() or str(path) != name
+                    or '..' in path.parts or not path.parts or path.parts[0] == '.git'):
+                raise ExecutionBlocked('source write scope escapes assigned worktree')
+            target = project.worktree / path
+            if any(p.is_symlink() for p in (target, *target.parents)):
+                raise ExecutionBlocked('source write scope contains an alias')
+            exact.append('(literal ' + json.dumps(str(target)) + ')')
+        writes = subpaths((scratch.resolve(), cache.resolve())) + ' ' + ' '.join(exact)
     runner = INSTALL_ROOT / 'current/package/do_again/supervisor/execution_runner.py'
     protected_git = json.dumps(str(project.worktree / '.git'))
     return (
@@ -157,12 +180,12 @@ def profile(project: ProjectExecution, scratch: Path, cache: Path) -> str:
         '(allow process-fork)(allow process-exec)(allow file-read-metadata)'
         f'(allow file-read* {subpaths(reads)} (literal {json.dumps(str(runner))}) (literal "/dev/null")(literal "/dev/urandom"))'
         f'(allow file-map-executable {subpaths(reads)})'
-        f'(allow file-write* {subpaths(roots)} (literal "/dev/null"))'
+        f'(allow file-write* {writes} (literal "/dev/null"))'
         f'(deny file-write* (subpath {protected_git}))'
     )
 
 
-def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path, cache: Path) -> dict[str, Any]:
+def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path, cache: Path, *, source_write_paths=None) -> dict[str, Any]:
     fields = {'operation', 'request_id', 'argv', 'cwd', 'timeout'}
     optional = {'request_fingerprint', 'expected_head', 'expected_authority'}
     if not fields <= set(packet) or set(packet) - fields - optional or packet['operation'] != 'execute':
@@ -188,7 +211,7 @@ def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path
     if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= 3600:
         raise ExecutionBlocked('invalid execution timeout')
     return {
-        'args': ['/usr/bin/sandbox-exec', '-p', profile(project, scratch, cache), sys.executable, '-I', '-S', '-B',
+        'args': ['/usr/bin/sandbox-exec', '-p', profile(project, scratch, cache, source_write_paths=source_write_paths), sys.executable, '-I', '-S', '-B',
                  str(INSTALL_ROOT / 'current/package/do_again/supervisor/execution_runner.py'),
                  str(project.uid), str(math.ceil(timeout)), *argv],
         'cwd': str(cwd), 'user': project.uid, 'group': project.gid, 'extra_groups': [],
@@ -202,8 +225,9 @@ def launch_spec(project: ProjectExecution, packet: dict[str, Any], scratch: Path
 
 
 class ExecutionLedger:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, on_reserve=None):
         self.path = path
+        self.on_reserve = on_reserve
         with closing(sqlite3.connect(path)) as db, db:
             db.execute('PRAGMA synchronous=FULL')
             db.execute('CREATE TABLE IF NOT EXISTS execution (project TEXT, request TEXT, fingerprint TEXT, '
@@ -217,14 +241,53 @@ class ExecutionLedger:
                              (project,request)).fetchone()
         return None if row is None else json.loads(row[0])
 
+    def evidence(self, project: str) -> dict[str, Any]:
+        """Redacted, transaction-consistent proof that effects survived cutover."""
+        digest=hashlib.sha256();counts={}
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            db.execute('BEGIN')
+            for table,fields in (('execution','request,fingerprint,state,result'),
+                                 ('capability_intent','request,payload')):
+                count=0;digest.update(canonical_json({'table':table,'project':project}))
+                for row in db.execute('SELECT '+fields+' FROM '+table+' WHERE project=? ORDER BY request',(project,)):
+                    digest.update(canonical_json(list(row)));digest.update(b'\n');count+=1
+                counts[table]=count
+        return {'schema_version':1,'sha256':digest.hexdigest(),'counts':counts}
+
     def pending(self, project: str) -> list[dict[str, str]]:
         with closing(sqlite3.connect(self.path)) as db:
-            rows = db.execute("SELECT request,fingerprint FROM execution WHERE project=? AND state='started'",
-                              (project,)).fetchall()
+            from .publication_quarantine import pending_rows
+            rows = pending_rows(db,project)
         return [{'request_id':row[0],'fingerprint':row[1],'state':'started'} for row in rows]
+
+    def quarantined_publications(self, project: str) -> list[dict]:
+        from .publication_quarantine import TABLE,pending_rows
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            pending_rows(db,project)  # Refuse any audit whose original changed.
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone():return []
+            rows=db.execute('SELECT request,source_sha,task_fingerprint,approval_reference FROM publication_quarantine '
+                'WHERE project=? ORDER BY request',(project,)).fetchall()
+        return [{'request_id':rid,'source_sha':source,'request_fingerprint':fp,'approval_reference':approval,
+                 'state':'quarantined_unresolved','original_state':'started','terminal_success':False,'replay_permitted':False}
+                for rid,source,fp,approval in rows]
+
+    def quarantined_planning_probes(self,project: str) -> list[dict]:
+        from .planning_probe_quarantine import TABLE
+        from .publication_quarantine import pending_rows
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            pending_rows(db,project)
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",(TABLE,)).fetchone():return []
+            rows=db.execute('SELECT request,source_sha,probe_fingerprint,approval_reference FROM planning_probe_quarantine WHERE project=? ORDER BY request',(project,)).fetchall()
+        return [{'request_id':rid,'source_sha':source,'request_fingerprint':fp,'approval_reference':approval,
+                 'state':'quarantined_unresolved','original_state':'started','terminal_success':False,
+                 'replay_permitted':False,'tests_claimed_passed':False} for rid,source,fp,approval in rows]
 
     def lookup(self, project: str, request: str, fingerprint: str) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db:
+            from .publication_quarantine import pending_rows,has_quarantine
+            pending_rows(db,project)
+            if has_quarantine(db,project,request):
+                raise ExecutionBlocked('quarantined publication cannot be completed or replayed')
             row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
                              (project,request)).fetchone()
         if row is None:
@@ -235,9 +298,40 @@ class ExecutionLedger:
             raise ExecutionBlocked('ambiguous started execution cannot replay')
         return json.loads(row[2])
 
-    def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None) -> dict[str, Any] | None:
+    def observe_request(self, project: str, request: str, original_fingerprint: str) -> dict:
+        """Read original terminal evidence without reserving or finishing effects."""
+        if not isinstance(original_fingerprint,str) or not re.fullmatch('[0-9a-f]{64}',original_fingerprint):
+            raise ExecutionBlocked('invalid original request fingerprint')
+        with closing(sqlite3.connect(self.path.as_uri()+'?mode=ro',uri=True)) as db:
+            from .publication_quarantine import pending_rows
+            pending_rows(db,project)
+            row=db.execute('SELECT e.state,e.result,i.payload FROM execution e '
+                'LEFT JOIN capability_intent i ON e.project=i.project AND e.request=i.request '
+                'WHERE e.project=? AND e.request=?',(project,request)).fetchone()
+        if row is None:return {'state':'not_started','replay':False}
+        intent=json.loads(row[2]) if row[2] else {}
+        if intent.get('request_fingerprint')!=original_fingerprint:
+            raise ExecutionBlocked('original request identity is absent or conflicting')
+        if row[0]!='terminal':return {'state':'post_dispatch_uncertain','replay':False}
+        result=json.loads(row[1])
+        if (not isinstance(result,dict) or type(result.get('returncode')) is not int
+                or type(result.get('timed_out',False)) is not bool
+                or intent.get('operation') not in {'execute','git_commit','git_publish','dependency_install','reviewed_task'}
+                or result.get('source_sha')!=intent.get('source_sha')
+                or not isinstance(intent.get('source_sha'),str)
+                or not re.fullmatch('[0-9a-f]{40}',intent['source_sha'])):
+            raise ExecutionBlocked('terminal execution source evidence differs')
+        return {'state':'terminal','replay':False,'request_fingerprint':original_fingerprint,
+                'source_sha':intent['source_sha'],'result':result}
+
+    def reserve(self, project: str, request: str, fingerprint: str, *, intent: dict | None = None,
+                parent_request: str | None = None) -> dict[str, Any] | None:
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('BEGIN IMMEDIATE')
+            from .publication_quarantine import pending_rows,has_quarantine
+            pending_rows(db,project)
+            if has_quarantine(db,project,request):
+                raise ExecutionBlocked('quarantined publication cannot be completed or replayed')
             row = db.execute('SELECT fingerprint,state,result FROM execution WHERE project=? AND request=?',
                              (project, request)).fetchone()
             if row:
@@ -246,15 +340,39 @@ class ExecutionLedger:
                 if row[1] == 'terminal':
                     return json.loads(row[2])
                 raise ExecutionBlocked('ambiguous started execution cannot replay')
-            if db.execute("SELECT 1 FROM execution WHERE project=? AND state='started'", (project,)).fetchone():
+            from .publication_quarantine import pending_rows
+            pending = [(rid,) for rid,fp in pending_rows(db,project)]
+            if parent_request is not None:
+                parent = db.execute('SELECT payload FROM capability_intent WHERE project=? AND request=?',
+                                    (project,parent_request)).fetchone()
+                parent_intent = json.loads(parent[0]) if parent else {}
+                if (pending != [(parent_request,)]
+                        or not re.fullmatch('amended-[0-9a-f]{32}',parent_request)
+                        or request != parent_request+'-commit'
+                        or parent_intent.get('operation') != 'reviewed_task'
+                        or parent_intent.get('publication') != 'disabled'
+                        or not intent or intent.get('operation') != 'git_commit'
+                        or intent.get('source_sha') != parent_intent.get('source_sha')
+                        or intent.get('request_fingerprint') != parent_intent.get('request_fingerprint')):
+                    raise ExecutionBlocked('reviewed child commit lacks exact reserved parent authority')
+            elif pending:
                 raise ExecutionBlocked('project already has an unresolved execution')
             db.execute('INSERT INTO execution VALUES(?,?,?,?,NULL)', (project, request, fingerprint, 'started'))
             if intent is not None:
                 db.execute('INSERT INTO capability_intent VALUES(?,?,?)',(project,request,json.dumps(intent)))
+            if self.on_reserve is not None:
+                # Publish trusted in-flight ownership before the transaction
+                # makes this started row visible to concurrent status readers.
+                self.on_reserve(project, request)
         return None
 
     def finish(self, project: str, request: str, result: dict[str, Any]) -> None:
         with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            from .publication_quarantine import has_quarantine,pending_rows
+            pending_rows(db,project)
+            if has_quarantine(db,project,request):
+                raise ExecutionBlocked('quarantined publication cannot be completed or replayed')
             db.execute('UPDATE execution SET state=?,result=? WHERE project=? AND request=? AND state=?',
                        ('terminal', json.dumps(result), project, request, 'started'))
 

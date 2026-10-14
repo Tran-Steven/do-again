@@ -418,8 +418,8 @@ def verify_project(path: str = ".", *, timeout_seconds: float = 90.0) -> int:
         layout = runtime_layout(repo)
         if not layout.browser_enabled:
             raise ServiceError(
-                "end-to-end verification requires browser automation; "
-                "enable it with do-again setup"
+                "unattended verification requires browser automation and a configured ChatGPT browser; "
+                "for normal ChatGPT conversations use do-again chatgpt prepare/check"
             )
         service = service_status(repo)
         if not service.get("running"):
@@ -895,8 +895,19 @@ def retry_request(request_id: str, path: str = ".") -> int:
 
 
 def _service_action(action: str, path: str) -> int:
+    from .supervisor.macos_execution import ExecutionBlocked
     try:
         repo = find_repo(path)
+        from .service import native_operating
+        from .supervisor.macos_execution import ExecutionBlocked
+        if native_operating.configured(repo) and action in {'start', 'stop', 'restart'}:
+            if action == 'restart':
+                native_operating.stop(repo)
+                value = native_operating.start(repo)
+            else:
+                value = getattr(native_operating, action)(repo)
+            print(json.dumps(value, indent=2, sort_keys=True))
+            return 0
         layout = runtime_layout(repo)
         report_since = session_start(layout) if action == "stop" else None
 
@@ -927,7 +938,7 @@ def _service_action(action: str, path: str) -> int:
                 stop_if_unused()
         else:
             raise ServiceError(f"unsupported service action: {action}")
-    except (ServiceError, BrowserError, BrowserAuthRequired) as exc:
+    except (ServiceError, BrowserError, BrowserAuthRequired, ExecutionBlocked, OSError, ValueError) as exc:
         print(f"do-again: {exc}", file=sys.stderr)
         return 1
     _print_service_status(value)
@@ -1059,6 +1070,85 @@ def _browser_action(action: str, *, mode: str = "auto", run_test: bool = True) -
         return 1
 
 
+def _model_action(action: str, *, allow_model_call: bool = False,
+                  nonce: str | None = None, task: int | None = None,
+                  expected_head: str | None = None) -> int:
+    from .model_transport import (
+        CodexTransportBlocked,
+        discover_codex,
+        generate_structured,
+        login_ready,
+    )
+    binary = discover_codex()
+    if action in {"status", "limits"}:
+        from .model_quota import CodexQuotaUnavailable, query_codex_rate_limits
+        authenticated = login_ready(binary) if binary else False
+        status = {"transport": "codex", "installed": binary is not None,
+                  "authenticated": authenticated,
+                  "browser_required": False, "production_enabled": False}
+        if authenticated:
+            try:
+                capacity = query_codex_rate_limits(binary, Path.home().resolve())
+                status["capacity"] = capacity
+                status["model_ready"] = capacity["allowed"] is True
+            except CodexQuotaUnavailable:
+                status["capacity"] = {"allowed": None, "reason": "quota_observation_unavailable"}
+                status["model_ready"] = False
+        else:
+            status["model_ready"] = False
+        print(json.dumps(status, sort_keys=True))
+        return 0 if status["model_ready"] else 2
+    if action == "canary-draft":
+        from .model_canary import (
+            CodexCanaryProposalRejected,
+            canary_model_schema,
+            canary_task_prompt,
+            prepare_canary_edit,
+        )
+        try:
+            if not allow_model_call:
+                raise CodexTransportBlocked("canary draft requires explicit model-call authorization")
+            prompt = canary_task_prompt(nonce=nonce, task=task)
+            proposal = generate_structured(
+                prompt, canary_model_schema(),
+                allow_model_call=True, binary=binary, timeout_seconds=180,
+            )
+            request = prepare_canary_edit(
+                proposal, nonce=nonce, task=task, expected_head=expected_head,
+            )
+        except (CodexTransportBlocked, CodexCanaryProposalRejected) as exc:
+            print(f"do-again: model: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps({
+            "state": "proposal_only",
+            "published": False,
+            "executed": False,
+            "request": request,
+        }, indent=2, sort_keys=True))
+        return 0
+    if action == "smoke":
+        try:
+            response = generate_structured(
+                "Return exactly the word ready in the reply field. Do not read files, use tools, or perform other actions.",
+                {"type": "object",
+                 "properties": {"reply": {"type": "string", "maxLength": 64}},
+                 "required": ["reply"], "additionalProperties": False},
+                allow_model_call=allow_model_call,
+                binary=binary,
+                timeout_seconds=120,
+            )
+        except CodexTransportBlocked as exc:
+            print(f"do-again: model: {exc}", file=sys.stderr)
+            return 1
+        if response.get("reply", "").strip().lower() != "ready":
+            print("do-again: model: structured response did not match smoke marker", file=sys.stderr)
+            return 1
+        print("CODEX_READ_ONLY_SMOKE_OK")
+        return 0
+    print("do-again: model: unknown transport action", file=sys.stderr)
+    return 2
+
+
 def _chat_cleanup_action(
     action: str,
     path: str,
@@ -1139,7 +1229,7 @@ def main() -> int:
     )
     verify_parser = sub.add_parser(
         "verify",
-        help="Verify the ChatGPT-to-control-to-local-to-receipt round trip",
+        help="Verify unattended ChatGPT browser round trip; use chatgpt prepare/check for regular chat",
     )
     verify_parser.add_argument("path", nargs="?", default=".")
     verify_parser.add_argument(
@@ -1148,6 +1238,38 @@ def main() -> int:
         default=90.0,
         help="Maximum seconds to wait for the end-to-end verification receipt",
     )
+    # Browser-free option for an ordinary ChatGPT chat with GitHub access.
+    # Does not contact Codex, invoke CDP, activate a worker, or submit an effect.
+    chatgpt_parser = sub.add_parser(
+        "chatgpt", help="Use the regular ChatGPT conversation + Git receipts (no Codex)"
+    )
+    chatgpt_sub = chatgpt_parser.add_subparsers(dest="chatgpt_command", required=True)
+    chatgpt_prepare = chatgpt_sub.add_parser(
+        "prepare", help="Prepare one browser-free status verification prompt"
+    )
+    chatgpt_prepare.add_argument("path", nargs="?", default=".")
+    chatgpt_check = chatgpt_sub.add_parser(
+        "check", help="Read-only reconcile the original ChatGPT Git receipt"
+    )
+    chatgpt_check.add_argument("request_id")
+    chatgpt_check.add_argument("path", nargs="?", default=".")
+    controller_parser = sub.add_parser("controller", help="Control a separately authorized native controller")
+    controller_sub = controller_parser.add_subparsers(dest="controller_command", required=True)
+    for action in ("start", "stop", "status"):
+        controller_sub.add_parser(action).add_argument("path", nargs="?", default=".")
+    runner = controller_sub.add_parser(
+        "run", help="Continue the already authorized jobpipe controller until completion or blocker")
+    runner.add_argument("path")
+    runner.add_argument("--source-sha", required=True)
+    runner.add_argument("--epoch", type=int, required=True)
+    persistent = controller_sub.add_parser("run-persistent", help="Run the separately authorized persistent native controller")
+    persistent.add_argument("path")
+    persistent.add_argument("--source-sha", required=True)
+    persistent.add_argument("--epoch", type=int, required=True)
+    for action in ("native-start", "native-status", "native-stop", "native-amended-task"):
+        controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
+    for action in ("background", "background-status", "background-stop"):
+        controller_sub.add_parser(action).add_argument("path", nargs="?", default=str(Path.home() / "jobpipe"))
     status_parser = sub.add_parser("status", help="Show project, service, and browser status")
     status_parser.add_argument("path", nargs="?", default=".")
     summary_parser = sub.add_parser(
@@ -1258,11 +1380,31 @@ def main() -> int:
     run_parser.add_argument("path", nargs="?", default=".")
     run_parser.add_argument("--once", action="store_true")
 
+    model_parser = sub.add_parser(
+        "model",
+        help="Optional non-browser Codex transport readiness and read-only inference smoke",
+    )
+    model_sub = model_parser.add_subparsers(dest="model_command", required=True)
+    model_sub.add_parser("status", help="Check Codex login and account capacity without inference")
+    model_sub.add_parser("limits", help="Read only the authenticated Codex allowance and reset time")
+    model_smoke = model_sub.add_parser("smoke", help="One explicit, read-only Codex inference")
+    model_smoke.add_argument("--allow-model-call", action="store_true",
+        help="Explicitly authorize one model call against your Codex usage allowance")
+    model_canary = model_sub.add_parser("canary-draft",
+        help="Prepare but never publish one exact-head synthetic canary edit request")
+    model_canary.add_argument("--nonce", required=True)
+    model_canary.add_argument("--task", type=int, choices=(1, 2), required=True)
+    model_canary.add_argument("--head", required=True)
+    model_canary.add_argument("--allow-model-call", action="store_true",
+        help="Explicitly authorize one non-browser model proposal")
+
     browser_parser = sub.add_parser(
         "browser",
         help="Advanced browser runtime diagnostics and controls",
     )
     browser_sub = browser_parser.add_subparsers(dest="browser_command", required=True)
+    planner_setup=browser_sub.add_parser("planner-setup", help="Create the dedicated native planner conversation once")
+    planner_setup.add_argument("path",nargs="?",default=".")
     browser_sub.add_parser("status", help="Inspect browser/session health")
     browser_sub.add_parser("start", help="Start the shared automation browser")
     browser_sub.add_parser("stop", help="Stop the shared automation browser")
@@ -1580,6 +1722,70 @@ def main() -> int:
         )
     if args.command == "verify":
         return verify_project(args.path, timeout_seconds=args.timeout)
+    if args.command == "chatgpt":
+        from .chatgpt_handoff import prepare, observe
+        try:
+            layout = runtime_layout(find_repo(args.path))
+            if args.chatgpt_command == "prepare":
+                outcome = prepare(layout)
+            elif args.chatgpt_command == "check":
+                outcome = observe(layout, args.request_id)
+            else:
+                chatgpt_parser.print_help()
+                return 2
+        except (ServiceError, OSError, ValueError) as exc:
+            print(f"do-again: chatgpt: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(outcome, indent=2, sort_keys=True))
+        return 0 if (args.chatgpt_command == "prepare" or
+                     outcome.get("completed") is True) else 2
+    if args.command == "controller":
+        from .supervisor.macos_client import broker_request
+        from .supervisor.macos_execution import ExecutionBlocked
+        try:
+            if args.controller_command == "native-amended-task":
+                from .supervisor.macos_client import broker_request
+                print(json.dumps(broker_request(Path(args.path).resolve(), {'operation': 'controller_amended_task'}), sort_keys=True))
+                return 0
+            if args.controller_command in ("run-persistent", "native-start", "native-status", "native-stop"):
+                from .service import native_operating
+                repo = Path(args.path).expanduser().resolve()
+                if args.controller_command == "run-persistent":
+                    value = native_operating.run_persistent(repo, source=args.source_sha, epoch=args.epoch)
+                else:
+                    value = getattr(native_operating, args.controller_command.removeprefix("native-"))(repo)
+            elif args.controller_command in ("run", "background", "background-status", "background-stop"):
+                from .service.controller_background import (
+                    run_bounded, background_start, background_status, background_stop,
+                )
+                repo = Path(args.path).expanduser().resolve()
+                if args.controller_command == "run":
+                    value = run_bounded(repo, source=args.source_sha, epoch=args.epoch)
+                elif args.controller_command == "background":
+                    value = background_start(repo)
+                elif args.controller_command == "background-status":
+                    value = background_status(repo)
+                else:
+                    value = background_stop(repo)
+            else:
+                value = broker_request(find_repo(args.path), {'operation': 'controller_'+args.controller_command})
+        except (ExecutionBlocked, ServiceError, OSError, ValueError) as exc:
+            print(f"do-again: controller: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(value, indent=2, sort_keys=True))
+        return 0
+    if args.command in {"status", "summary"}:
+        from .service import native_operating
+        from .supervisor.macos_execution import ExecutionBlocked
+        try:
+            repo = Path(args.path).expanduser().resolve()
+            if native_operating.configured(repo):
+                value = getattr(native_operating, args.command)(repo)
+                print(json.dumps(value, indent=2, sort_keys=True))
+                return 0
+        except (ExecutionBlocked, OSError, ValueError) as exc:
+            print(f"do-again: {exc}", file=sys.stderr)
+            return 1
     if args.command == "status":
         return status(args.path)
     if args.command == "summary":
@@ -1613,7 +1819,24 @@ def main() -> int:
         return init_project(args.path)
     if args.command in {"start", "stop", "restart", "install", "uninstall"}:
         return _service_action(args.command, args.path)
+    if args.command == "model":
+        return _model_action(
+            args.model_command,
+            allow_model_call=bool(getattr(args, "allow_model_call", False)),
+            nonce=getattr(args, "nonce", None),
+            task=getattr(args, "task", None),
+            expected_head=getattr(args, "head", None),
+        )
     if args.command == "browser":
+        if args.browser_command == "planner-setup":
+            from .browser.native_planner_binding import prepare_planner_chat
+            from .supervisor.macos_execution import ExecutionBlocked
+            try:
+                print(json.dumps(prepare_planner_chat(find_repo(args.path)),indent=2,sort_keys=True))
+                return 0
+            except (ExecutionBlocked, BrowserError, OSError, ValueError) as exc:
+                print('do-again: '+str(exc),file=sys.stderr)
+                return 1
         return _browser_action(
             args.browser_command,
             mode=getattr(args, "mode", "auto"),

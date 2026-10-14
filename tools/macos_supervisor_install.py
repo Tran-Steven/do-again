@@ -1,7 +1,7 @@
 """Root-stage installer. Called only after a sealed bundle is authenticated."""
 from __future__ import annotations
 import argparse
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, closing
 import sqlite3
 import grp
 import hashlib
@@ -9,8 +9,11 @@ import json
 import os
 import plistlib
 import pwd
+import re
 import shutil
+import stat
 import subprocess
+import time
 import sys
 import uuid
 from pathlib import Path
@@ -19,6 +22,131 @@ ROOT=Path('/Library/Application Support/DoAgainSupervisor')
 EXEC=Path('/private/var/do-again-execution')
 LABEL='io.github.tran-steven.do-again.supervisor'
 PLIST=Path('/Library/LaunchDaemons')/(LABEL+'.plist')
+WORKER_AGENTS=Path('/Library/LaunchAgents')
+RECOVERY_CONTRACT={'authority_schema':1,'effect_schema':1,
+                   'worker_admission':'fenced-v1','mode':'maintenance-only'}
+
+
+def validate_project_scope(config, previous=None):
+    """Verify an exact, maintenance-only two-parent roster or Sonary add-only upgrade.
+
+    Pure preflight: reject scope replacement/removal before accounts, journals,
+    snapshots, or launchd are mutated. A new scope requires explicit operator
+    preparation against the exact previous sealed source.
+    """
+    projects=config.get('projects')
+    if not isinstance(projects,list) or len(projects) not in (2,3):
+        raise RuntimeError('invalid protected project scope cardinality')
+    home=config.get('operator_home')
+    if not isinstance(home,str) or not Path(home).is_absolute():
+        raise RuntimeError('invalid operator home for project scope')
+    expected={'_doagain_da':('do-again','Tran-Steven/do-again'),
+              '_doagain_jp':('jobpipe','Tran-Steven/jobpipe'),
+              '_doagain_so':('Sonary','Tran-Steven/Sonary')}
+    accounts=[p.get('account') for p in projects if isinstance(p,dict)]
+    if (len(accounts)!=len(projects) or len(set(accounts))!=len(accounts)
+            or not {'_doagain_da','_doagain_jp'}.issubset(accounts)
+            or set(accounts)-set(expected)
+            or (len(projects)==3 and '_doagain_so' not in accounts)):
+        raise RuntimeError('unknown or duplicate protected project scope')
+    if len({p.get('uid') for p in projects})!=len(projects):
+        raise RuntimeError('protected execution identity is shared')
+    for p in projects:
+        name,repository=expected[p['account']]
+        exact=Path(home)/name
+        if (p.get('repo')!=str(exact) or exact.is_symlink()
+                or p.get('key')!=hashlib.sha256(os.fsencode(exact)).hexdigest()
+                or p.get('github_repository')!=repository
+                or p.get('worktree')!=str(EXEC/p['key']/'worktree')
+                or type(p.get('uid')) is not int or not 400<=p['uid']<500
+                or p.get('gid')!=p['uid']):
+            raise RuntimeError('protected project repository or identity scope changed')
+    # This preflight runs in /usr/bin/python3 -I -S before the sealed package
+    # is inserted into sys.path. Validate the grant using stdlib only; repeat
+    # full scope/expiration checks with the sealed module after import.
+    grant=config.get('development_scope')
+    if grant is not None:
+        from datetime import datetime,timezone,timedelta
+        fields={'kind','source_sha','project_key','goal_revision','issued_at_utc',
+                'expires_at_utc','network_access','application_submissions'}
+        jp=next(p for p in projects if p['account']=='_doagain_jp')
+        if (not isinstance(grant,dict) or set(grant)!=fields
+                or config.get('production_ready') is not False
+                or config.get('live_canary') is not None
+                or config.get('codex_canary') is not None
+                or grant.get('kind') not in {'jobpipe-offline-v1','jobpipe-native-v1'}
+                or grant.get('network_access') is not False
+                or grant.get('application_submissions') is not False
+                or not isinstance(config.get('source_sha'),str)
+                or not re.fullmatch('[0-9a-f]{40}',config['source_sha'])
+                or grant.get('source_sha')!=config['source_sha']
+                or grant.get('project_key')!=jp['key']
+                or not isinstance(grant.get('goal_revision'),str)
+                or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,127}',
+                                    grant['goal_revision'])
+                or grant['goal_revision']!=jp.get('goal_revision')):
+            raise RuntimeError('root-sealed jobpipe offline grant is invalid')
+        try:
+            issued=datetime.strptime(grant['issued_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            persistent=grant['kind']=='jobpipe-native-v1'
+            expires=None if persistent else datetime.strptime(grant['expires_at_utc'],'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+            if (issued.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['issued_at_utc']
+                    or datetime.now(timezone.utc)<issued
+                    or (persistent and grant['expires_at_utc'] is not None)
+                    or (not persistent and (expires.strftime('%Y-%m-%dT%H:%M:%SZ')!=grant['expires_at_utc']
+                        or datetime.now(timezone.utc)>expires
+                        or not timedelta(0)<expires-issued<=timedelta(days=14)))):
+                raise ValueError('invalid jobpipe development grant lifetime')
+        except (ValueError,TypeError,KeyError) as exc:
+            raise RuntimeError('root-sealed jobpipe offline grant lifetime is invalid') from exc
+    if previous is None:
+        if (len(projects)!=2 or config.get('scope_enrollment') is not None
+                or config.get('snapshot_migration') is not None):
+            raise RuntimeError('initial protected installation cannot implicitly enroll or migrate projects')
+        return False
+    older=previous.get('projects',[])
+    old_accounts={p['account']:p for p in older}
+    incoming={p['account']:p for p in projects}
+    migration=config.get('snapshot_migration')
+    if migration is not None:
+        prior=old_accounts.get('_doagain_jp')
+        updated=incoming.get('_doagain_jp')
+        fields={'kind','installed_source_sha','project_key','from_sha','to_sha'}
+        if (not isinstance(migration,dict) or set(migration)!=fields
+                or migration['kind']!='jobpipe_fast_forward_v1'
+                or config.get('production_ready') is not False
+                or previous.get('production_ready') is not False
+                or config.get('development_scope') is None
+                or config.get('scope_enrollment') is not None
+                or not isinstance(prior,dict) or not isinstance(updated,dict)
+                or migration['installed_source_sha']!=previous.get('source_sha')
+                or migration['project_key']!=prior.get('key')
+                or migration['from_sha']!=prior.get('source_sha')
+                or migration['to_sha']!=updated.get('source_sha')
+                or not re.fullmatch('[0-9a-f]{40}',str(migration['from_sha']))
+                or not re.fullmatch('[0-9a-f]{40}',str(migration['to_sha']))
+                or migration['from_sha']==migration['to_sha']
+                or len(older)!=len(projects) or set(incoming)!=set(old_accounts)
+                or any(incoming[a]!=({**old_accounts[a],'source_sha':migration['to_sha']}
+                        if a=='_doagain_jp' else old_accounts[a])
+                       for a in old_accounts)):
+            raise RuntimeError('jobpipe snapshot migration violates protected source scope')
+        return False
+    if (len(older) not in (2,3) or any(
+            incoming.get(account)!=project for account,project in old_accounts.items())):
+        raise RuntimeError('existing protected scope cannot change or be removed')
+    added=set(incoming)-set(old_accounts)
+    if added:
+        if (added!={'_doagain_so'} or len(older)!=2
+                or config.get('scope_enrollment')!={'kind':'sonary_add_only',
+                         'previous_source_sha':previous.get('source_sha')}
+                or previous.get('production_ready') is not False
+                or config.get('production_ready') is not False):
+            raise RuntimeError('Sonary scope requires explicit add-only maintenance enrollment')
+        return True
+    if added or config.get('scope_enrollment') is not None:
+        raise RuntimeError('unexpected or replayed protected scope enrollment')
+    return False
 
 
 def run(args, **kwargs):
@@ -28,11 +156,120 @@ def run(args, **kwargs):
     return result
 
 
+# This is executed only after launchctl bootstrap, using the normal operator UID.
+# A loaded launchd service is not a ready service: socket files can predate
+# listen(), and launchctl can return before the daemon accepts clients.
+_READINESS_CLIENT = r"""
+import errno,json,socket,sys,time
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from do_again.supervisor.macos_execution import peer_uid
+
+expected=json.loads(sys.argv[2])
+socket_root=Path('/private/var/run/do-again-supervisor')
+deadline=time.monotonic()+60
+last='no listener'
+
+def connect(path, packet=None):
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(3)
+        connection.connect(str(path))
+        if peer_uid(connection)!=0:
+            raise RuntimeError('readiness socket is not served by root')
+        if packet is None:return None
+        connection.sendall(json.dumps(packet,separators=(',',':')).encode()+b'\n')
+        data=bytearray()
+        while b'\n' not in data:
+            chunk=connection.recv(8192)
+            if not chunk or len(data)+len(chunk)>1048576:
+                raise RuntimeError('readiness response missing or oversized')
+            data.extend(chunk)
+        response=json.loads(bytes(data).split(b'\n',1)[0])
+        if not isinstance(response,dict) or response.get('ok') is not True:
+            raise RuntimeError('project status request was rejected during readiness')
+        return response['result']
+
+def verify_status(status,project):
+    if not isinstance(status,dict) or not isinstance(status.get('authority'),dict):
+        raise RuntimeError('installed broker returned invalid status')
+    if (status.get('source_sha')!=expected['source_sha']
+            or status.get('production_ready') is not False
+            or status.get('operator_intent') not in ('maintenance','paused','stopped')
+            or status.get('unresolved_executions')!=[]
+            or status.get('inflight_request_ids')!=[]
+            or status['authority'].get('repo_head')!=project['source_sha']):
+        raise RuntimeError('installed project status does not match sealed maintenance authority')
+
+while time.monotonic()<deadline:
+    try:
+        for project in expected['projects']:
+            project_status=connect(socket_root/(project['key'][:24]+'.sock'),
+                                   {'operation':'status'})
+            verify_status(project_status,project)
+            operator_status=connect(socket_root/'operator.sock',
+                                    {'operation':'status','project':project['key']})
+            verify_status(operator_status,project)
+            if operator_status.get('uid')!=project_status.get('uid'):
+                raise RuntimeError('operator and project broker identities differ')
+        print('SUPERVISOR_AUTHENTICATED_READY')
+        sys.exit(0)
+    except OSError as exc:
+        if exc.errno not in (errno.ENOENT,errno.ECONNREFUSED,errno.ECONNRESET,
+                             errno.ETIMEDOUT):
+            raise
+        last=type(exc).__name__
+        time.sleep(0.15)
+raise RuntimeError('supervisor socket readiness timed out: '+last)
+"""
+
+
+def wait_for_supervisor_readiness(config):
+    """Prove live authenticated status under the operator UID before reporting success.
+
+    Never send an execution or mutation request; a failed check leaves the
+    original cutover journal open for administrator reconciliation.
+    """
+    expected={'source_sha':config['source_sha'],
+              'projects':[{'key':p['key'],'source_sha':config.get('native_head_checkpoints',{}).get(p['key'],{}).get('commit',p['source_sha'])}
+                          for p in config['projects']]}
+    result=subprocess.run(
+        [config['python'],'-I','-S','-B','-c',_READINESS_CLIENT,
+         str(ROOT/'current/package'),json.dumps(expected,sort_keys=True)],
+        capture_output=True,text=True,timeout=75,
+        user=config['operator_uid'],group=config['operator_gid'],
+        extra_groups=[],env={'PATH':'/usr/bin:/bin','HOME':config['operator_home']})
+    if result.returncode or result.stdout.strip()!='SUPERVISOR_AUTHENTICATED_READY':
+        raise RuntimeError(
+            'supervisor startup readiness unverified; maintenance and cutover '
+            'journal retained (inspect installed helper and sockets)')
+
+
 def atomic(path, data):
     temporary=path.with_name(path.name+'.pending')
     with temporary.open('w') as stream:
         json.dump(data,stream,sort_keys=True);stream.flush();os.fsync(stream.fileno())
     temporary.chmod(0o600);os.replace(temporary,path)
+    sync_directory(path.parent)
+
+
+def sync_directory(path):
+    fd=os.open(path,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+    try:os.fsync(fd)
+    finally:os.close(fd)
+
+
+def select_runtime(stage, current, journal_path, journal, source_sha, *, recovery):
+    previous=ROOT/('previous-'+uuid.uuid4().hex)
+    journal['runtime_transition']={'operation':'recovery' if recovery else 'install',
+        'from_source':journal.get('source_sha'),'to_source':source_sha,
+        'selected_path':str(stage),'retained_path':str(previous),'phase':'cutover_started'}
+    # Persist the ticket and directory entry before the first package rename.
+    # A crash never authorizes replay or replacing the retained effect DB.
+    atomic(journal_path,journal)
+    if current.exists():
+        os.rename(current,previous);sync_directory(ROOT)
+    os.rename(stage,current);sync_directory(ROOT)
+    journal['runtime_transition']['phase']='runtime_selected';atomic(journal_path,journal)
 
 
 def secure_directory(path, mode=0o755):
@@ -108,6 +345,13 @@ def provision_worktree(config, project, current):
     for name in ('requests','probes'):secure_directory(target.parent/name,0o711)
     partial = target.exists()
     if partial:
+        if project['key'] in config.get('native_head_checkpoints',{}):
+            # Admission already verified the original root terminal receipt and
+            # clean tested tree. Repeat before accepting the existing directory.
+            from do_again.supervisor.native_checkpoint import verify_checkpoints
+            verified=verify_checkpoints(config,config)
+            if project['key'] not in verified:raise RuntimeError('native checkpoint not verified')
+            return
         if target.is_symlink():raise RuntimeError('existing worktree is aliased')
         if target.stat().st_uid==project['uid']:
             metadata=target/'.git';head=metadata/'HEAD'
@@ -146,6 +390,204 @@ def provision_worktree(config, project, current):
     target.chmod(0o750)
 
 
+
+def verify_jobpipe_migration_preflight(config, previous):
+    """Read-only check before a protected snapshot is ever replaced.
+
+    The primary checkout and its dirty files are NOT involved. Root-owned
+    migration is permitted only from the previously sealed detached HEAD,
+    without any tracked or untracked worktree changes.
+    """
+    marker=config.get('snapshot_migration')
+    if marker is None:return None
+    if previous is None:
+        raise RuntimeError('jobpipe migration requires an installed protected snapshot')
+    validate_project_scope(config,previous)
+    prior=next(p for p in previous['projects'] if p['account']=='_doagain_jp')
+    target=Path(prior['worktree'])
+    if target!=EXEC/prior['key']/'worktree' or target.is_symlink() or not target.is_dir():
+        raise RuntimeError('jobpipe protected worktree identity differs')
+    metadata=target/'.git'
+    head=metadata/'HEAD'
+    if (not metadata.is_dir() or metadata.is_symlink() or head.is_symlink()
+            or head.stat().st_nlink!=1
+            or metadata.stat().st_uid!=config['operator_uid']
+            or head.read_text().strip()!=prior['source_sha']):
+        raise RuntimeError('jobpipe snapshot has changed from the recorded detached HEAD')
+    # No user-controlled hooks, system/global configuration, fsmonitor, or
+    # optional Git index locks. Never run against the normal ~/jobpipe checkout.
+    environment={'PATH':'/usr/bin:/bin','HOME':'/var/empty',
+                 'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null',
+                 'GIT_OPTIONAL_LOCKS':'0','GIT_TERMINAL_PROMPT':'0'}
+    result=subprocess.run(['/usr/bin/git','-c','core.fsmonitor=false',
+        '-c','core.hooksPath=/dev/null','-c','safe.directory='+str(target),
+        '-C',str(target),'status','--porcelain=v1','--untracked-files=all'],
+        env=environment,capture_output=True,text=True,timeout=60)
+    if result.returncode or result.stdout.strip():
+        raise RuntimeError('jobpipe protected worktree is modified or cannot be verified; migration refused')
+    stage=target.parent/('worktree-next-'+marker['to_sha'][:12])
+    retained=target.parent/('worktree-retained-'+marker['from_sha'][:12])
+    if any(path.exists() or path.is_symlink() for path in (stage,retained)):
+        raise RuntimeError('jobpipe migration staging or retained snapshot already exists; reconcile first')
+    return {'target':target,'staged':stage,'retained':retained,'previous':prior}
+
+
+def migrate_jobpipe_snapshot(config, current, previous, journal_path, journal):
+    """One-shot, crash-recorded source-only migration under root admission fences.
+
+    The old protected worktree is retained. Every interruption requires
+    explicit reconciliation; no file deletion, rollback, or retry is automatic.
+    """
+    marker=config.get('snapshot_migration')
+    if marker is None:return
+    proof=verify_jobpipe_migration_preflight(config,previous)
+    old=proof['previous']
+    project=next(p for p in config['projects'] if p['account']=='_doagain_jp')
+    target,staged,retained=proof['target'],proof['staged'],proof['retained']
+    if journal.get('snapshot_migration',{}).get('phase') not in (None,'complete'):
+        raise RuntimeError('interrupted jobpipe snapshot migration requires operator reconciliation')
+    record={'phase':'stage_requested','kind':marker['kind'],
+            'from_sha':marker['from_sha'],'to_sha':marker['to_sha'],
+            'worktree':str(target),'staged':str(staged),'retained':str(retained),
+            'source_sha':config['source_sha']}
+    journal['snapshot_migration']=record
+    atomic(journal_path,journal)
+    staged.mkdir(mode=0o700)
+    os.chown(staged,config['operator_uid'],config['operator_gid'])
+    environment={'PATH':'/usr/bin:/bin','HOME':config['operator_home'],
+                 'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':'/dev/null',
+                 'GIT_TERMINAL_PROMPT':'0'}
+    options={'user':config['operator_uid'],'group':config['operator_gid'],
+             'extra_groups':[],'env':environment}
+    git=['/usr/bin/git','-c','core.fsmonitor=false',
+         '-c','core.hooksPath=/dev/null','-c','protocol.file.allow=always',
+         '-c','submodule.recurse=false']
+    bundle=current/project['bundle']
+    run([*git,'clone','--no-hardlinks','--no-checkout',str(bundle),str(staged)],**options)
+    run([*git,'-C',str(staged),'fetch','--no-tags',
+         str(bundle),marker['to_sha']],**options)
+    run([*git,'-C',str(staged),'merge-base','--is-ancestor',
+         marker['from_sha'],marker['to_sha']],**options)
+    run([*git,'-C',str(staged),'checkout','--detach',marker['to_sha']],**options)
+    head=run([*git,'-C',str(staged),'rev-parse','HEAD'],**options).stdout.strip()
+    if head!=marker['to_sha']:
+        raise RuntimeError('staged jobpipe snapshot head does not match sealed fast-forward')
+    for directory,dirs,files in os.walk(staged,followlinks=False):
+        if Path(directory)==staged:dirs[:]=[name for name in dirs if name!='.git']
+        for item in [Path(directory),*(Path(directory)/name for name in files)]:
+            os.chown(item,project['uid'],project['gid'],follow_symlinks=False)
+    staged.chmod(0o750)
+    record['phase']='ready_to_swap';atomic(journal_path,journal)
+    # No automagic restore: a crash after the first rename leaves the
+    # original untouched under retained and a durable incomplete journal.
+    os.rename(target,retained)
+    sync_directory(target.parent)
+    record['phase']='original_retained';atomic(journal_path,journal)
+    os.rename(staged,target)
+    sync_directory(target.parent)
+    record['phase']='complete';atomic(journal_path,journal)
+
+
+
+def verify_worker_quiescence(config, *, reconcile=True):
+    """A maintenance runtime cutover never replaces code beneath a live worker."""
+    if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+        raise RuntimeError('browser and Codex canary grants may not coexist')
+    if config.get('live_canary') is not None:
+        from do_again.supervisor.live_canary import scope
+        _,_,canary=scope(config)
+        config=dict(config,projects=[*config['projects'],canary])
+    if config.get('codex_canary') is not None:
+        from do_again.supervisor.model_native import codex_project
+        _,_,canary=codex_project(config)
+        config=dict(config,projects=[*config['projects'],canary])
+    for project in config['projects']:
+        journal=ROOT/'state'/project['key']/'worker-deployment.json'
+        record=None
+        if journal.exists():
+            if journal.is_symlink() or journal.stat().st_uid!=0 or journal.stat().st_nlink!=1:
+                raise RuntimeError('worker deployment ownership is invalid')
+            record=json.loads(journal.read_text())
+            if record.get('phase') not in {'staged','withdrawn','stage_started','stage_failed_pre_effect','running'}:
+                raise RuntimeError('worker deployment requires guarded withdrawal before cutover')
+            # A withdrawn launchd worker may leave its durable phase at
+            # "running" if bootout returned before launchd removed the service.
+            # This is an observation candidate, not permission to issue another
+            # bootout. The original registered PID/birth must also be gone.
+        label='io.github.tran-steven.do-again.worker.'+project['key'][:12]
+        observed=subprocess.run(['/bin/launchctl','print',f"gui/{config['operator_uid']}/{label}"],
+            capture_output=True,text=True,timeout=30,user=config['operator_uid'],group=config['operator_gid'],
+            extra_groups=[],env={'PATH':'/usr/bin:/bin','HOME':config['operator_home']})
+        if observed.returncode==0:
+            raise RuntimeError('loaded engineering worker blocks immutable runtime cutover')
+        if observed.returncode!=113 or 'Could not find service' not in observed.stderr:
+            raise RuntimeError('worker service absence is unproven; cutover deferred')
+        if record and record.get('phase')=='running':
+            # Maintain the original effect journal; only correct this worker
+            # deployment phase after independent service and kernel evidence.
+            from do_again.supervisor.authority import AuthorityRegistry
+            from do_again.supervisor.macos_execution import MacOSProcesses
+            from do_again.supervisor.service_probe import verify_process_withdrawn
+            registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
+            status=registry.status(Path(project['repo']))
+            lease=ROOT/'state'/project['key']/'worker-instance.json'
+            definition=WORKER_AGENTS/(label+'.plist')
+            if (status['intent']!='maintenance' or record.get('source_sha')!=config['source_sha']
+                    or not lease.is_file() or lease.is_symlink() or not definition.is_file()
+                    or definition.is_symlink()):
+                raise RuntimeError('worker withdrawal has no trusted, quiescent provenance')
+            for protected in (lease,definition):
+                info=protected.stat()
+                if info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o022:
+                    raise RuntimeError('worker withdrawal identity or service definition is untrusted')
+            if record.get('plist_sha256')!=hashlib.sha256(definition.read_bytes()).hexdigest():
+                raise RuntimeError('worker withdrawal definition changed')
+            identity=json.loads(lease.read_text())
+            if (type(identity.get('pid')) is not int or identity['pid']<=1
+                    or identity.get('epoch')!=record.get('epoch')
+                    or not isinstance(identity.get('identity'),list)
+                    or len(identity['identity'])!=4
+                    or identity['identity'][0]!=config['operator_uid']):
+                raise RuntimeError('worker withdrawal original kernel identity is invalid')
+            # Observe the exact original PID and kernel birth; never signal it.
+            verify_process_withdrawn(identity['pid'],identity['identity'],timeout=3)
+            record['phase']='withdrawn'
+            record['recovery_evidence']={'reason':'launchd_bootout_observation_race',
+                                         'previous_phase':'running','service_absent':True,
+                                         'registered_pid':identity['pid'],
+                                         'original_kernel_identity':identity['identity'],
+                                         'original_worker_withdrawn':True}
+            if reconcile:atomic(journal,record)
+        if record and record.get('phase')=='stage_started':
+            target=WORKER_AGENTS/(label+'.plist')
+            pending=target.with_suffix('.plist.pending')
+            if any(path.exists() or path.is_symlink() for path in (target,pending)):
+                raise RuntimeError('interrupted staging has service artifacts; reconciliation required')
+            # No definition, pending artifact or loaded service exists. Preserve
+            # the original journal and record this independently proven failure.
+            record['phase']='stage_failed_pre_effect'
+            record['recovery_evidence']={'service_absent':True,'definition_absent':True,'pending_absent':True}
+            if reconcile:atomic(journal,record)
+
+
+@contextmanager
+def installation_fences(config):
+    """Observe and lock existing protected admission files without creating them."""
+    import fcntl
+    from do_again.supervisor.macos_execution import private_root_file
+    with ExitStack() as stack:
+        for project in sorted(config['projects'],key=lambda p:p['key']):
+            path=ROOT/'state'/project['key']/'admission.lock'
+            private_root_file(path)
+            descriptor=os.open(path,os.O_RDONLY | os.O_NOFOLLOW)
+            stream=stack.enter_context(os.fdopen(descriptor,'rb'))
+            info=os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:
+                raise RuntimeError('publication recovery admission fence is untrusted')
+            fcntl.flock(stream.fileno(),fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
 @contextmanager
 def preview_cutover(config, registry, live):
     """Upgrade only this sealed, maintenance-only helper under admission fences.
@@ -154,14 +596,13 @@ def preview_cutover(config, registry, live):
     cutover. Production helpers require the later guarded rollout procedure.
     """
     with ExitStack() as fences:
-        if live:
+        if (ROOT/'current').exists():
             import fcntl
             old=json.loads((ROOT/'current/config.json').read_text())
             verify_stage(ROOT/'current')
-            fields=('repo','key','uid','gid','account','worktree','source_sha')
-            scoped=lambda c:sorted(tuple(p[k] for k in fields) for p in c['projects'])
-            if old.get('production_ready') is not False or config.get('production_ready') is not False or scoped(old)!=scoped(config):
-                raise RuntimeError('production or changed-scope helper upgrade requires guarded rollout')
+            if old.get('production_ready') is not False or config.get('production_ready') is not False:
+                raise RuntimeError('production helper upgrade requires guarded rollout')
+            enrolling_sonary=validate_project_scope(config,old)
             for project in sorted(config['projects'],key=lambda p:p['key']):
                 path=ROOT/'state'/project['key']/'admission.lock'
                 if path.is_symlink() or path.parent.is_symlink():raise RuntimeError('aliased admission fence')
@@ -169,20 +610,55 @@ def preview_cutover(config, registry, live):
                 fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
             # Recheck immediately before the service effect, while spawn and
             # operator-intent transitions are excluded by the same fences.
+            from do_again.supervisor.authority import AuthorityDenied
             for project in config['projects']:
-                if registry.status(Path(project['repo']))['intent']=='active':
+                try:
+                    status=registry.status(Path(project['repo']))
+                except AuthorityDenied:
+                    if enrolling_sonary and project['account']=='_doagain_so':
+                        continue  # Root creates only this missing maintenance row after cutover.
+                    raise
+                if status['intent']=='active':
                     raise RuntimeError('authority admits execution; cutover deferred')
-            with sqlite3.connect(registry.path) as db:
-                if db.execute("SELECT 1 FROM execution WHERE state='started' LIMIT 1").fetchone():
-                    raise RuntimeError('ambiguous execution blocks cutover')
+            from do_again.supervisor.macos_execution import ExecutionLedger
+            ledger=ExecutionLedger.__new__(ExecutionLedger);ledger.path=Path(registry.path)
+            with closing(sqlite3.connect(registry.path)) as db:
+                projects={row[0] for row in db.execute('SELECT DISTINCT project FROM execution')}
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='publication_quarantine'").fetchone():
+                    projects.update(row[0] for row in db.execute('SELECT DISTINCT project FROM publication_quarantine'))
+                if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_probe_quarantine'").fetchone():
+                    projects.update(row[0] for row in db.execute('SELECT DISTINCT project FROM planning_probe_quarantine'))
+                projects.update(p['key'] for p in config['projects'])
+            if any(ledger.pending(project) for project in projects):
+                raise RuntimeError('ambiguous execution blocks cutover')
             from do_again.supervisor.macos_execution import MacOSProcesses
             inventory=MacOSProcesses()
             if any(inventory.owned(p['uid']) for p in config['projects']):
                 raise RuntimeError('dedicated execution still active; cutover deferred')
-            run(['/bin/launchctl','bootout','system/'+LABEL])
-            stopped=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
-            if stopped.returncode!=113:raise RuntimeError('helper stop is uncertain; cutover deferred')
+            verify_worker_quiescence(old)
+            verify_worker_quiescence(config)
+            if live:
+                run(['/bin/launchctl','bootout','system/'+LABEL])
+                # launchctl bootout may return before the service disappears.
+                # Poll observation only: no second bootout, force-kill, or
+                # unchecked cutover. The root-owned package and ledger remain
+                # unchanged unless the actual service is conclusively absent.
+                verify_helper_stopped()
         yield
+
+
+def verify_helper_stopped(*, timeout=12.0):
+    """Wait for launchd's asynchronous bootout without additional effects."""
+    deadline=time.monotonic()+timeout
+    while True:
+        stopped=subprocess.run(
+            ['/bin/launchctl','print','system/'+LABEL],
+            capture_output=True, timeout=8)
+        if stopped.returncode==113:
+            return
+        if stopped.returncode!=0 or time.monotonic()>=deadline:
+            raise RuntimeError('helper stop is uncertain; cutover deferred')
+        time.sleep(0.15)
 
 
 def runtime_executables(config, current):
@@ -190,17 +666,178 @@ def runtime_executables(config, current):
               'git':current/'runtimes/git/bin/git'}
     if any(config.get(key)!=str(path) for key,path in expected.items()):
         raise RuntimeError('invalid sealed runtime executable path')
+    if (config.get('controller_scope') or {}).get('planner')=='codex-cli':
+        expected['codex']=current/'runtimes/codex/bin/codex'
     return tuple(expected.values())
 
 
-def install(stage):
+def recovery_candidate(source_sha):
+    """Select an exact immutable package; never restore a historical effect DB."""
+    if not re.fullmatch('[0-9a-f]{40}',source_sha):
+        raise RuntimeError('recovery requires an exact approved source commit')
+    current=ROOT/'current'
+    verify_stage(current)
+    active=json.loads((current/'config.json').read_text())
+    if active.get('production_ready') is not False or active.get('recovery_contract')!=RECOVERY_CONTRACT:
+        raise RuntimeError('current runtime lacks the compatible maintenance recovery contract')
+    if active.get('source_sha')==source_sha:
+        raise RuntimeError('requested source is already installed; no recovery effect')
+    candidates=[]
+    for path in ROOT.glob('previous-*'):
+        # A malformed retained package blocks recovery instead of being silently
+        # adopted or discarded. Retained packages and journals remain untouched.
+        manifest=verify_stage(path)
+        if manifest.get('source_sha')==source_sha:
+            seal=hashlib.sha256((path/'manifest.json').read_bytes()).hexdigest()
+            candidates.append((path,seal))
+    if not candidates or len({seal for path,seal in candidates})!=1:
+        raise RuntimeError('recovery source is absent or ambiguous')
+    # Reinstalling an approved bundle can retain multiple byte-identical copies.
+    # Fully verify each; equivalent seals are one choice, different seals block.
+    candidate=min(path for path,seal in candidates);config=json.loads((candidate/'config.json').read_text())
+    if (config.get('source_sha')!=source_sha or config.get('production_ready') is not False
+            or config.get('recovery_contract')!=RECOVERY_CONTRACT):
+        raise RuntimeError('target runtime lacks the compatible maintenance recovery contract')
+    fixed=('authority_path','operator_uid','operator_gid','operator_home','projects')
+    if any(config.get(key)!=active.get(key) for key in fixed):
+        raise RuntimeError('recovery cannot change project scope, credentials or capabilities')
+    previous_dependencies=config.get('dependency_artifacts',{})
+    active_dependencies=active.get('dependency_artifacts',{})
+    if not isinstance(previous_dependencies,dict) or not isinstance(active_dependencies,dict):
+        raise RuntimeError('recovery dependency capabilities are invalid')
+    for project, artifacts in previous_dependencies.items():
+        current=active_dependencies.get(project,[])
+        if not isinstance(artifacts,list) or not isinstance(current,list):
+            raise RuntimeError('recovery dependency capabilities are invalid')
+        if not all(isinstance(item,dict) and isinstance(item.get('id'),str) for item in artifacts+current):
+            raise RuntimeError('recovery dependency capabilities are invalid')
+        if len({item['id'] for item in artifacts})!=len(artifacts) or len({item['id'] for item in current})!=len(current):
+            raise RuntimeError('recovery dependency capabilities are ambiguous')
+        approved={item['id']:item for item in current}
+        if any(approved.get(item['id'])!=item for item in artifacts):
+            raise RuntimeError('recovery cannot expand dependency capabilities')
+    database=Path(active['authority_path'])
+    with closing(sqlite3.connect(database.as_uri()+'?mode=ro',uri=True)) as db:
+        if db.execute('PRAGMA user_version').fetchone()[0]!=RECOVERY_CONTRACT['authority_schema']:
+            raise RuntimeError('effect journal schema is incompatible with recovery')
+        columns={'execution':['project','request','fingerprint','state','result'],
+                 'capability_intent':['project','request','payload']}
+        for table,expected in columns.items():
+            if [row[1] for row in db.execute('PRAGMA table_info('+table+')')]!=expected:
+                raise RuntimeError('effect journal schema is incompatible with recovery')
+        if db.execute("SELECT 1 FROM execution WHERE state='started' LIMIT 1").fetchone():
+            raise RuntimeError('unresolved execution blocks runtime recovery')
+    return candidate
+
+
+def complete_selected_runtime(source_sha):
+    """Explicitly reconcile readiness after a completed package selection.
+
+    No package, source, service or effect is replayed. Retain the original
+    installation ticket before marking only this verified transition complete.
+    """
+    if sys.platform!='darwin' or os.geteuid()!=0 or not re.fullmatch('[0-9a-f]{40}',source_sha):
+        raise RuntimeError('exact source and administrator authentication required')
+    current=ROOT/'current';verify_stage(current)
+    config=json.loads((current/'config.json').read_text())
+    path=ROOT/'state/installation.json'
+    info=path.lstat()
+    if path.is_symlink() or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:
+        raise RuntimeError('installation recovery ticket is untrusted')
+    original=path.read_bytes();journal=json.loads(original)
+    transition=journal.get('runtime_transition',{})
+    if (config.get('source_sha')!=source_sha or config.get('production_ready') is not False
+            or config.get('recovery_contract')!=RECOVERY_CONTRACT
+            or transition.get('phase')!='runtime_selected' or transition.get('to_source')!=source_sha
+            or transition.get('from_source')!=journal.get('source_sha')):
+        raise RuntimeError('selected runtime recovery identity or phase differs')
+    retained=Path(transition.get('retained_path',''))
+    if retained.parent!=ROOT or not retained.name.startswith('previous-'):
+        raise RuntimeError('retained runtime recovery path differs')
+    if verify_stage(retained)['source_sha']!=transition['from_source']:
+        raise RuntimeError('retained runtime recovery source differs')
+    validate_project_scope(config,json.loads((retained/'config.json').read_text()))
+    sys.path.insert(0,str(current/'package'))
+    from do_again.supervisor.authority import AuthorityRegistry
+    from do_again.supervisor.native_checkpoint import verify_checkpoints
+    registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
+    import fcntl
+    with ExitStack() as fences:
+        for project in sorted(config['projects'],key=lambda p:p['key']):
+            lock=ROOT/'state'/project['key']/'admission.lock'
+            if lock.is_symlink() or lock.stat().st_uid!=0 or lock.stat().st_mode&0o077:
+                raise RuntimeError('runtime recovery admission fence is untrusted')
+            file=fences.enter_context(lock.open('a'));fcntl.flock(file,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if path.read_bytes()!=original:raise RuntimeError('runtime recovery ticket changed')
+        for project in config['projects']:
+            if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+                raise RuntimeError('active project blocks runtime recovery')
+        from do_again.supervisor.macos_execution import MacOSProcesses
+        inventory=MacOSProcesses()
+        if any(inventory.owned(p['uid']) for p in config['projects']):
+            raise RuntimeError('dedicated process blocks runtime recovery')
+        verify_worker_quiescence(config,reconcile=False)
+        verify_checkpoints(config,config)
+        wait_for_supervisor_readiness(config)
+        backup=path.with_name('installation-before-readiness-'+hashlib.sha256(original).hexdigest()+'.json')
+        try:
+            fd=os.open(backup,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+        except FileExistsError:
+            fd=os.open(backup,os.O_RDONLY|os.O_NOFOLLOW)
+            try:
+                info=os.fstat(fd)
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1
+                        or info.st_mode&0o077 or info.st_size!=len(original)):
+                    raise RuntimeError('retained readiness ticket is untrusted')
+                with os.fdopen(fd,'rb',closefd=False) as stream:saved=stream.read(len(original)+1)
+                if saved!=original:raise RuntimeError('retained readiness ticket differs')
+            finally:os.close(fd)
+        else:
+            with os.fdopen(fd,'wb') as stream:stream.write(original);stream.flush();os.fsync(stream.fileno())
+        sync_directory(backup.parent)
+        journal['source_sha']=source_sha;journal['status']='installed_maintenance'
+        journal['runtime_transition'].update(phase='complete',readiness_recovery={
+            'source_sha':source_sha,'original_ticket_sha256':hashlib.sha256(original).hexdigest(),
+            'authenticated_maintenance_status':True,'effects_replayed':False})
+        atomic(path,journal)
+    print('SUPERVISOR_SELECTED_RUNTIME_VERIFIED')
+
+
+def install(stage, *, recovery=False, classify_canary_partial=False, partial_expected=None):
     if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
     os.umask(0o077)
     manifest=verify_stage(stage)
     config=json.loads((stage/'config.json').read_text())
     if config['source_sha']!=manifest['source_sha']:raise RuntimeError('configuration source mismatch')
-    if len(config['projects'])!=2 or len({p['uid'] for p in config['projects']})!=2:
-        raise RuntimeError('two independently scoped execution identities required')
+    # Never install another one-shot grant into a chat carrying an earlier
+    # canary's uncertain delivery. An altered preparer cannot bypass this.
+    prior_path=ROOT/'current/config.json'
+    if prior_path.exists():
+        # This root entrypoint runs in an isolated system Python before the
+        # verified payload package is on sys.path. Use only sealed JSON values
+        # for this early fail-closed gate; do not import do_again here.
+        previous=json.loads(prior_path.read_text())
+        older=previous.get('live_canary')
+        proposed=config.get('live_canary')
+        if (isinstance(older,dict) and isinstance(proposed,dict)
+                and older.get('chat_url')
+                and older['chat_url']==proposed.get('chat_url')):
+            raise RuntimeError('fresh canary installation requires a distinct ChatGPT conversation')
+    if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+        raise RuntimeError('browser and Codex grants cannot coexist in an installed runtime')
+    # Authenticated stage code is imported only after verify_stage succeeds,
+    # before account, authority, runtime or launchd mutation.
+    sys.path.insert(0,str(stage/'package'))
+    from do_again.supervisor.controller_installation import validate_controller_stage
+    try:validate_controller_stage(stage,config)
+    except Exception as exc:raise RuntimeError('controller stage authorization rejected') from exc
+    previous_config=json.loads(prior_path.read_text()) if prior_path.exists() else None
+    enrolling_sonary=validate_project_scope(config,previous_config)
+    # Refuse a dirty or ambiguous protected source before any account/runtime
+    # effect. The same check repeats immediately before the fenced rename.
+    verify_jobpipe_migration_preflight(config,previous_config)
+    from do_again.supervisor.native_checkpoint import verify_checkpoints
+    verify_checkpoints(config,previous_config)
     if any(p['uid'] in (0,config['operator_uid']) for p in config['projects']):raise RuntimeError('invalid execution identity')
     secure_directory(ROOT)
     secure_directory(ROOT/'state',0o700)
@@ -214,40 +851,94 @@ def install(stage):
     if authority.is_symlink() or authority.stat().st_uid!=config['operator_uid'] or authority.stat().st_mode&0o077:
         raise RuntimeError('operator authority journal is not privately owned')
     current=ROOT/'current'
+    transition=journal.get('runtime_transition',{})
+    if existing_installation and not current.exists():
+        raise RuntimeError('interrupted runtime selection requires administrator reconciliation; journals retained')
+    if transition and transition.get('phase')!='complete' and not recovery:
+        raise RuntimeError('interrupted runtime cutover requires explicit recovery; no automatic retry')
     live=subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True)
     if live.returncode not in (0,113):raise RuntimeError('cannot establish supervisor service quiescence')
     if current.exists() and not existing_installation:
         raise RuntimeError('existing package has unknown installation provenance')
     sys.path.insert(0,str(stage/'package'))
-    from do_again.supervisor.authority import AuthorityRegistry
+    if config.get('development_scope') is not None:
+        from do_again.supervisor.jobpipe_development import require_jobpipe_grant
+        from do_again.supervisor.macos_execution import project_from_dict
+        target=next(p for p in config['projects'] if p['account']=='_doagain_jp')
+        try:
+            require_jobpipe_grant(config,project_from_dict(target))
+        except Exception as exc:
+            raise RuntimeError('sealed jobpipe grant fails admission') from exc
+    from do_again.supervisor.authority import AuthorityRegistry, AuthorityDenied
     registry=AuthorityRegistry(Path(config['authority_path']),owner_uid=0)
+    if classify_canary_partial:
+        if recovery or not existing_installation or not current.exists():
+            raise RuntimeError('partial canary disposition requires a separately authorized maintenance update')
+        verify_stage(current)
+        old=json.loads((current/'config.json').read_text())
+        if (old.get('production_ready') is not False or config.get('production_ready') is not False
+                or not old.get('live_canary') or not config.get('live_canary')
+                or partial_expected!=(old['source_sha'],old['live_canary']['nonce'])
+                or old['source_sha']==config['source_sha']
+                or old['live_canary']['nonce']==config['live_canary']['nonce']):
+            raise RuntimeError('partial disposition cannot reactivate a consumed grant or enable production')
+        verify_worker_quiescence(old)
+        from do_again.supervisor.macos_server import ProjectBroker
+        from do_again.supervisor.live_canary import create_broker
+        from do_again.supervisor.publication import classify_canary_partial_publication
+        parent=ProjectBroker(old,next(p for p in old['projects'] if p['account']=='_doagain_da'))
+        child=create_broker(old,parent)
+        # This explicit installer flag classifies one observed failed partial
+        # result; it never replays publication or overwrites older journals.
+        classify_canary_partial_publication(child)
     if existing_installation and not registry.path.exists():
         raise RuntimeError('previous installation lost its effect journal; reconciliation required')
     if registry.path.exists():
         for project in config['projects']:
-            if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+            try:
+                prior=registry.status(Path(project['repo']))
+            except AuthorityDenied:
+                if enrolling_sonary and project['account']=='_doagain_so':
+                    continue
+                raise
+            if prior['intent'] not in {'maintenance','paused','stopped'}:
                 raise RuntimeError('existing authority admits work; upgrade deferred')
     legacy=AuthorityRegistry(authority,owner_uid=config['operator_uid'])
     for project in config['projects']:
         from do_again.supervisor.macos_execution import project_from_dict
         scoped=project_from_dict(project);scoped.validate(config['operator_uid'])
-        if scoped.key != project['key'] or project['account'] not in {'_doagain_da','_doagain_jp'}:
+        if scoped.key != project['key'] or project['account'] not in {'_doagain_da','_doagain_jp','_doagain_so'}:
             raise RuntimeError('invalid project scope')
-        status=legacy.status(Path(project['repo']))
-        if status['intent']!='maintenance' or status['goal_revision']!=project['goal_revision']:
+        try:
+            status=legacy.status(Path(project['repo']))
+        except AuthorityDenied:
+            if project['account']!='_doagain_so':
+                raise
+            status=None
+        accepted={'maintenance','paused','stopped'} if project['account']=='_doagain_so' else {'maintenance'}
+        if status is not None and (status['intent'] not in accepted
+                                    or status['goal_revision']!=project['goal_revision']):
             raise RuntimeError('operator admission changed after preparation')
+        if status is None and project['account']=='_doagain_so':
+            older=next((p for p in (previous_config or {}).get('projects',[])
+                        if p['account']=='_doagain_so'),None)
+            expected=older['goal_revision'] if older is not None else 'sonary-enrolled-maintenance-v1'
+            if project['goal_revision']!=expected:
+                raise RuntimeError('new Sonary scope has no approved maintenance goal')
     if config.get('production_ready') is not False:
         raise RuntimeError('initial installation must remain in maintenance')
     if PLIST.exists() and not existing_installation:
         raise RuntimeError('existing service definition has unknown provenance')
     runtimes=runtime_executables(config,current)
     for project in config['projects']:create_account(project,journal_path,journal)
+    if enrolling_sonary:
+        new_project=next(p for p in config['projects'] if p['account']=='_doagain_so')
+        # A new project has no existing admission fence. Create its empty,
+        # protected state container before taking the same cross-project locks.
+        # Existing parents' protected state is never recreated or replaced.
+        secure_directory(ROOT/'state'/new_project['key'],0o700)
     with preview_cutover(config,registry,live.returncode==0):
-        if current.exists():
-            # Retain earlier immutable package. Effect journals always remain newer.
-            previous=ROOT/('previous-'+uuid.uuid4().hex)
-            os.rename(current,previous)
-        os.rename(stage,current)
+        select_runtime(stage,current,journal_path,journal,config['source_sha'],recovery=recovery)
         for runtime in runtimes:runtime.chmod(0o755)
         if not registry.path.exists():
             registry.initialize()
@@ -255,9 +946,44 @@ def install(stage):
                 registry.set_intent(Path(project['repo']),'maintenance',goal_revision=project['goal_revision'])
         else:
             for project in config['projects']:
-                if registry.status(Path(project['repo']))['intent'] not in {'maintenance','paused','stopped'}:
+                try:
+                    status=registry.status(Path(project['repo']))
+                except AuthorityDenied:
+                    if enrolling_sonary and project['account']=='_doagain_so':
+                        registry.set_intent(Path(project['repo']),'maintenance',
+                                            goal_revision=project['goal_revision'])
+                        continue
+                    raise
+                if status['intent'] not in {'maintenance','paused','stopped'}:
                     raise RuntimeError('existing authority admits work; upgrade deferred')
+        migrate_jobpipe_snapshot(config,current,previous_config,journal_path,journal)
         for project in config['projects']:provision_worktree(config,project,current)
+        if config.get('live_canary') is not None and config.get('codex_canary') is not None:
+            raise RuntimeError('cannot provision overlapping browser and Codex grants')
+        if config.get('live_canary') is not None or config.get('codex_canary') is not None:
+            if config.get('live_canary') is not None:
+                from do_again.supervisor.live_canary import scope
+                _,_,canary=scope(config)
+            else:
+                from do_again.supervisor.model_native import codex_project
+                _,_,canary=codex_project(config)
+            repo=Path(canary['repo']);repo.mkdir(parents=True,exist_ok=True,mode=0o700)
+            if repo.is_symlink() or any(repo.iterdir()):raise RuntimeError('canary identity directory is not empty and isolated')
+            os.chown(repo,config['operator_uid'],config['operator_gid'])
+            provision_worktree(config,canary,current)
+            registry.set_intent(repo,'maintenance',goal_revision=canary['goal_revision'])
+            state=ROOT/'state'/canary['key'];secure_directory(state,0o700)
+            parent=next(p for p in config['projects'] if p['account']=='_doagain_da')
+            token=ROOT/'state'/parent['key']/'github-token'
+            if token.is_symlink() or token.stat().st_uid!=0 or token.stat().st_nlink!=1 or token.stat().st_mode&0o077:
+                raise RuntimeError('canary requires the existing protected Do Again repository credential')
+            with (state/'github-token').open('x') as stream:stream.write(token.read_text())
+            (state/'github-token').chmod(0o600)
+            base=Path(config['operator_home'])/'.do_again/projects'/canary['key'][:12]
+            for path in (base,base/'state'):
+                if path.exists():raise RuntimeError('existing canary state requires reconciliation; no replacement')
+                path.mkdir(mode=0o700);os.chown(path,config['operator_uid'],config['operator_gid'])
+
         definition={'Label':LABEL,'ProgramArguments':[config['python'],'-I','-S','-B',str(current/'bootstrap.py')],
                     'UserName':'root','RunAtLoad':True,'KeepAlive':{'SuccessfulExit':False},
                     'WorkingDirectory':str(current),'EnvironmentVariables':{'PATH':'/usr/bin:/bin'},
@@ -267,11 +993,39 @@ def install(stage):
         temporary.write_bytes(plistlib.dumps(definition));temporary.chmod(0o644)
         os.chown(temporary,0,0);os.replace(temporary,PLIST)
         run(['/bin/launchctl','bootstrap','system',str(PLIST)])
+        if config.get('hosted_planning_scope') is not None:
+            from do_again.supervisor.controller_codex_helper import qualify_codex_helper
+            jp=next(p for p in config['projects'] if p['account']=='_doagain_jp')
+            qualify_codex_helper(config,ROOT/'state'/jp['key'])
+        wait_for_supervisor_readiness(config)
         journal['source_sha']=config['source_sha'];journal['status']='installed_maintenance'
+        journal['runtime_transition']['phase']='complete'
         atomic(journal_path,journal)
         print('SUPERVISOR_INSTALLED_MAINTENANCE')
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--stage',type=Path,required=True)
-    args=parser.parse_args();install(args.stage.resolve())
+    parser=argparse.ArgumentParser();choice=parser.add_mutually_exclusive_group(required=True)
+    choice.add_argument('--stage',type=Path);choice.add_argument('--recover-source')
+    choice.add_argument('--complete-selected-source')
+    parser.add_argument('--classify-canary-partial-publication',action='store_true')
+    parser.add_argument('--partial-disposition-source')
+    parser.add_argument('--partial-disposition-nonce')
+    args=parser.parse_args()
+    if args.recover_source and args.classify_canary_partial_publication:
+        parser.error('partial disposition is separate from runtime rollback')
+    if args.complete_selected_source and args.classify_canary_partial_publication:
+        parser.error('selected readiness recovery is separate from partial disposition')
+    if args.classify_canary_partial_publication:
+        if (not re.fullmatch('[0-9a-f]{40}',args.partial_disposition_source or '')
+                or not re.fullmatch('[0-9a-f]{24}',args.partial_disposition_nonce or '')):
+            parser.error('partial disposition requires the exact approved installed source and nonce')
+    elif args.partial_disposition_source or args.partial_disposition_nonce:
+        parser.error('partial disposition identity requires explicit authorization')
+    if args.complete_selected_source:
+        complete_selected_runtime(args.complete_selected_source)
+    elif args.recover_source:
+        if sys.platform!='darwin' or os.geteuid()!=0:raise RuntimeError('administrator authentication required')
+        install(recovery_candidate(args.recover_source),recovery=True)
+    else:install(args.stage.resolve(),classify_canary_partial=args.classify_canary_partial_publication,
+                 partial_expected=(args.partial_disposition_source,args.partial_disposition_nonce))

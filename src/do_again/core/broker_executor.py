@@ -10,19 +10,28 @@ from ..supervisor.macos_client import broker_request
 
 
 class BrokerExecutor:
-    def __init__(self, *, repo: Path, policy_path: Path, state_dir: Path):
+    def __init__(self, *, repo: Path, policy_path: Path, state_dir: Path, rpc=None):
         self.repo = repo.resolve()
         self.policy = read_json(policy_path)
+        self.rpc = rpc
 
     def execute(self, request: dict[str, Any]) -> dict[str, Any]:
         if sys.platform != 'darwin':
             raise OperatorError('native execution boundary unavailable on this platform; no local fallback')
+        rpc = self.rpc or broker_request
         operation = request['operation']
         if operation not in self.policy.get('allowed_operations', []):
             raise OperatorError(f'operation is not allowed: {operation}')
-        before = broker_request(self.repo, {'operation': 'status'})
-        if before.get('operator_intent') != 'active' or before.get('production_ready') is not True:
-            raise OperatorError('operator authority or production migration blocks execution')
+        before = rpc(self.repo, {'operation': 'status'})
+        if before.get('operator_intent') != 'active':
+            raise OperatorError('operator intent blocks execution')
+        if (before.get('production_ready') is not True
+                and before.get('canary_authorized') is not True):
+            # Offline authority cannot be inferred from an untrusted status flag.
+            # Revalidate the installed root-owned grant, exact jobpipe identity,
+            # expiration and quiescent siblings; root broker checks independently.
+            from ..supervisor.admission import require_worker_active
+            require_worker_active(self.repo, status=before, rpc=rpc)
         if before.get('enforcement_verified') is not True:
             raise OperatorError('native enforcement is not verified')
         actual = before.get('authority', {})
@@ -33,22 +42,47 @@ class BrokerExecutor:
             result = before
         else:
             packet = self._packet(request, before)
-            result = broker_request(self.repo, packet)
-        after = broker_request(self.repo, {'operation': 'status'})
+            result = rpc(self.repo, packet)
+        after = rpc(self.repo, {'operation': 'status'})
         return {'operation': operation, 'request_fingerprint': request_fingerprint(request),
                 'authority_before': actual, 'authority_after': after.get('authority', {}),
                 'result': result}
+
+    def recover(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        """Only an authenticated, original terminal result can repair a receipt."""
+        if sys.platform!='darwin':
+            raise OperatorError('native recovery unavailable; no local fallback')
+        if request['operation'] not in self.policy.get('allowed_operations',[]):
+            raise OperatorError('recovery operation is not allowed')
+        rpc=self.rpc or broker_request
+        fingerprint=request_fingerprint(request)
+        if request['operation']=='ci_observe':
+            # Repeating an observation is read-only, not an execution replay.
+            # Root still rechecks original publication and current HEAD.
+            result=rpc(self.repo,self._packet(request,{}))
+            return {'operation':'ci_observe','request_fingerprint':fingerprint,
+                    'result':result,'recovered_read_only':True}
+        result=rpc(self.repo,{'operation':'execution_observe','request_id':request['request_id'],
+                             'request_fingerprint':fingerprint})
+        if result.get('state')!='terminal':return None
+        if result.get('request_fingerprint')!=fingerprint or result.get('replay') is not False:
+            raise OperatorError('broker recovery identity differs')
+        if not isinstance(result.get('result'),dict):
+            raise OperatorError('broker terminal evidence is invalid')
+        return {'operation':request['operation'],'request_fingerprint':fingerprint,
+                'result':result['result'],'recovered_read_only':True,
+                'source_sha':result['source_sha']}
 
     def _packet(self, request: dict[str, Any], status: dict[str, Any]) -> dict:
         args = request.get('args', {})
         if args.get('env'):
             raise OperatorError('script-supplied environment is not admitted')
-        if request['operation'] == 'git_publication_reconcile':
+        if request['operation'] in {'git_publication_reconcile','ci_observe'}:
             original = args.get('original_request_id')
             if (set(args) != {'original_request_id'} or not isinstance(original, str)
                     or not REQUEST_ID_RE.fullmatch(original)):
                 raise OperatorError('publication reconciliation requires one original request identity')
-            return {'operation':'git_publication_reconcile','request_id':original}
+            return {'operation':request['operation'],'request_id':original}
         if request['operation'] == 'git_publish':
             if set(args) != {'title','body'}:
                 raise OperatorError('publication accepts pull request content only')
@@ -73,6 +107,10 @@ class BrokerExecutor:
                     'expected_head':status.get('authority',{}).get('repo_head'),
                     'expected_epoch':status.get('epoch'),
                     'request_fingerprint':request_fingerprint(request)}
+        if (request['operation'] == 'scratch_script'
+                and status.get('controller_enabled') is True
+                and request.get('request_id', '').startswith('offline-')):
+            return {'operation': 'development_execute', 'request': request}
         worktree = Path(status['worktree'])
         executables = [Path(value) for value in status['executables']]
 

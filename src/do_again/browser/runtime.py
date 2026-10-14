@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -22,7 +23,7 @@ from typing import Any, Callable
 
 from ..platforms.process import pid_alive
 from . import cdp
-from .errors import BrowserAuthRequired, BrowserError, BrowserSubmissionUncertain
+from .errors import BrowserAuthRequired, BrowserError, BrowserPreDispatchBlocked, BrowserSubmissionUncertain
 
 
 CHATGPT_URL = "https://chatgpt.com/"
@@ -93,6 +94,7 @@ def _default_config() -> dict[str, Any]:
         "port": 9223,
         "preferred_mode": "auto",
         "resolved_mode": None,
+        "allow_visible_fallback": False,
         "authenticated": False,
         "last_authenticated_utc": None,
         "last_headless_verified_utc": None,
@@ -302,6 +304,14 @@ def _project_operation(function):
     return wrapped
 
 
+def _exclusive_blank_chat(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with _file_lock(browser_paths().root / "blank-chat-bootstrap.lock", timeout=600.0):
+            return function(*args, **kwargs)
+    return wrapped
+
+
 def _owns_process(state: dict[str, Any]) -> bool:
     pid = int(state.get("pid") or 0)
     if not _pid_alive(pid):
@@ -465,7 +475,7 @@ def _find_chatgpt_target(port: int, chat_url: str | None = None) -> cdp.Target |
             return exact[0]
         if "/c/" in chat_url:
             chat_id = chat_url.split("/c/", 1)[1].split("?", 1)[0].split("#", 1)[0]
-            matched = [item for item in rows if f"/c/{chat_id}" in item.url]
+            matched = [item for item in rows if _chat_id(item.url)==chat_id]
             if matched:
                 return matched[0]
         return None
@@ -579,6 +589,8 @@ def _normal_mode(config: dict[str, Any]) -> str:
         return "headless"
     if preferred == "background":
         return "background"
+    if preferred == "auto" and config.get("allow_visible_fallback") is not True:
+        return "headless"
     if resolved in {"headless", "background"}:
         return resolved
     return "headless"
@@ -592,6 +604,9 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
         if verify_auth and config.get("auth_required"):
             raise BrowserAuthRequired("ChatGPT authentication requires interaction; run do-again setup")
         preferred = config.get("preferred_mode")
+        if (preferred == "auto" and config.get("allow_visible_fallback") is not True
+                and status["running"] and status.get("mode") != "headless"):
+            raise BrowserError("unattended auto mode refuses an existing GUI browser; no browser submission attempted")
         if status["running"] and preferred in {"headless", "background"} and status.get("mode") != preferred:
             stop_browser(force=True)
             status["running"] = False
@@ -600,7 +615,8 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
             try:
                 launch_browser(mode, config=config)
             except BrowserError:
-                if mode != "headless" or config.get("preferred_mode") != "auto":
+                if (mode != "headless" or config.get("preferred_mode") != "auto"
+                        or config.get("allow_visible_fallback") is not True):
                     raise
                 stop_browser(force=True)
                 launch_browser("background", config=config)
@@ -619,7 +635,8 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
         current_mode = str(status.get("mode") or "")
         preferred = str(config.get("preferred_mode") or "auto")
 
-        if current_mode == "headless" and preferred == "auto":
+        if (current_mode == "headless" and preferred == "auto"
+                and config.get("allow_visible_fallback") is True):
             # Some ChatGPT/Cloudflare sessions work in real Chrome but not in
             # true headless. Fall back automatically without involving the
             # user's normal browser profile or foreground applications.
@@ -664,8 +681,8 @@ def ensure_browser_running(*, verify_auth: bool = True) -> dict[str, Any]:
 @_shared_operation
 def use_background_fallback() -> dict[str, Any]:
     config = load_config()
-    if config.get("preferred_mode") != "auto":
-        raise BrowserError("automatic browser fallback requires auto mode")
+    if config.get("preferred_mode") != "auto" or config.get("allow_visible_fallback") is not True:
+        raise BrowserError("background fallback requires explicit visible-fallback approval")
     stop_browser(force=True)
     config["resolved_mode"] = "background"
     save_config(config)
@@ -706,7 +723,15 @@ def setup_browser(
     try:
         try:
             wait_for_authenticated(port, timeout=6.0)
-        except BrowserAuthRequired:
+        except BrowserError as exc:
+            # A slow initial page load has no login button and no composer,
+            # which the short probe reports as BrowserError. Keep the dedicated
+            # window available for interactive authentication rather than
+            # closing it after six seconds. Transport/Chrome failures still
+            # fail closed instead of silently extending the timeout.
+            if (not isinstance(exc, BrowserAuthRequired)
+                    and str(exc) != "ChatGPT did not load a usable composer; check connectivity and retry"):
+                raise
             print("")
             print("Do Again needs one-time ChatGPT authentication.")
             print("A dedicated automation Chrome profile is open.")
@@ -733,9 +758,13 @@ def setup_browser(
             save_config(config)
         except Exception as exc:
             stop_browser(force=True)
-            if mode == "headless":
+            if mode == "headless" or (mode == "auto" and config.get("allow_visible_fallback") is not True):
+                config = load_config()
+                config["resolved_mode"] = None
+                save_config(config)
                 raise BrowserError(
-                    "true headless Chrome could not preserve a usable ChatGPT session: "
+                    "true headless Chrome could not preserve a usable ChatGPT session; "
+                    "refusing GUI fallback: "
                     f"{type(exc).__name__}: {exc}"
                 ) from exc
             resolved = "background"
@@ -806,6 +835,266 @@ return {count: assistant.length, latest, busy: !!(stop && !stop.disabled), url: 
     return result
 
 
+def _ensure_high_reasoning(target: cdp.Target) -> None:
+    """Set and verify High in the dedicated background tab without GUI focus.
+
+    ChatGPT's nested model picker ignores Escape while Chrome treats a
+    background tab as unfocused. CDP focus emulation delivers the key events
+    without activating the window. Disable emulation even if the UI fails;
+    never send unless the closed model picker still reports High afterward.
+    """
+    try:
+        cdp.target_call(target,"Emulation.setFocusEmulationEnabled",
+                        {"enabled":True},timeout=10.0)
+        _ensure_high_reasoning_focused(target)
+    finally:
+        cdp.target_call(target,"Emulation.setFocusEmulationEnabled",
+                        {"enabled":False},timeout=10.0)
+    persisted=cdp.evaluate(target,r"""(() => {
+        const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+            .filter(el=>el.getBoundingClientRect().width>0);
+        return buttons.length===1
+            && buttons[0].getAttribute('aria-expanded')==='false'
+            && (buttons[0].innerText||'').trim()==='High';
+    })()""",timeout=10.0)
+    if persisted is not True:
+        raise BrowserPreDispatchBlocked(
+            "ChatGPT High did not persist after background focus was restored; no prompt submitted")
+
+
+def _ensure_high_reasoning_focused(target: cdp.Target) -> None:
+    """Select and verify ChatGPT High before a model-authored development Send.
+
+    Product-level effort must be selected in the real UI; prompt instructions
+    cannot do it. Unknown or unavailable controls fail *before* any Send.
+    Keyboard End is verified on the Oct 2026 three-stop slider; a pointer click
+    was rejected because the model dropdown overlays the High tick.
+    """
+    # A fresh / chat can briefly render the composer, then hydrate again.
+    # The model picker may be absent or momentarily detach in that transition.
+    # Wait only for a *settled* composer + picker; never send at a lower effort.
+    opened = None
+    for _ in range(30):
+        try:
+            opened = cdp.evaluate(target, r"""(() => {
+                if(document.readyState!=='complete')return 'page_loading';
+                const composer=document.querySelector(
+                    '#prompt-textarea,[data-testid="prompt-textarea"],'
+                    +'[role="textbox"][contenteditable="true"][aria-label="Ask ChatGPT"]');
+                if(!composer || composer.getBoundingClientRect().width<=0
+                    || composer.getBoundingClientRect().height<=0)return 'page_loading';
+                const buttons=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                    .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&!el.disabled;});
+                if(buttons.length!==1)return 'missing_picker';
+                if(buttons[0].getAttribute('aria-expanded')==='true')return 'already_open';
+                buttons[0].click();
+                return 'opened';
+            })()""", timeout=10.0, user_gesture=True)
+        except cdp.CdpError:
+            # A navigation may detach the execution context. The only
+            # possible effect here is opening the model menu, never Send.
+            opened = 'page_loading'
+        if opened in {'opened','already_open'}:
+            break
+        if opened not in {'page_loading','missing_picker'}:
+            break
+        time.sleep(0.2)
+    if opened not in {'opened', 'already_open'}:
+        raise BrowserPreDispatchBlocked("ChatGPT High reasoning picker is unavailable after page hydration; no prompt submitted")
+    try:
+        observed = None
+        for _ in range(12):
+            observed = cdp.evaluate(target, r"""(() => {
+                const sliders=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
+                    .filter(el => {const r=el.getBoundingClientRect();return r.width>0&&r.height>0;});
+                if(sliders.length!==1)return null;
+                const el=sliders[0],track=el.closest('[data-orientation="horizontal"][aria-disabled="false"]');
+                if(!track || track.querySelectorAll('[role="slider"]').length!==1)return null;
+                const r=track.getBoundingClientRect();
+                if(track.querySelectorAll('[data-selected]').length!==3 || r.width<70 || r.height<8)return null;
+                return {value:el.getAttribute('aria-valuenow'),
+                    min:el.getAttribute('aria-valuemin'),max:el.getAttribute('aria-valuemax')};
+            })()""", timeout=10.0)
+            if isinstance(observed, dict):
+                break
+            time.sleep(0.15)
+        if (not isinstance(observed, dict) or observed.get('min')!='0'
+                or observed.get('max')!='2'
+                or observed.get('value') not in {'0','1','2'}):
+            raise BrowserPreDispatchBlocked(
+                "ChatGPT High reasoning slider is unavailable or changed; no prompt submitted")
+        if observed['value']!='2':
+            focused=cdp.evaluate(target, r"""(() => {
+                const sliders=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
+                    .filter(el=>el.getBoundingClientRect().width>0);
+                if(sliders.length!==1)return false;
+                sliders[0].focus({preventScroll:true});
+                return document.activeElement===sliders[0];
+            })()""",timeout=10.0,user_gesture=True)
+            if focused is not True:
+                raise BrowserPreDispatchBlocked(
+                    "ChatGPT High slider could not take keyboard focus; no prompt submitted")
+            for kind in ('keyDown','keyUp'):
+                cdp.target_call(target,'Input.dispatchKeyEvent',{
+                    'type':kind,'key':'End','code':'End',
+                    'windowsVirtualKeyCode':35,'nativeVirtualKeyCode':35},timeout=10.0)
+        verified=False
+        for _ in range(12):
+            verified=cdp.evaluate(target, r"""(() => {
+                const picker=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                  .filter(el=>el.getBoundingClientRect().width>0);
+                if(picker.length!==1)return false;
+                const slider=[...document.querySelectorAll('[role="slider"][aria-valuenow]')]
+                  .filter(el=>el.getBoundingClientRect().width>0);
+                if(slider.length===1)return slider[0].getAttribute('aria-valuenow')==='2'
+                    && slider[0].getAttribute('aria-valuemax')==='2';
+                return (picker[0].innerText||'').trim()==='High';
+            })()""",timeout=10.0) is True
+            if verified:break
+            time.sleep(0.15)
+        if not verified:
+            raise BrowserPreDispatchBlocked(
+                "ChatGPT did not verify High after keyboard selection; no prompt submitted")
+    finally:
+        # Escape dismisses Radix's menu without clicking an overlapping model
+        # radio item, changing the selected model, or sending any prompt.
+        for kind in ('keyDown','keyUp'):
+            cdp.target_call(target,'Input.dispatchKeyEvent',{
+                'type':kind,'key':'Escape','code':'Escape',
+                'windowsVirtualKeyCode':27,'nativeVirtualKeyCode':27},timeout=10.0)
+    # A value of 2 *inside* an open picker is necessary but insufficient.
+    # Verify that ChatGPT persisted High after the picker was dismissed.
+    for _ in range(12):
+        persisted=cdp.evaluate(target, r"""(() => {
+            const options=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                .filter(el=>el.getBoundingClientRect().width>0);
+            return options.length===1
+                && options[0].getAttribute('aria-expanded')==='false'
+                && (options[0].innerText||'').trim()==='High';
+        })()""",timeout=10.0)
+        if persisted is True:
+            break
+        # ChatGPT may nest the Thinking effort menu inside the outer model
+        # picker. One Escape closes the slider submenu but leaves the outer
+        # picker expanded. Dismiss *only if* the exact picker still says open.
+        # No model item is clicked and no Send gesture is possible here.
+        still_open=cdp.evaluate(target, r"""(() => {
+            const rows=[...document.querySelectorAll('button[aria-label="Select ChatGPT model"]')]
+                .filter(el=>el.getBoundingClientRect().width>0);
+            return rows.length===1
+                ? rows[0].getAttribute('aria-expanded')==='true' : null;
+        })()""",timeout=10.0)
+        if still_open is True:
+            for kind in ('keyDown','keyUp'):
+                cdp.target_call(target,'Input.dispatchKeyEvent',{
+                    'type':kind,'key':'Escape','code':'Escape',
+                    'windowsVirtualKeyCode':27,'nativeVirtualKeyCode':27},timeout=10.0)
+        time.sleep(0.15)
+    else:
+        raise BrowserPreDispatchBlocked(
+            "ChatGPT did not persist High after closing the model picker; no prompt submitted")
+
+
+_background_send_session = threading.local()
+
+
+def _approved_background_send(function):
+    @wraps(function)
+    def wrapped(target, *args, background_focus=False, **kwargs):
+        if not background_focus:
+            return function(target, *args, **kwargs)
+        config = load_config()
+        state = load_state()
+        if not (config.get("preferred_mode") in {"auto", "background"}
+                and config.get("allow_visible_fallback") is not True
+                and state.get("mode") == "background"):
+            return function(target, *args, **kwargs)
+        if getattr(_background_send_session, "target_id", None) is not None:
+            raise BrowserPreDispatchBlocked("background send focus is already reserved")
+        try:
+            cdp.target_call(target, "Emulation.setFocusEmulationEnabled",
+                            {"enabled": True}, timeout=10.0)
+            _background_send_session.target_id = target.id
+            return function(target, *args, **kwargs)
+        finally:
+            _background_send_session.target_id = None
+            cdp.target_call(target, "Emulation.setFocusEmulationEnabled",
+                            {"enabled": False}, timeout=10.0)
+    return wrapped
+
+
+def _require_send_target_focus(target: cdp.Target) -> None:
+    """Require document focus without activating desktop GUI windows."""
+    config = load_config()
+    state = load_state()
+    virtual = getattr(_background_send_session, "target_id", None) == target.id
+    if (config.get("preferred_mode") == "auto"
+            and config.get("allow_visible_fallback") is not True
+            and state.get("mode") == "background" and not virtual):
+        raise BrowserPreDispatchBlocked("unattended auto mode refuses GUI tab focus; no browser submission was attempted")
+    probe = r"""(() => {
+        const editor = [...document.querySelectorAll(
+            '#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]'
+        )].find(el => {
+            const bounds = el.getBoundingClientRect();
+            return bounds.width > 0 && bounds.height > 0;
+        });
+        return {focused: document.hasFocus(), visibility: document.visibilityState,
+                url: location.href, ready: document.readyState, editor_visible: !!editor};
+    })()"""
+    observed = cdp.evaluate(target, probe, timeout=10.0)
+    if virtual:
+        # A completed document can precede composer hydration. Wait read-only
+        # before preparation/dispatch, without activating a GUI window.
+        deadline = time.monotonic() + 10.0
+        while (isinstance(observed, dict)
+               and isinstance(observed.get('url'), str)
+               and observed['url'].startswith('https://chatgpt.com/')
+               and (observed.get('ready') != 'complete' or observed.get('editor_visible') is not True)
+               and time.monotonic() < deadline):
+            time.sleep(0.2)
+            observed = cdp.evaluate(target, probe, timeout=10.0)
+        if not (state.get("mode") == "background"
+                and config.get("preferred_mode") in {"auto", "background"}
+                and config.get("allow_visible_fallback") is not True
+                and isinstance(observed, dict)
+                and type(observed.get("focused")) is bool
+                and observed.get("visibility") in {"visible", "hidden"}
+                and observed.get("ready") == "complete"
+                and observed.get("editor_visible") is True
+                and isinstance(observed.get("url"), str)
+                and observed["url"].startswith("https://chatgpt.com/")):
+            raise BrowserPreDispatchBlocked("background ChatGPT composer or origin could not be verified; no prompt submitted")
+        return
+    if not (isinstance(observed, dict)
+            and observed.get("focused") is True
+            and observed.get("visibility") == "visible"):
+        if state.get("mode") != "headless":
+            raise BrowserPreDispatchBlocked(
+                "unfocused GUI automation tab; refusing window activation; "
+                "no browser submission was attempted"
+            )
+        cdp.target_call(target, "Page.bringToFront", {}, timeout=10.0)
+        observed = cdp.evaluate(target, probe, timeout=10.0)
+    if not (isinstance(observed, dict)
+            and observed.get("focused") is True
+            and observed.get("visibility") == "visible"):
+        raise BrowserPreDispatchBlocked(
+            "ChatGPT automation tab lacks visible document focus before Send; "
+            "no browser submission was attempted"
+        )
+
+
+def _exclusive_message_send(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with _file_lock(browser_paths().root / "chatgpt-send.lock", timeout=600.0):
+            return function(*args, **kwargs)
+    return wrapped
+
+
+@_exclusive_message_send
+@_approved_background_send
 def send_message(
     target: cdp.Target,
     text: str,
@@ -813,12 +1102,14 @@ def send_message(
     timeout: float = 180.0,
     wait_for_response: bool = True,
     before_dispatch: Callable[[], None] | None = None,
+    response_observer: Any = None,
 ) -> dict[str, Any]:
+    _require_send_target_focus(target)
     baseline = _assistant_snapshot(target)
     if baseline.get("busy"):
-        raise BrowserError("ChatGPT is still generating; retry delivery later")
+        raise BrowserPreDispatchBlocked("ChatGPT is still generating; retry delivery later")
     if _context_limit_warning(target):
-        raise BrowserError("ChatGPT conversation reached its context limit")
+        raise BrowserPreDispatchBlocked("ChatGPT conversation reached its context limit")
     prep = r"""(() => {
 const visible = (el) => {
   if (!el) return false;
@@ -844,20 +1135,56 @@ if ('value' in el) {
 return 'ready';
 })()"""
     if cdp.evaluate(target, prep, timeout=15.0, user_gesture=True) != "ready":
-        raise BrowserError("ChatGPT composer was not available")
+        raise BrowserPreDispatchBlocked("ChatGPT composer was not available")
     dispatch_started = False
     try:
         cdp.insert_text(target, text)
-        time.sleep(0.15)
-        # Persist the caller's durable, fail-closed send intent immediately
-        # before the sole browser gesture. Failure here means no Enter was
-        # attempted; the caller may still conservatively retain its intent.
-        if before_dispatch is not None:
-            before_dispatch()
+        # ChatGPT can transiently render a disabled textarea before the actual
+        # contenteditable composer hydrates. Input.insertText may finish while
+        # Send is still disabled. Readiness is read-only and must be established
+        # BEFORE the durable pre-gesture dispatch point; never make a speculative
+        # click, or use Enter as a fallback.
+        expected = str(text).strip()
+        readiness = r"""(() => {
+const visible = el => {const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+  return r.width>0 && r.height>0 && s.display!=='none' && s.visibility!=='hidden';};
+const inputs=[...document.querySelectorAll(
+  '#prompt-textarea,[data-testid="prompt-textarea"],textarea,div[contenteditable="true"]'
+)].filter(visible);
+const buttons=[...document.querySelectorAll(
+  'button[data-testid="send-button"],button[aria-label="Send"],button[aria-label="Send prompt"]'
+)].filter(visible);
+if(inputs.length!==1 || buttons.length!==1 || buttons[0].disabled ||
+   buttons[0].getAttribute('aria-disabled')==='true')return false;
+const editor=inputs[0], expected=EXPECTED;
+const raw=String(editor.value||editor.innerText||editor.textContent||'').trim();
+if(raw===expected)return true;
+// A contenteditable can render each actual line break as two newlines in
+// innerText while textContent omits the same structural breaks entirely.
+// Accept only that exact paired DOM representation, *not* arbitrary
+// whitespace-equivalence, so modified request IDs, tokens, spaces and text
+// remain fail-closed. Never apply this fallback to input/textarea values.
+const lineBreak=String.fromCharCode(10);
+if(!editor.isContentEditable || 'value' in editor || !expected.includes(lineBreak))
+  return false;
+const rendered=String(editor.innerText||'').trim();
+const flattened=String(editor.textContent||'').trim();
+return rendered===expected.split(lineBreak).join(lineBreak+lineBreak) &&
+       flattened===expected.split(lineBreak).join('');
+})()""".replace('EXPECTED', json.dumps(expected))
+        deadline = time.monotonic()+10.0
+        while cdp.evaluate(target, readiness, timeout=10.0) is not True:
+            if time.monotonic()>=deadline:
+                raise BrowserPreDispatchBlocked("ChatGPT Send did not become enabled for this composer before dispatch")
+            time.sleep(0.2)
         # Exactly one gesture. From this point every exception is uncertain;
         # absence of composer clearing never permits a fallback submission.
         dispatch_started = True
-        cdp.press_enter(target)
+        if before_dispatch is not None:
+            # A failed/crashed durable commit is uncertain even when Send
+            # may never occur. Never permit a fallback after this boundary.
+            before_dispatch()
+        cdp.click_send(target)
         accepted = False
         for _ in range(20):
             time.sleep(0.1)
@@ -869,7 +1196,7 @@ return 'ready';
                 break
         if not accepted:
             raise BrowserSubmissionUncertain(
-                "ChatGPT did not confirm submission after the single Enter gesture; "
+                "ChatGPT did not confirm submission after the single Send gesture; "
                 "delivery outcome must be reconciled before another submission"
             )
 
@@ -884,11 +1211,12 @@ return 'ready';
         stable = 0
         while time.monotonic() < deadline:
             time.sleep(1.0)
-            current = _assistant_snapshot(target)
+            current = response_observer() if response_observer is not None else _assistant_snapshot(target)
             if _context_limit_warning(target):
                 raise BrowserError("ChatGPT conversation reached its context limit")
             if (
-                int(current.get("count") or 0) > int(baseline.get("count") or 0)
+                (current.get("bound") is True if response_observer is not None else
+                 int(current.get("count") or 0) > int(baseline.get("count") or 0))
                 and not current.get("busy")
                 and str(current.get("latest") or "").strip()
             ):
@@ -913,7 +1241,7 @@ return 'ready';
                 "inspect the exact bound conversation before retrying"
             ) from exc
         if isinstance(exc, cdp.CdpTimeoutError):
-            raise BrowserError("ChatGPT composer preparation failed before submission") from exc
+            raise BrowserPreDispatchBlocked("ChatGPT composer preparation failed before submission") from exc
         raise
 
 def browser_self_test(*, target: cdp.Target | None = None) -> dict[str, Any]:
@@ -947,6 +1275,33 @@ return lines.some((line, index) =>
 })()"""
     )
     return bool(cdp.evaluate(target, expression, timeout=10.0))
+
+
+def receipt_acknowledgment(target: cdp.Target, marker: str, token: str) -> dict[str, bool]:
+    """Read only: acknowledgment must follow the exact original user turn."""
+    if not marker or not re.fullmatch(r"DO_AGAIN_RECEIPT_ACK token=[0-9a-f]{32}", token):
+        return {"visible": False, "acknowledged": False}
+    expression = "(() => {" + _MESSAGE_NODES_JS + r"""
+const marker = MARKER, token = TOKEN;
+const users = messageNodes('user');
+const originals = users.filter(el => {
+  const text = String(el.innerText || el.textContent || '');
+  return text.includes(marker) && text.includes(token);
+});
+const assistants = messageNodes('assistant');
+const acknowledged = originals.some(user => assistants.some(assistant =>
+  !!(user.compareDocumentPosition(assistant) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+  String(assistant.innerText || assistant.textContent || '').split('\n').some(line => line.trim() === token)
+));
+const stop = document.querySelector('[data-testid="stop-button"],button[aria-label="Stop generating"]');
+return {visible: originals.length === 1, acknowledged: originals.length === 1 && acknowledged && !(stop && !stop.disabled)};
+})()"""
+    expression = expression.replace('MARKER', json.dumps(marker)).replace('TOKEN', json.dumps(token))
+    result = cdp.evaluate(target, expression, timeout=10.0)
+    if not isinstance(result, dict):
+        return {"visible": False, "acknowledged": False}
+    return {"visible": result.get('visible') is True,
+            "acknowledged": result.get('visible') is True and result.get('acknowledged') is True}
 
 
 def _context_limit_warning(target: cdp.Target) -> str:
@@ -1675,6 +2030,7 @@ def _rollover_needed(target: cdp.Target) -> bool:
     return _conversation_pressure_chars(target) >= threshold
 
 
+@_exclusive_blank_chat
 def _rollover_project_chat(
     repo: Path,
     record: dict[str, Any],
@@ -1717,7 +2073,8 @@ def _rollover_project_chat(
     target = cdp.create_target(port, CHATGPT_URL, background=True)
     try:
         target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
-        result = send_message(target, prompt, timeout=180.0)
+        _ensure_high_reasoning(target)
+        result = send_message(target, prompt, timeout=180.0, background_focus=True)
         new_url = str(result.get("chat_url") or "")
         transaction["successor_chat_url"] = new_url or None
         transaction["state"] = "successor_created"
@@ -1819,6 +2176,12 @@ def project_record(repo: Path) -> dict[str, Any]:
     return _read_json(_project_record_path(repo))
 
 
+def binding_identity(record: dict[str, Any]) -> str:
+    value={'chat_url':str(record.get('chat_url') or ''),
+           'generation':str(record.get('binding_generation') or 'legacy')}
+    return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+
 @_project_operation
 def register_project(
     repo: Path,
@@ -1842,7 +2205,15 @@ def register_project(
     if control_branch is not None:
         value["control_branch"] = control_branch
     if chat_url is not None:
+        prior_url = str(value.get("chat_url") or "")
         value["chat_url"] = chat_url
+        # The binding generation represents the exact ChatGPT conversation,
+        # not the number of times setup or a CLI registration is repeated.
+        # Re-registering an unchanged URL must not invalidate durable
+        # in-flight/outbox evidence bearing the original binding identity.
+        # This also preserves the legacy implicit generation when present.
+        if prior_url != chat_url:
+            value["binding_generation"] = uuid.uuid4().hex
     _atomic_json(_project_record_path(repo), value)
     return value
 
@@ -1866,11 +2237,13 @@ When development work is requested in this conversation, use the Do Again reques
     return prompt
 
 
+@_exclusive_blank_chat
 def _bootstrap_new_chat(port: int, prompt: str) -> tuple[cdp.Target, dict[str, Any]]:
     target = cdp.create_target(port, CHATGPT_URL, background=True)
     try:
         target, _ = wait_for_authenticated(port, chat_url=target.url, timeout=30.0, target=target)
-        result = send_message(target, prompt, timeout=180.0)
+        _ensure_high_reasoning(target)
+        result = send_message(target, prompt, timeout=180.0, background_focus=True)
         if "DO_AGAIN_PROJECT_READY" not in result.get("response", ""):
             raise BrowserError("ChatGPT bootstrap did not return the expected readiness marker")
         if "/c/" not in str(result.get("chat_url") or ""):
@@ -1966,11 +2339,14 @@ def stop_if_unused() -> bool:
 
 
 @_project_operation
-def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any]:
+def notify_receipts(repo: Path, receipts: list[dict[str, Any]], *, before_dispatch: Any = None, binding_guard: dict | None = None) -> dict[str, Any]:
     if not receipts:
         return {"response": "nothing_to_deliver", "chat_url": ""}
 
     record = project_record(repo)
+    if binding_guard is not None and (record.get('chat_url')!=binding_guard.get('chat_url')
+            or binding_identity(record)!=binding_guard.get('binding_identity')):
+        raise BrowserSubmissionUncertain('sealed canary conversation binding changed')
     chat_url = str(record.get("chat_url") or "")
     if not chat_url:
         raise BrowserError("project has no bound automation chat; run do-again setup")
@@ -1987,6 +2363,7 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
         )
 
     batch_marker = "DO_AGAIN_RECEIPTS_READY request_ids=" + ",".join(ids)
+    acknowledgment_token = "DO_AGAIN_RECEIPT_ACK token=" + uuid.uuid4().hex
     newline = chr(10)
     message = (
         batch_marker
@@ -1996,7 +2373,23 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
         + "Do Again request only if more local work is needed:"
         + newline
         + newline.join(rows)
+        + newline + "After inspecting the receipts, include this exact acknowledgment on its own line: "
+        + acknowledgment_token
     )
+
+    purpose = 'receipt_notification'
+    if len(receipts) == 1 and receipts[0].get('kind') == 'continuation':
+        intent = receipts[0]
+        purpose = str(intent.get('purpose') or '')
+        if purpose not in {'ci_continuation', 'idle_continuation'}:
+            raise BrowserError('invalid continuation purpose')
+        batch_marker = str(intent.get('event_marker') or '')
+        prompt = intent.get('prompt')
+        if not batch_marker or not isinstance(prompt, str) or not prompt:
+            raise BrowserError('invalid continuation payload')
+        message = batch_marker + ': ' + prompt + newline + (
+            'After inspecting the event, include this exact acknowledgment on its own line: '
+            + acknowledgment_token)
 
     status = ensure_browser_running(verify_auth=True)
     port = int(status["port"])
@@ -2005,6 +2398,8 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
         target = cdp.create_target(port, chat_url, background=True)
 
     if _rollover_needed(target):
+        if binding_guard is not None:
+            raise BrowserSubmissionUncertain('sealed canary cannot authorize conversation rollover')
         if _assistant_snapshot(target).get("busy"):
             raise BrowserError(
                 "rollover needed while ChatGPT is still busy; retrying later"
@@ -2028,17 +2423,40 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
     if _page_contains(target, batch_marker):
         return {"response": "already_delivered", "chat_url": target.url}
 
+    def commit_dispatch():
+        bound=project_record(repo)
+        if binding_guard is not None and (bound.get('chat_url')!=binding_guard.get('chat_url')
+                or binding_identity(bound)!=binding_guard.get('binding_identity')):
+            raise BrowserSubmissionUncertain('sealed canary binding changed before dispatch')
+        bound_url=str(bound.get('chat_url') or '')
+        conversation=_chat_id(target.url)
+        if not conversation or _chat_id(bound_url)!=conversation:
+            raise BrowserSubmissionUncertain('receipt binding changed before dispatch; no automatic replay')
+        before_dispatch({'chat_url':bound_url,'conversation_id':conversation,'binding_identity':binding_identity(bound),
+                         'payload_sha256':hashlib.sha256(message.encode()).hexdigest(),
+                         'purpose':purpose,'state':'dispatch_started',
+                         'acknowledgment_token':acknowledgment_token})
+
+    dispatch_options={'before_dispatch':commit_dispatch} if before_dispatch is not None else {}
+
+    # Re-check the real UI before every autonomous receipt/continuation message.
+    # Model/effort preferences can change between runs; no lower-effort fallback.
+    _ensure_high_reasoning(target)
     try:
         return send_message(
             target,
             message,
             timeout=180.0,
             wait_for_response=False,
+            background_focus=True,
+            **dispatch_options,
         )
     except BrowserSubmissionUncertain:
         # Never create a new chat or resend after an unverified CDP submit.
         raise
     except BrowserError:
+        if binding_guard is not None:
+            raise  # A sealed canary never admits an implicit replacement chat.
         warning = _context_limit_warning(target)
         if not warning or _assistant_snapshot(target).get("busy"):
             raise
@@ -2050,11 +2468,14 @@ def notify_receipts(repo: Path, receipts: list[dict[str, Any]]) -> dict[str, Any
         )
         if _page_contains(target, batch_marker):
             return {"response": "already_delivered", "chat_url": target.url}
+        _ensure_high_reasoning(target)
         return send_message(
             target,
             message,
             timeout=180.0,
             wait_for_response=False,
+            background_focus=True,
+            **dispatch_options,
         )
 
 

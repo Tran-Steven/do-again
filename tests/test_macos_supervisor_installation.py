@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -19,6 +20,334 @@ class InstallationTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
+    @unittest.skipUnless(sys.platform=='darwin','root installer is supported only on macOS')
+    def test_installer_early_chat_gate_works_in_isolated_system_python(self):
+        import subprocess
+        current=self.root/'current';current.mkdir()
+        stage=self.root/'stage';stage.mkdir()
+        (current/'config.json').write_text(json.dumps({
+            'live_canary':{'chat_url':'https://chatgpt.com/c/fixture-old'}}))
+        (stage/'config.json').write_text(json.dumps({
+            'source_sha':'b'*40,
+            'live_canary':{'chat_url':'https://chatgpt.com/c/fixture-old'}}))
+        installer=Path(__file__).resolve().parents[1]/'tools/macos_supervisor_install.py'
+        script="""
+import importlib.util,json,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('sealed_installer',sys.argv[1])
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.ROOT=Path(sys.argv[2])
+module.verify_stage=lambda path:{'source_sha':'b'*40}
+module.os.geteuid=lambda:0
+try:
+    module.install(Path(sys.argv[3]))
+except RuntimeError as exc:
+    if 'distinct ChatGPT conversation' not in str(exc):
+        raise
+else:
+    raise AssertionError('duplicate conversation was accepted')
+"""
+        child=subprocess.run([sys.executable,'-I','-S','-c',script,str(installer),
+                              str(self.root),str(stage)],capture_output=True,text=True)
+        self.assertEqual(child.returncode,0,child.stderr[-800:])
+
+    @unittest.skipUnless(sys.platform=='darwin','requires actual Apple system Python')
+    def test_installer_controller_import_with_apple_system_python(self):
+        # The administrator installer uses /usr/bin/python3, not the 3.13
+        # interpreter running the application tests. This must work even when
+        # Apple's system interpreter has no tomllib.
+        script = """
+import sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from do_again.supervisor.controller_installation import validate_controller_stage
+assert callable(validate_controller_stage)
+assert 'do_again.service.runtime' not in sys.modules
+"""
+        child=subprocess.run(
+            ['/usr/bin/python3','-I','-S','-B','-c',script,
+             str(Path(__file__).resolve().parents[1]/'src')],
+            capture_output=True,text=True,timeout=15)
+        self.assertEqual(child.returncode,0,child.stderr[-1600:])
+
+    def test_jobpipe_development_grant_preflight_uses_isolated_system_python(self):
+        from datetime import datetime, timedelta, timezone
+        now=datetime.now(timezone.utc).replace(microsecond=0)
+        home=self.root/'operator'
+        projects=[]
+        for name,account,uid in [('do-again','_doagain_da',401),
+                                 ('jobpipe','_doagain_jp',402)]:
+            repo=home/name
+            key=hashlib.sha256(os.fsencode(repo)).hexdigest()
+            projects.append({'account':account,'repo':str(repo),'key':key,
+                             'uid':uid,'gid':uid,'worktree':str(self.module.EXEC/key/'worktree'),
+                             'github_repository':'Tran-Steven/'+name,
+                             'source_sha':'a'*40,
+                             'goal_revision':'maintenance-test'})
+        config={'operator_home':str(home),'source_sha':'b'*40,
+                'production_ready':False,'projects':projects}
+        config['development_scope']={'kind':'jobpipe-offline-v1',
+                'project_key':projects[1]['key'],'source_sha':config['source_sha'],
+                'goal_revision':'maintenance-test',
+                'issued_at_utc':(now-timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'expires_at_utc':(now+timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                'network_access':False,'application_submissions':False}
+        child_script="""
+import importlib.util,json,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('installer',sys.argv[1])
+module=importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+config=json.loads(sys.argv[2])
+previous=dict(config,source_sha='a'*40,development_scope=None)
+assert module.validate_project_scope(config,previous) is False
+config['development_scope']['kind']='jobpipe-native-v1'
+config['development_scope']['expires_at_utc']=None
+assert module.validate_project_scope(config,previous) is False
+config['development_scope']['application_submissions']=True
+try:
+    module.validate_project_scope(config,previous)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('unauthorized application scope admitted')
+"""
+        child=subprocess.run([sys.executable,'-I','-S','-B','-c',child_script,
+                              str(Path(__file__).resolve().parents[1]/'tools/macos_supervisor_install.py'),
+                              json.dumps(config)],capture_output=True,text=True,timeout=15)
+        self.assertEqual(child.returncode,0,child.stderr[-1200:])
+
+    def test_installer_refuses_mixed_browser_and_codex_grants_before_any_service_effect(self):
+        cfg={'live_canary':{'nonce':'a'*24},
+             'codex_canary':{'nonce':'b'*24},
+             'projects':[]}
+        with patch.object(self.module,'ROOT',self.root),patch.object(
+                self.module.subprocess,'run') as effects:
+            with self.assertRaisesRegex(RuntimeError,'may not coexist'):
+                self.module.verify_worker_quiescence(cfg)
+        effects.assert_not_called()
+
+
+    def test_installer_requires_authenticated_socket_readiness_after_bootstrap(self):
+        import inspect
+        config={'python':'/sealed/python3','source_sha':'a'*40,
+                'operator_uid':501,'operator_gid':20,'operator_home':'/operator',
+                'projects':[{'key':'b'*64,'source_sha':'c'*40}]}
+        with patch.object(self.module.subprocess,'run',
+                          return_value=Mock(returncode=0,
+                                            stdout='SUPERVISOR_AUTHENTICATED_READY\n')) as check:
+            self.module.wait_for_supervisor_readiness(config)
+        check.assert_called_once()
+        args,kwargs=check.call_args
+        self.assertEqual(args[0][:5],
+                         ['/sealed/python3','-I','-S','-B','-c'])
+        self.assertEqual(kwargs['user'],501)
+        self.assertEqual(kwargs['group'],20)
+        self.assertEqual(kwargs['extra_groups'],[])
+        self.assertEqual(kwargs['timeout'],75)
+        self.assertEqual(kwargs['env']['HOME'],'/operator')
+        expected=json.loads(args[0][-1])
+        self.assertEqual(expected['projects'],[{'key':'b'*64,'source_sha':'c'*40}])
+        self.assertEqual(expected['source_sha'],'a'*40)
+        body=inspect.getsource(self.module.install)
+        self.assertLess(body.index('wait_for_supervisor_readiness(config)'),
+                        body.index("journal['source_sha']=config['source_sha']"))
+
+    def test_installer_refuses_unready_service_without_claiming_success(self):
+        config={'python':'/sealed/python3','source_sha':'a'*40,
+                'operator_uid':501,'operator_gid':20,'operator_home':'/operator',
+                'projects':[]}
+        for result in (Mock(returncode=1,stdout='',stderr='socket refused'),
+                       Mock(returncode=0,stdout='garbled success',stderr='')):
+            with self.subTest(result=result.returncode),patch.object(
+                    self.module.subprocess,'run',return_value=result):
+                with self.assertRaisesRegex(RuntimeError,'startup readiness unverified'):
+                    self.module.wait_for_supervisor_readiness(config)
+        script=self.module._READINESS_CLIENT
+        self.assertIn("peer_uid(connection)!=0",script)
+        self.assertIn("'operation':'status'",script)
+        self.assertNotIn("'operation':'execute'",script)
+
+    def test_readiness_uses_retained_tested_head_without_changing_snapshot_pin(self):
+        config={'python':'/sealed/python3','source_sha':'a'*40,
+                'operator_uid':501,'operator_gid':20,'operator_home':'/operator',
+                'projects':[{'key':'b'*64,'source_sha':'c'*40}],
+                'native_head_checkpoints':{'b'*64:{'commit':'d'*40}}}
+        with patch.object(self.module.subprocess,'run',return_value=Mock(
+                returncode=0,stdout='SUPERVISOR_AUTHENTICATED_READY\n')) as check:
+            self.module.wait_for_supervisor_readiness(config)
+        expected=json.loads(check.call_args.args[0][-1])
+        self.assertEqual(expected['projects'],[{'key':'b'*64,'source_sha':'d'*40}])
+        self.assertEqual(config['projects'][0]['source_sha'],'c'*40)
+
+    def test_selected_runtime_recovery_preserves_ticket_and_requires_live_readiness(self):
+        current,retained,database,ledger=self.recovery_fixture()
+        state=self.root/'state';state.mkdir();ticket=state/'installation.json'
+        original=json.dumps({'source_sha':'b'*40,'runtime_transition':{
+            'phase':'runtime_selected','from_source':'b'*40,'to_source':'a'*40,
+            'retained_path':str(retained)}}).encode()
+        ticket.write_bytes(original);ticket.chmod(0o600)
+        original_lstat=Path.lstat
+        original_fstat=os.fstat
+        def owned(path):
+            value=original_lstat(path)
+            if path==ticket:
+                values=list(value);values[4]=0;return os.stat_result(values)
+            return value
+        def root_fstat(fd):
+            values=list(original_fstat(fd));values[4]=0;return os.stat_result(values)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.sys,'platform','darwin'),\
+                patch.object(self.module.os,'geteuid',return_value=0),\
+                patch.object(Path,'lstat',owned),patch.object(self.module.os,'fstat',root_fstat),patch.object(self.module,'verify_stage',side_effect=lambda p:{
+                    'source_sha':json.loads((p/'config.json').read_text())['source_sha']}),\
+                patch.object(self.module,'validate_project_scope'),patch.object(self.module,'verify_worker_quiescence'),\
+                patch('do_again.supervisor.native_checkpoint.verify_checkpoints'),\
+                patch('do_again.supervisor.macos_execution.MacOSProcesses',return_value=Mock(owned=Mock(return_value=[]))),\
+                patch.object(self.module,'wait_for_supervisor_readiness') as ready:
+            ready.side_effect=RuntimeError('readiness failed')
+            with self.assertRaisesRegex(RuntimeError,'readiness failed'):
+                self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            self.assertEqual(list(state.iterdir()),[ticket])
+            ready.side_effect=None
+            with patch.object(self.module,'atomic',side_effect=OSError('interrupted ticket completion')):
+                with self.assertRaisesRegex(OSError,'interrupted ticket completion'):
+                    self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            backup=next(state.glob('installation-before-readiness-*.json'))
+            self.assertEqual(backup.stat().st_mode&0o777,0o600)
+            self.assertEqual(backup.read_bytes(),original)
+            backup.write_bytes(b'x'*len(original))
+            with self.assertRaisesRegex(RuntimeError,'ticket differs'):
+                self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            backup.write_bytes(original);backup.chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError,'ticket is untrusted'):
+                self.module.complete_selected_runtime('a'*40)
+            self.assertEqual(ticket.read_bytes(),original)
+            backup.chmod(0o600)
+            self.module.complete_selected_runtime('a'*40)
+        saved=list(state.glob('installation-before-readiness-*.json'))
+        self.assertEqual(len(saved),1);self.assertEqual(saved[0].read_bytes(),original)
+        result=json.loads(ticket.read_text())
+        self.assertEqual(result['runtime_transition']['phase'],'complete')
+        self.assertFalse(result['runtime_transition']['readiness_recovery']['effects_replayed'])
+        self.assertEqual(ledger.lookup('fixture','completed','fingerprint')['status'],'succeeded')
+
+    def worker_quiescence_fixture(self):
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        key='c'*64
+        repo=self.root/'synthetic-canary';repo.mkdir()
+        state=self.root/'state'/key;state.mkdir(parents=True)
+        agents=self.root/'agents';agents.mkdir()
+        label='io.github.tran-steven.do-again.worker.'+key[:12]
+        definition=agents/(label+'.plist')
+        definition.write_bytes(b'known-root-owned-plist-fixture')
+        lease=state/'worker-instance.json'
+        lease.write_text(json.dumps({'epoch':2,'pid':12345,'identity':[501,12,34,1]}))
+        journal=state/'worker-deployment.json'
+        record={'phase':'running','epoch':2,'source_sha':'a'*40,
+                'plist_sha256':hashlib.sha256(definition.read_bytes()).hexdigest()}
+        journal.write_text(json.dumps(record))
+        config={'source_sha':'a'*40,'operator_uid':501,'operator_gid':20,
+                'operator_home':str(self.root),'authority_path':str(self.root/'authority'),
+                'projects':[{'repo':str(repo),'key':key,'uid':401,'gid':401}]}
+        actual_stat=type(journal).stat
+        def root_owned(path,*args,**kwargs):
+            st=actual_stat(path,*args,**kwargs)
+            if path in (journal,lease,definition):
+                from types import SimpleNamespace
+                return SimpleNamespace(st_uid=0,st_nlink=1,st_mode=st.st_mode)
+            return st
+        return config,journal,record,agents,root_owned
+
+    def test_install_reconciles_proven_withdrawal_without_repeating_launchd_effect(self):
+        config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
+        result=Mock(returncode=113,stderr='Could not find service')
+        with patch.object(self.module,'ROOT',self.root), \
+             patch.object(self.module,'WORKER_AGENTS',agents), \
+             patch.object(type(journal),'stat',new=root_owned), \
+             patch.object(self.module.subprocess,'run',return_value=result) as launchd, \
+             patch('do_again.supervisor.authority.AuthorityRegistry') as registry, \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn') as birth:
+            registry.return_value.status.return_value={'intent':'maintenance'}
+            self.module.verify_worker_quiescence(config)
+            launchd.assert_called_once()
+            self.assertEqual(launchd.call_args.args[0][:2],['/bin/launchctl','print'])
+            birth.assert_called_once_with(12345,[501,12,34,1],timeout=3)
+        saved=json.loads(journal.read_text())
+        self.assertEqual(saved['phase'],'withdrawn')
+        self.assertEqual(saved['recovery_evidence']['previous_phase'],'running')
+        self.assertTrue(saved['recovery_evidence']['original_worker_withdrawn'])
+
+    def test_readiness_quiescence_observation_preserves_worker_journal(self):
+        config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
+        original=journal.read_bytes()
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'WORKER_AGENTS',agents),\
+                patch.object(type(journal),'stat',new=root_owned),\
+                patch.object(self.module.subprocess,'run',return_value=Mock(returncode=113,stderr='Could not find service')),\
+                patch('do_again.supervisor.authority.AuthorityRegistry') as registry,\
+                patch('do_again.supervisor.service_probe.verify_process_withdrawn') as birth,\
+                patch.object(self.module,'atomic') as writes:
+            registry.return_value.status.return_value={'intent':'maintenance'}
+            self.module.verify_worker_quiescence(config,reconcile=False)
+            self.assertEqual(journal.read_bytes(),original);writes.assert_not_called()
+            birth.side_effect=RuntimeError('original worker remains alive')
+            with self.assertRaisesRegex(RuntimeError,'remains alive'):
+                self.module.verify_worker_quiescence(config,reconcile=False)
+            self.assertEqual(journal.read_bytes(),original);writes.assert_not_called()
+
+    def test_install_refuses_live_or_unverified_withdrawal_without_journal_mutation(self):
+        config,journal,record,agents,root_owned=self.worker_quiescence_fixture()
+        original=journal.read_bytes()
+        cases=[('active',None),('maintenance',RuntimeError('original worker remains alive'))]
+        for intent,error in cases:
+            with self.subTest(intent=intent,error=bool(error)), \
+                 patch.object(self.module,'ROOT',self.root), \
+                 patch.object(self.module,'WORKER_AGENTS',agents), \
+                 patch.object(type(journal),'stat',new=root_owned), \
+                 patch.object(self.module.subprocess,'run',
+                              return_value=Mock(returncode=113,stderr='Could not find service')), \
+                 patch('do_again.supervisor.authority.AuthorityRegistry') as registry, \
+                 patch('do_again.supervisor.service_probe.verify_process_withdrawn',
+                       side_effect=error) as birth:
+                registry.return_value.status.return_value={'intent':intent}
+                with self.assertRaises(RuntimeError):
+                    self.module.verify_worker_quiescence(config)
+                if intent!='maintenance':birth.assert_not_called()
+            self.assertEqual(journal.read_bytes(),original)
+        with patch.object(self.module,'ROOT',self.root), \
+             patch.object(self.module,'WORKER_AGENTS',agents), \
+             patch.object(type(journal),'stat',new=root_owned), \
+             patch.object(self.module.subprocess,'run',
+                          return_value=Mock(returncode=0,stderr='')), \
+             patch('do_again.supervisor.authority.AuthorityRegistry') as registry, \
+             patch('do_again.supervisor.service_probe.verify_process_withdrawn') as birth:
+            registry.return_value.status.return_value={'intent':'maintenance'}
+            with self.assertRaisesRegex(RuntimeError,'loaded engineering worker'):
+                self.module.verify_worker_quiescence(config)
+            birth.assert_not_called()
+        self.assertEqual(journal.read_bytes(),original)
+
+    @unittest.skipUnless(sys.platform=='darwin','root installer is supported only on macOS')
+    def test_install_rejects_reused_canary_chat_before_privileged_effects(self):
+        current=self.root/'current';current.mkdir()
+        stage=self.root/'stage';stage.mkdir()
+        old={'live_canary':{'nonce':'a'*24,'chat_url':'https://chatgpt.com/c/old'}}
+        candidate={'live_canary':{'nonce':'b'*24,'chat_url':'https://chatgpt.com/c/old'},
+                   'source_sha':'b'*40}
+        (current/'config.json').write_text(json.dumps(old))
+        (stage/'config.json').write_text(json.dumps(candidate))
+        with patch.object(self.module,'ROOT',self.root), \
+             patch.object(self.module.os,'geteuid',return_value=0), \
+             patch.object(self.module,'verify_stage',return_value={'source_sha':'b'*40}), \
+             patch.object(self.module,'secure_directory') as privileged:
+            with self.assertRaisesRegex(RuntimeError,'distinct ChatGPT conversation'):
+                self.module.install(stage)
+            privileged.assert_not_called()
+        self.assertEqual(json.loads((current/'config.json').read_text()),old)
+
     def test_runtime_executable_paths_are_validated_before_cutover(self):
         current=self.root/'current'
         valid={'python':str(current/'runtimes/python/bin/python3'),
@@ -28,6 +357,241 @@ class InstallationTests(unittest.TestCase):
                         {**valid,'python':'/tmp/untrusted'}):
             with self.assertRaises(RuntimeError):
                 self.module.runtime_executables(invalid,current)
+
+    def recovery_fixture(self):
+        from do_again.supervisor.authority import AuthorityRegistry
+        from do_again.supervisor.macos_execution import ExecutionLedger
+        self.root=self.root.resolve()
+        current=self.root/'current';candidate=self.root/'previous-fixture'
+        current.mkdir();candidate.mkdir()
+        database=self.root/'effects.sqlite'
+        registry=AuthorityRegistry(database);registry.initialize()
+        ledger=ExecutionLedger(database)
+        ledger.reserve('fixture','completed','fingerprint')
+        ledger.finish('fixture','completed',{'status':'succeeded'})
+        config={'source_sha':'a'*40,'production_ready':False,
+                'recovery_contract':self.module.RECOVERY_CONTRACT,
+                'authority_path':str(database),'operator_uid':501,'operator_gid':20,
+                'operator_home':'/fixture','dependency_artifacts':{},'projects':[]}
+        (current/'config.json').write_text(json.dumps(config))
+        (candidate/'config.json').write_text(json.dumps({**config,'source_sha':'b'*40}))
+        (current/'manifest.json').write_text(json.dumps({'source_sha':'a'*40}))
+        (candidate/'manifest.json').write_text(json.dumps({'source_sha':'b'*40}))
+        return current,candidate,database,ledger
+
+    def test_recovery_preserves_newer_effects_and_requires_exact_compatible_source(self):
+        current,candidate,database,ledger=self.recovery_fixture()
+        original=database.read_bytes()
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage',
+                side_effect=lambda path: {'source_sha':json.loads((path/'config.json').read_text())['source_sha']}):
+            self.assertEqual(self.module.recovery_candidate('b'*40),candidate)
+            self.assertEqual(database.read_bytes(),original)
+            self.assertEqual(ledger.lookup('fixture','completed','fingerprint')['status'],'succeeded')
+            for source in ('main','b'*7,'c'*40):
+                with self.assertRaises(RuntimeError):self.module.recovery_candidate(source)
+            duplicate=self.root/'previous-duplicate';duplicate.mkdir()
+            (duplicate/'config.json').write_bytes((candidate/'config.json').read_bytes())
+            (duplicate/'manifest.json').write_bytes((candidate/'manifest.json').read_bytes())
+            self.assertIn(self.module.recovery_candidate('b'*40),(candidate,duplicate))
+            (duplicate/'manifest.json').write_text(json.dumps({'source_sha':'b'*40,'different_build':True}))
+            with self.assertRaisesRegex(RuntimeError,'ambiguous'):self.module.recovery_candidate('b'*40)
+            (duplicate/'config.json').unlink();(duplicate/'manifest.json').unlink();duplicate.rmdir()
+            with self.assertRaisesRegex(RuntimeError,'already installed'):self.module.recovery_candidate('a'*40)
+            config=json.loads((candidate/'config.json').read_text());config.pop('recovery_contract')
+            (candidate/'config.json').write_text(json.dumps(config))
+            with self.assertRaisesRegex(RuntimeError,'contract'):self.module.recovery_candidate('b'*40)
+
+    def test_recovery_rejects_pending_effect_changed_scope_and_new_schema(self):
+        import sqlite3
+        current,candidate,database,ledger=self.recovery_fixture()
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage',
+                side_effect=lambda path: {'source_sha':json.loads((path/'config.json').read_text())['source_sha']}):
+            config=json.loads((candidate/'config.json').read_text())
+            (candidate/'config.json').write_text(json.dumps({**config,'operator_uid':502}))
+            with self.assertRaisesRegex(RuntimeError,'scope'):self.module.recovery_candidate('b'*40)
+            (candidate/'config.json').write_text(json.dumps(config))
+            with sqlite3.connect(database) as db:db.execute('PRAGMA user_version=2')
+            with self.assertRaisesRegex(RuntimeError,'schema'):self.module.recovery_candidate('b'*40)
+            with sqlite3.connect(database) as db:db.execute('PRAGMA user_version=1')
+            ledger.reserve('fixture','uncertain','fingerprint')
+            with self.assertRaisesRegex(RuntimeError,'unresolved'):self.module.recovery_candidate('b'*40)
+
+
+    def test_recovery_allows_only_exact_dependency_permission_reduction(self):
+        current,candidate,database,ledger=self.recovery_fixture()
+        artifact={
+            'id':'pytest-9-1-1',
+            'name':'pytest',
+            'version':'9.1.1',
+            'url':'https://files.pythonhosted.org/packages/example/pytest.whl',
+            'sha256':'a'*64,
+        }
+        active=json.loads((current/'config.json').read_text())
+        older=json.loads((candidate/'config.json').read_text())
+        active['dependency_artifacts']={'jobpipe':[artifact]}
+        (current/'config.json').write_text(json.dumps(active))
+
+        with patch.object(self.module,'ROOT',self.root),patch.object(
+            self.module,'verify_stage',
+            side_effect=lambda path: {
+                'source_sha':json.loads((path/'config.json').read_text())['source_sha']
+            }
+        ):
+            self.assertEqual(self.module.recovery_candidate('b'*40),candidate)
+
+            older['dependency_artifacts']={'jobpipe':[artifact]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            self.assertEqual(self.module.recovery_candidate('b'*40),candidate)
+
+            changed={**artifact,'sha256':'b'*64}
+            older['dependency_artifacts']={'jobpipe':[changed]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            with self.assertRaisesRegex(RuntimeError,'capabilities'):
+                self.module.recovery_candidate('b'*40)
+
+            older['dependency_artifacts']={'jobpipe':[artifact,{**artifact,'id':'extra'}]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            with self.assertRaisesRegex(RuntimeError,'capabilities'):
+                self.module.recovery_candidate('b'*40)
+
+            active['dependency_artifacts']={}
+            (current/'config.json').write_text(json.dumps(active))
+            older['dependency_artifacts']={'jobpipe':[artifact]}
+            (candidate/'config.json').write_text(json.dumps(older))
+            with self.assertRaisesRegex(RuntimeError,'capabilities'):
+                self.module.recovery_candidate('b'*40)
+
+    def test_cutover_crash_preserves_ticket_runtime_and_newer_effects(self):
+        current=self.root/'current';stage=self.root/'stage'
+        current.mkdir();stage.mkdir()
+        (current/'version').write_text('old');(stage/'version').write_text('new')
+        effects=self.root/'effects';effects.write_text('newer terminal effect')
+        journal_path=self.root/'installation.json';journal={'source_sha':'a'*40}
+        rename=os.rename;calls=[]
+        def interrupt(source,target):
+            calls.append((source,target))
+            ticket=json.loads(journal_path.read_text())['runtime_transition']
+            self.assertEqual(ticket['phase'],'cutover_started')
+            if len(calls)==2:raise OSError('injected interruption after retaining old runtime')
+            rename(source,target)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.os,'rename',side_effect=interrupt):
+            with self.assertRaisesRegex(OSError,'injected'):
+                self.module.select_runtime(stage,current,journal_path,journal,'b'*40,recovery=False)
+        ticket=json.loads(journal_path.read_text())['runtime_transition']
+        self.assertEqual((Path(ticket['retained_path'])/'version').read_text(),'old')
+        self.assertEqual((stage/'version').read_text(),'new');self.assertFalse(current.exists())
+        self.assertEqual(effects.read_text(),'newer terminal effect')
+        self.assertEqual(ticket['phase'],'cutover_started')
+
+    def test_successful_runtime_selection_flushes_each_rename_before_advancing(self):
+        current=self.root/'current';stage=self.root/'stage'
+        current.mkdir();stage.mkdir();(current/'version').write_text('old');(stage/'version').write_text('new')
+        journal_path=self.root/'installation.json';journal={'source_sha':'a'*40}
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'sync_directory',wraps=self.module.sync_directory) as sync:
+            self.module.select_runtime(stage,current,journal_path,journal,'b'*40,recovery=True)
+        self.assertEqual(sync.call_count,4)  # Two durable tickets and two package renames.
+        ticket=json.loads(journal_path.read_text())['runtime_transition']
+        self.assertEqual(ticket['phase'],'runtime_selected');self.assertEqual(ticket['operation'],'recovery')
+        self.assertEqual((current/'version').read_text(),'new')
+        self.assertEqual((Path(ticket['retained_path'])/'version').read_text(),'old')
+
+
+
+    def test_jobpipe_offline_preflight_fails_before_stale_snapshot_install(self):
+        spec=importlib.util.spec_from_file_location(
+            'jobpipe_preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        repo=self.root/'jobpipe'
+        pinned='a'*40
+        latest='b'*40
+        def fake_git(*args):
+            if args[1]=='rev-parse':
+                self.assertEqual(args[2],'refs/remotes/origin/main')
+                return latest
+            if args[1]=='ls-remote':
+                self.assertEqual(args[2:],
+                                 ('origin','refs/heads/main'))
+                return latest+'\trefs/heads/main'
+            raise AssertionError('unexpected git operation')
+        with patch.object(module,'git',side_effect=fake_git) as command:
+            with self.assertRaisesRegex(ValueError,'protected snapshot is stale'):
+                module.require_fresh_jobpipe_snapshot(repo,pinned_sha=pinned)
+            self.assertEqual([x.args[1] for x in command.call_args_list],
+                             ['rev-parse','ls-remote'])
+        with patch.object(module,'git',side_effect=[latest,latest+'\trefs/heads/main']):
+            self.assertEqual(module.require_fresh_jobpipe_snapshot(repo,pinned_sha=latest),latest)
+        for remote in ('',pinned+'\trefs/heads/main',latest+'\trefs/heads/other',
+                       latest+'\trefs/heads/main\n'+latest):
+            with patch.object(module,'git',side_effect=[latest,remote]):
+                with self.subTest(remote=remote),self.assertRaisesRegex(ValueError,'stale or unavailable'):
+                    module.require_fresh_jobpipe_snapshot(repo,pinned_sha=latest)
+        with patch.object(module,'git',side_effect=[latest,latest+'\trefs/heads/main']):
+            self.assertEqual(module.require_fresh_jobpipe_snapshot(repo),latest)
+
+
+    def test_sonary_snapshot_freshness_rejects_stale_or_ambiguous_remote(self):
+        spec=importlib.util.spec_from_file_location(
+            'preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        repo=self.root/'Sonary'
+        local='a'*40;other='b'*40
+        def run(*args):
+            if args[1]=='rev-parse':return local
+            if args[1]=='ls-remote':return other+'\trefs/heads/main'
+            raise AssertionError('unexpected Git operation')
+        with patch.object(module,'git',side_effect=run) as command:
+            with self.assertRaisesRegex(ValueError,'stale'):
+                module.require_fresh_sonary_snapshot(repo)
+            self.assertEqual([c.args[1] for c in command.call_args_list],
+                             ['rev-parse','ls-remote'])
+        with patch.object(module,'git',side_effect=[
+                local,local+'\trefs/heads/main']):
+            self.assertEqual(module.require_fresh_sonary_snapshot(repo),local)
+        for bad in ('',other,other+'\trefs/heads/other',local+'\trefs/heads/main\n'+local):
+            with patch.object(module,'git',side_effect=[local,bad]):
+                with self.subTest(remote=bad),self.assertRaises(ValueError):
+                    module.require_fresh_sonary_snapshot(repo)
+
+    def test_sonary_enrollment_is_explicit_add_only_and_preserves_parent_snapshots(self):
+        from do_again.supervisor.authority import project_identity
+        from do_again.supervisor.macos_execution import EXECUTION_ROOT
+        home=Path('/Users/fixture')
+        def scoped(name,account,uid):
+            repo=home/name;key=project_identity(repo)
+            return {'repo':str(repo),'key':key,'uid':uid,'gid':uid,'account':account,
+                    'worktree':str(EXECUTION_ROOT/key/'worktree'),
+                    'github_repository':'Tran-Steven/'+name,
+                    'source_sha':str(uid)*40,'goal_revision':'maintenance-fixture'}
+        parents=[scoped('do-again','_doagain_da',401),scoped('jobpipe','_doagain_jp',402)]
+        old={'source_sha':'a'*40,'operator_home':str(home),'production_ready':False,
+             'projects':parents}
+        next_cfg={**old,'source_sha':'b'*40,'projects':[dict(p) for p in parents]}
+        self.assertFalse(self.module.validate_project_scope(old))
+        self.assertFalse(self.module.validate_project_scope(next_cfg,old))
+        sonary=scoped('Sonary','_doagain_so',403)
+        new={**next_cfg,'projects':[ *next_cfg['projects'],sonary ],
+             'scope_enrollment':{'kind':'sonary_add_only','previous_source_sha':'a'*40}}
+        self.assertTrue(self.module.validate_project_scope(new,old))
+        self.assertFalse(self.module.validate_project_scope(
+            {**new,'source_sha':'c'*40,'scope_enrollment':None},new))
+        for candidate in (
+            {**new,'scope_enrollment':None},
+            {**new,'scope_enrollment':{'kind':'sonary_add_only','previous_source_sha':'c'*40}},
+            {**new,'projects':[parents[0],sonary]},
+            {**new,'projects':[parents[0],{**parents[1],'source_sha':'c'*40},sonary]},
+            {**new,'projects':[ *parents,{**sonary,'uid':402,'gid':402}]},
+            {**new,'projects':[ *parents,{**sonary,'repo':str(home/'sonary')}]},
+            {**new,'projects':[ *parents,{**sonary,'github_repository':'Tran-Steven/jobpipe'}]},
+            {**new,'projects':[ *parents,{**sonary,'worktree':parents[1]['worktree']}]},
+            {**new,'projects':[ *parents,{**sonary,'account':'_doagain_other'}]},
+            {**new,'projects':[ *parents,sonary,{**sonary,'account':'_doagain_x','uid':404,'gid':404}]},
+        ):
+            with self.subTest(candidate=candidate),self.assertRaises(RuntimeError):
+                self.module.validate_project_scope(candidate,old)
+        with self.assertRaisesRegex(RuntimeError,'scope'):
+            self.module.validate_project_scope(next_cfg,new)
+        with self.assertRaisesRegex(RuntimeError,'implicitly enroll'):
+            self.module.validate_project_scope(new)
 
     def test_account_collision_requires_trusted_provenance_without_mutation(self):
         project={'account':'_doagain_da','uid':400,'gid':400}
@@ -120,10 +684,96 @@ class InstallationTests(unittest.TestCase):
         (self.root/'state/test').mkdir(parents=True)
         path=self.root/'authority.sqlite';ExecutionLedger(path).reserve('test','request-ambiguous','fingerprint')
         registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
-        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'),patch.object(self.module,'run') as run:
-            with self.assertRaisesRegex(RuntimeError,'ambiguous'):
-                with self.module.preview_cutover(config,registry,True):self.fail('unsafe cutover admitted')
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'), \
+             patch.object(self.module,'validate_project_scope',return_value=False), \
+             patch.object(self.module,'run') as run:
+            for live in (True,False):
+                with self.subTest(supervisor_running=live),self.assertRaisesRegex(RuntimeError,'ambiguous'):
+                    with self.module.preview_cutover(config,registry,live):self.fail('unsafe cutover admitted')
             run.assert_not_called()
+
+    def test_preview_cutover_rejects_orphan_quarantine_in_unknown_project(self):
+        import sqlite3
+        from contextlib import closing
+        from do_again.supervisor.macos_execution import ExecutionLedger,ExecutionBlocked
+        from do_again.supervisor.publication_quarantine import append_quarantine
+        config={'production_ready':False,'projects':[{'repo':'/synthetic','key':'configured','uid':401,
+            'gid':401,'account':'_doagain_da','worktree':'/synthetic/work','source_sha':'approved'}]}
+        (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))
+        (self.root/'state/configured').mkdir(parents=True)
+        path=self.root/'authority.sqlite';ledger=ExecutionLedger(path)
+        intent={'operation':'git_publish','source_sha':'b'*40,'request_fingerprint':'c'*64}
+        ledger.reserve('unknown-orphan-project','original-publish-1','a'*64,intent=intent)
+        with closing(sqlite3.connect(path)) as db:
+            append_quarantine(db,'unknown-orphan-project','original-publish-1',expected_intent=intent,
+                approval_reference='disposable operator fixture')
+            db.execute("DELETE FROM execution WHERE project='unknown-orphan-project'");db.commit()
+        registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'), \
+             patch.object(self.module,'validate_project_scope',return_value=False),patch.object(self.module,'run') as run:
+            for live in (True,False):
+                with self.subTest(supervisor_running=live),self.assertRaises(ExecutionBlocked):
+                    with self.module.preview_cutover(config,registry,live):self.fail('orphan audit was admitted')
+            run.assert_not_called()
+
+    def test_preview_cutover_rejects_orphan_probe_audit_in_unknown_project(self):
+        import sqlite3
+        from do_again.supervisor.macos_execution import ExecutionLedger,ExecutionBlocked
+        from do_again.supervisor.planning_probe_quarantine import append
+        config={'production_ready':False,'projects':[{'repo':'/synthetic','key':'configured','uid':401,
+            'gid':401,'account':'_doagain_da','worktree':'/synthetic/work','source_sha':'approved'}]}
+        (self.root/'current').mkdir();(self.root/'current/config.json').write_text(json.dumps(config))
+        (self.root/'state/configured').mkdir(parents=True)
+        path=self.root/'authority.sqlite';ledger=ExecutionLedger(path)
+        intent={'operation':'execute','source_sha':'b'*40,'request_fingerprint':'c'*64}
+        rid='offline-'+'a'*20+'-4-probe';ledger.reserve('unknown-probe-project',rid,'a'*64,intent=intent)
+        with sqlite3.connect(path) as db:
+            append(db,'unknown-probe-project',rid,expected_intent=intent,approval_reference='disposable fixture')
+            db.execute("DELETE FROM execution WHERE project='unknown-probe-project'");db.commit()
+        registry=Mock(path=path);registry.status.return_value={'intent':'maintenance'}
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'verify_stage'), \
+             patch.object(self.module,'validate_project_scope',return_value=False),patch.object(self.module,'run') as run:
+            for live in (True,False):
+                with self.subTest(supervisor_running=live),self.assertRaises(ExecutionBlocked):
+                    with self.module.preview_cutover(config,registry,live):self.fail('orphan probe audit admitted')
+            run.assert_not_called()
+
+    def test_worker_cutover_requires_absence_and_preserves_ambiguous_deployment(self):
+        config={'operator_uid':501,'operator_gid':20,'operator_home':'/synthetic',
+                'projects':[{'key':'a'*64}]}
+        state=self.root/'state'/('a'*64);state.mkdir(parents=True)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module.subprocess,'run') as effect:
+            effect.return_value=Mock(returncode=113,stderr='Could not find service')
+            self.module.verify_worker_quiescence(config)
+            effect.return_value=Mock(returncode=1,stderr='Permission denied')
+            with self.assertRaisesRegex(RuntimeError,'unproven'):self.module.verify_worker_quiescence(config)
+            effect.return_value=Mock(returncode=0,stderr='')
+            with self.assertRaisesRegex(RuntimeError,'loaded'):self.module.verify_worker_quiescence(config)
+            (state/'worker-deployment.json').write_text(json.dumps({'phase':'start_started'}))
+            # Unknown ownership is preserved rather than adopted by an upgrade.
+            with self.assertRaisesRegex(RuntimeError,'ownership|withdrawal'):
+                self.module.verify_worker_quiescence(config)
+
+    def test_interrupted_staging_recovery_requires_definition_pending_and_service_absence(self):
+        config={'operator_uid':501,'operator_gid':20,'operator_home':'/synthetic','projects':[{'key':'a'*64}]}
+        state=self.root/'state'/('a'*64);state.mkdir(parents=True)
+        journal=state/'worker-deployment.json';journal.write_text(json.dumps({'phase':'stage_started','source_sha':'preserved'}))
+        agents=self.root/'agents';agents.mkdir()
+        original_stat=type(journal).stat
+        def owned(path,*args,**kwargs):
+            if path==journal:return Mock(st_uid=0,st_nlink=1,st_mode=0o100600)
+            return original_stat(path,*args,**kwargs)
+        with patch.object(self.module,'ROOT',self.root),patch.object(self.module,'WORKER_AGENTS',agents),              patch.object(type(journal),'stat',new=owned),patch.object(self.module.subprocess,'run',return_value=Mock(returncode=113,stderr='Could not find service')):
+            pending=agents/('io.github.tran-steven.do-again.worker.'+'a'*12+'.plist.pending')
+            pending.write_bytes(b'preserve interrupted artifact')
+            with self.assertRaisesRegex(RuntimeError,'service artifacts'):self.module.verify_worker_quiescence(config)
+            self.assertEqual(json.loads(journal.read_text())['phase'],'stage_started')
+            pending.unlink()  # Synthetic test artifact only.
+            self.module.verify_worker_quiescence(config)
+            recovered=json.loads(journal.read_text())
+            self.assertEqual(recovered['phase'],'stage_failed_pre_effect')
+            self.assertEqual(recovered['source_sha'],'preserved')
+            self.assertTrue(recovered['recovery_evidence']['service_absent'])
 
     def test_preview_cutover_preserves_production_helper(self):
         config={'production_ready':True,'projects':[]}
@@ -133,14 +783,110 @@ class InstallationTests(unittest.TestCase):
                 with self.module.preview_cutover(config,Mock(),True):self.fail('production helper admitted')
             run.assert_not_called()
 
+
+    def test_preparer_rejects_missing_hosted_planner_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'requires both a separately approved hosted-planner grant'):
+            module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
+        self.assertFalse(output.exists())
+        # An explicitly offline planner never silently inherits hosted credentials.
+        proposal.write_text(json.dumps({'scope':{'planner':'sealed-offline'},'goal':{},'profile':{}}))
+        hosted=self.root/'hosted.json'
+        hosted.write_text('{}')
+        hosted.chmod(0o600)
+        with self.assertRaisesRegex(ValueError,'cannot inherit hosted planner'):
+            module.require_planner_grants_before_staging(proposal,hosted,None)
+        self.assertFalse(output.exists())
+
+    def test_controller_proposals_must_be_private_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        controller=self.root/'controller.json'
+        hosted=self.root/'hosted.json'
+        controller.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        hosted.write_text('{}')
+        controller.chmod(0o600)
+        hosted.chmod(0o644)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'operator-owned and private'):
+            module.prepare(self.root,self.root,self.root,output,
+                           controller_grant=controller,hosted_planner_grant=hosted,
+                           codex_native_payload=self.root/'codex-stub')
+        self.assertFalse(output.exists())
+        hosted.chmod(0o600)
+        alias=self.root/'hosted-link.json'
+        alias.symlink_to(hosted)
+        with self.assertRaisesRegex(ValueError,'unalias'):
+            module.prepare(self.root,self.root,self.root,output,
+                           controller_grant=controller,hosted_planner_grant=alias,
+                           codex_native_payload=self.root/'codex-stub')
+        self.assertFalse(output.exists())
+
+    def test_controller_grant_hardlink_rejected_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
+        other=self.root/'controller-hardlink.json'
+        os.link(proposal,other)
+        output=self.root/'not-created'
+        with self.assertRaisesRegex(ValueError,'operator-owned and private'):
+            module.prepare(self.root,self.root,self.root,output,controller_grant=proposal)
+        self.assertFalse(output.exists())
+
+    def test_controller_preflight_rejects_malformed_scope_before_staging(self):
+        spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        proposal=self.root/'controller.json'
+        hosted=self.root/'hosted.json'
+        proposal.write_text(json.dumps({'scope':{'planner':'codex-cli'},'goal':{},'profile':{}}))
+        proposal.chmod(0o600)
+        hosted.write_text(json.dumps({'source_sha':'old','network_endpoints':[],'dns_resolvers':[]}))
+        hosted.chmod(0o600)
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        with self.assertRaisesRegex(ExecutionBlocked,'controller scope absent or contains unknown authority'):
+            module.validate_planner_authorization_preflight('a'*40,501,20,proposal,hosted)
+        self.assertFalse((self.root/'payload').exists())
+
+    def test_hosted_scope_rejects_wrong_source_and_unapproved_network(self):
+        from datetime import datetime, timezone
+        from do_again.supervisor.controller_codex_helper import validate_hosted_scope
+        from do_again.supervisor.macos_execution import ExecutionBlocked
+        source='a'*40
+        goal='b'*64
+        config={'source_sha':source,'operator_uid':501,'operator_gid':20,
+                'controller_scope':{'goal_sha256':goal,'epoch':13}}
+        # Deliberately malformed: the real hosted validator must reject missing
+        # capabilities, wrong source, and absent approved endpoints/resolvers.
+        grant={'source_sha':'c'*40,'goal_sha256':goal,'epoch':13,
+               'network_endpoints':[],'dns_resolvers':[]}
+        with self.assertRaisesRegex(ExecutionBlocked,'explicitly approved public IPv4 endpoints and DNS resolvers'):
+            validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+        grant['network_endpoints']=['8.8.8.8']
+        grant['dns_resolvers']=['1.1.1.1']
+        with self.assertRaisesRegex(ExecutionBlocked,'hosted scope identity/capabilities differ'):
+            validate_hosted_scope(config,grant,datetime.now(timezone.utc))
+        with self.assertRaisesRegex(ExecutionBlocked,'separate approved hosted planner grant'):
+            validate_hosted_scope(config,None,datetime.now(timezone.utc))
+
     @unittest.skipUnless(sys.platform=='darwin','native relocation requires macOS tools')
     def test_sealed_runtime_does_not_import_host_packages_or_framework(self):
         spec=importlib.util.spec_from_file_location('preparer',Path(__file__).resolve().parents[1]/'tools/prepare_macos_supervisor.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         # CI setup-python commonly uses a non-framework distribution. The
         # production builder rejects it; relocation runs on supported frameworks.
-        if not (Path(sys.base_prefix)/'Resources/Python.app/Contents/MacOS/Python').is_file():
-            self.skipTest('framework Python is required for installation preparation')
+        base = Path(sys.base_prefix).resolve()
+        if not (
+            (base/'Resources/Python.app/Contents/MacOS/Python').is_file()
+            and (base/'Python').is_file()
+        ):
+            self.skipTest('compatible framework Python is required for runtime relocation')
         module.seal_runtime(self.root)
         runtime=self.root/'runtimes/python'
         self.assertFalse(list(runtime.rglob('site-packages')))

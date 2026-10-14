@@ -35,6 +35,9 @@ def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
     sentinel = root / 'protected-sentinel'
     sentinel.write_text('SYNTHETIC_UNCHANGED')
     sentinel.chmod(0o600)
+    same_uid_sentinel=root/'same-uid-outside-scope'
+    same_uid_sentinel.write_text('SAME_UID_SYNTHETIC_UNCHANGED');same_uid_sentinel.chmod(0o600)
+    os.chown(same_uid_sentinel,project.uid,project.gid)
     other = next(item for item in config['projects'] if item['uid'] != project.uid)
     other_sentinel = root / 'other-project-sentinel'
     other_sentinel.write_text('OTHER_SYNTHETIC_UNCHANGED');other_sentinel.chmod(0o600)
@@ -48,7 +51,7 @@ def verify_dedicated_boundary(config: dict, project, *, start_guard) -> dict:
         if launchctl('bootstrap', domain, str(fixture)).returncode:
             raise ExecutionBlocked('cannot install synthetic operator-domain proof fixture')
     try:
-        targets = {'other_sentinel':str(other_sentinel), 'sentinel': str(sentinel), 'service': target,
+        targets = {'same_uid_sentinel':str(same_uid_sentinel),'other_sentinel':str(other_sentinel), 'sentinel': str(sentinel), 'service': target,
                    'socket': str(SOCKET_ROOT / f'{project.key[:24]}.sock'),
                    'runner':str(Path(__file__).with_name('execution_runner.py')), 'operator_pid': os.getpid(), 'uid': project.uid, 'gid': project.gid,
                    'package':str(Path(__file__).resolve().parents[2]),
@@ -61,7 +64,11 @@ import sys
 sys.path.insert(0,T['package'])
 from do_again.supervisor.wheels import validate_wheel
 from do_again.supervisor.git_export import export_commit
-result['immutable_module_import']=callable(validate_wheel) and callable(export_commit)
+from do_again.supervisor.control_history import publish_control
+from do_again.supervisor.browser_broker import browser_tick
+from do_again.supervisor.worker_service import register_worker
+from do_again.core.control_transport import BrokerControlHistory
+result['immutable_module_import']=all(callable(value) for value in (validate_wheel,export_commit,publish_control,browser_tick,register_worker,BrokerControlHistory))
 def denied(name, action):
     try: action()
     except OSError as e: result[name]=e.errno in (errno.EPERM,errno.EACCES)
@@ -83,6 +90,7 @@ result['identity']=os.getuid()==T['uid'] and os.geteuid()==T['uid'] and os.getgi
 Path(T['allowed']).write_text('allowed')
 result['allowed_write']=Path(T['allowed']).read_text()=='allowed'
 denied('other_project_write_denied',lambda:Path(T['other_sentinel']).write_text('ESCAPE'))
+denied('same_uid_outside_scope_denied',lambda:Path(T['same_uid_sentinel']).write_text('ESCAPE'))
 denied('read_denied',lambda:Path(T['sentinel']).read_bytes())
 denied('write_denied',lambda:Path(T['sentinel']).write_text('ESCAPE'))
 denied('hardlink_denied',lambda:os.link(T['sentinel'],str(Path(T['scratch'])/'hardlink-proof')))
@@ -120,16 +128,26 @@ print(json.dumps(result),flush=True)
         disabled = launchctl('print-disabled', domain)
         if f'"{label}" => disabled' in disabled.stdout:
             raise BoundaryProbeBlocked('synthetic operator service was disabled',evidence)
-        if other_sentinel.read_text() != 'OTHER_SYNTHETIC_UNCHANGED' or sentinel.read_text() != 'SYNTHETIC_UNCHANGED' or not result or not all(value is True for value in result.values()):
+        if same_uid_sentinel.read_text() != 'SAME_UID_SYNTHETIC_UNCHANGED' or other_sentinel.read_text() != 'OTHER_SYNTHETIC_UNCHANGED' or sentinel.read_text() != 'SYNTHETIC_UNCHANGED' or not result or not all(value is True for value in result.values()):
             raise BoundaryProbeBlocked('native execution boundary proof rejected an escape or lost allowed work',evidence)
         from .macos_execution import MacOSProcesses
         if MacOSProcesses().owned(project.uid):
             raise ExecutionBlocked('detached execution descendants survived proof')
         git_scratch, git_cache = git_proof_directories(root, project.uid, project.gid)
         git_evidence = verify_native_git(config, project, git_scratch, git_cache, nonce, start_guard=start_guard)
+        verify_literal_source_scope(config, project, root, scratch, cache, start_guard=start_guard)
+        snapshot_evidence = verify_reviewed_metadata_snapshot(config, project, root, start_guard=start_guard)
+        result['reviewed_metadata_snapshot'] = True
+        baseline_evidence = None
+        if project.account == '_doagain_jp' and config.get('reviewed_task_scope') is not None:
+            baseline_evidence = verify_reviewed_native_baseline(config, project, nonce, start_guard=start_guard)
+            result['reviewed_native_original_baseline'] = True
+        result['literal_source_scope'] = True
         result['git_transaction'] = True
         result['git_broker_promotion'] = True
-        return {'verified': True, 'git': git_evidence, 'checks': sorted(result), 'detached_descendants_drained': True,
+        return {'verified': True, 'git': git_evidence, 'reviewed_metadata_snapshot': snapshot_evidence,
+                'reviewed_native_original_baseline': baseline_evidence,
+                'checks': sorted(result), 'detached_descendants_drained': True,
                 'execution_uid': project.uid, 'fixture': label}
     finally:
         (project.worktree / ('.native-proof-' + nonce)).unlink(missing_ok=True)
@@ -217,6 +235,7 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     from dataclasses import replace
     from types import SimpleNamespace
     from .git_broker import commit_via_broker
+    from .jobpipe_development import synthetic_qualification_config
     from .macos_execution import ExecutionLedger, MacOSProcesses
     from .macos_server import worktree_authority
     expected_root = EXECUTION_ROOT / project.key / 'probes' / nonce
@@ -232,7 +251,7 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     # All spawn and promotion decisions still hold the real maintenance fence.
     fixture_broker = SimpleNamespace(
         project=replace(project, worktree=fixture),
-        config=dict(config, production_ready=True),
+        config=synthetic_qualification_config(config),
         registry=SimpleNamespace(status=lambda repo:dict(status)),
         ledger=ledger, lock=threading.Lock(), admission=start_guard, _verified=lambda:True)
     packet = {'operation':'git_commit','request_id':'native-broker-' + nonce,
@@ -260,3 +279,122 @@ def verify_native_git_broker(config: dict, project, fixture: Path, root: Path, b
     return {'verified':True,'promoted_sha':promoted['repo_head'], 'base_sha':base,
             'metadata_root_owned':True,'terminal_receipt_replayed':True,
             'live_authority_unchanged':True,'production_configuration_unchanged':True}
+
+
+def verify_reviewed_native_baseline(config, project, nonce, *, start_guard):
+    """Collect the exact original baseline under the actual confined UID before admission."""
+    from types import SimpleNamespace
+    from .reviewed_task_native import prepare_original_baseline, require_original_baseline
+    from .reviewed_task import ASSETS, sha
+    from .controller_native_effects import NativeControllerEffects
+    from .macos_execution import INSTALL_ROOT
+    content = ASSETS['files']['tests/test_ats_question_triage.py']['before'].encode()
+    sid = 'reviewed-baseline-proof-' + nonce
+    baseline, directory = prepare_original_baseline(EXECUTION_ROOT / project.key / 'requests' / sid, content)
+    broker = SimpleNamespace(config=config, project=project)
+    effects = NativeControllerEffects(broker, config['controller_profile'], start_guard, lambda request: ())
+    code = ('import sys;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
+            'from do_again.supervisor.reviewed_test_runner import main;sys.exit(main(sys.argv[1],sys.argv[2]))')
+    captured = effects.capture(sid+'-capture', [config['python'],'-I','-S','-B','-c',code,
+        str(baseline),str(INSTALL_ROOT/'current/runtimes/test-packages')],60,
+        read_only_source=True,extra_read_paths=(directory,))
+    try:
+        counts = json.loads(captured.get('stdout','').rpartition('\nNATIVE_PYTEST_OBSERVATION=')[2].strip())
+    except (ValueError,TypeError):
+        counts = {}
+    if (captured['returncode'] != 0 or captured['timed_out']
+            or captured.get('stdout_truncated') or captured.get('stderr_truncated')
+            or counts != {'execution_uid':project.uid,'pytest_exit_code':0,
+                'collected':ASSETS['expected_baseline_count'],'passed':ASSETS['expected_baseline_count'],
+                'failed':0,'skipped':0}):
+        raise BoundaryProbeBlocked('original native baseline did not independently pass',
+            {'phase':'reviewed_native_original_baseline','capture':captured,'observation':counts})
+    require_original_baseline(baseline,content)
+    return {'verified':True,'actual_tests':counts,'network_denied':captured['network_denied'],
+            'baseline_sha256':sha(content),'source_read_only':True,'immutable_baseline_reverified':True}
+
+
+def verify_reviewed_metadata_snapshot(config, project, root, *, start_guard):
+    """Actual root copy/exchange of synthetic metadata owned by other identities."""
+    from .reviewed_task import copy_git_metadata, metadata_digest
+    from .git_broker import atomic_swap
+    directory = root / 'reviewed-metadata-proof'
+    directory.mkdir(mode=0o700)
+    original, saved = directory / 'original', directory / 'saved'
+    original.mkdir(mode=0o755)
+    (original / 'objects').mkdir(mode=0o750)
+    (original / 'HEAD').write_bytes(b'ref: refs/heads/synthetic-original\n')
+    (original / 'objects' / 'inert').write_bytes(b'synthetic byte-preservation proof\n')
+    for path in (original, original / 'HEAD'):
+        os.chown(path, config['operator_uid'], config['operator_gid'])
+    for path in (original / 'objects', original / 'objects' / 'inert'):
+        os.chown(path, project.uid, project.gid)
+    with start_guard():
+        before = metadata_digest(original)
+        copy_git_metadata(original, saved)
+        if metadata_digest(saved) != before or metadata_digest(original) != before:
+            raise ExecutionBlocked('cross-identity metadata snapshot was not exact')
+        (original / 'HEAD').write_bytes(b'ref: refs/heads/synthetic-candidate\n')
+        atomic_swap(original, saved)
+        if metadata_digest(original) != before:
+            raise ExecutionBlocked('cross-identity metadata recovery was not exact')
+    return {'verified': True, 'root_uid': os.geteuid(),
+            'original_owner_uids': [config['operator_uid'], project.uid],
+            'byte_mode_owner_digest': before, 'atomic_recovery_verified': True,
+            'fixture_only': True}
+
+
+def verify_literal_source_scope(config, project, root, scratch, cache, *, start_guard):
+    """Actual Seatbelt positive/negative proof on root-created synthetic source.
+
+    The real engineering worktree and its Git metadata are never modified.
+    The synthetic worktree is outside scratch/cache so their general write
+    permissions cannot accidentally make the negative test pass.
+    """
+    from dataclasses import replace
+    scratch, cache = root / 'literal-scope-scratch', root / 'literal-scope-cache'
+    for directory in (scratch,cache):
+        directory.mkdir(mode=0o700); os.chown(directory,project.uid,project.gid)
+    fixture = root / 'literal-source-fixture'
+    fixture.mkdir(mode=0o700)
+    os.chown(fixture, project.uid, project.gid)
+    allowed, blocked = fixture / 'allowed.py', fixture / 'blocked.py'
+    for path in (allowed, blocked):
+        path.write_text('BEFORE'); path.chmod(0o600); os.chown(path, project.uid, project.gid)
+    synthetic = replace(project, worktree=fixture)
+    script = ('import errno,json;from pathlib import Path;'
+        'a=Path('+repr(str(allowed))+');b=Path('+repr(str(blocked))+');'
+        'a.write_text("AFTER");ok=a.read_text()=="AFTER";'
+        '\ntry: b.write_text("ESCAPE")'
+        '\nexcept OSError as e: denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: denied=False'
+        '\ntry: __import__("os").link(b,'+repr(str(cache/'blocked-link'))+')'
+        '\nexcept OSError as e: link_denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: link_denied=False'
+        '\ntry:'
+        '\n Path('+repr(str(cache/'blocked-symlink'))+').symlink_to(b)'
+        '\n Path('+repr(str(cache/'blocked-symlink'))+').write_text("ESCAPE")'
+        '\nexcept OSError as e: symlink_denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: symlink_denied=False'
+        '\nprint(json.dumps({"allowed":ok,"other_denied":denied,"hardlink_denied":link_denied,"symlink_denied":symlink_denied}))')
+    packet={'operation':'execute','request_id':'literal-scope-'+root.name,
+        'argv':[config['python'],'-I','-S','-B','-c',script], 'cwd':'.','timeout':15}
+    result=capture(launch_spec(synthetic,packet,scratch,cache,source_write_paths=('allowed.py',)),
+                   15,start_guard=start_guard)
+    if (result['returncode'] or result['timed_out']
+            or json.loads(result['stdout'])!={'allowed':True,'other_denied':True,'hardlink_denied':True,'symlink_denied':True}
+            or allowed.read_text()!='AFTER' or blocked.read_text()!='BEFORE'):
+        raise BoundaryProbeBlocked('literal source write scope failed',{'phase':'literal_source_scope','outcome':result})
+    script=('import errno,json;from pathlib import Path;'
+        '\ntry: Path('+repr(str(allowed))+').write_text("ESCAPE")'
+        '\nexcept OSError as e: denied=e.errno in (errno.EPERM,errno.EACCES)'
+        '\nelse: denied=False'
+        '\nprint(json.dumps({"readonly_denied":denied}))')
+    packet=dict(packet, request_id='readonly-scope-'+root.name,
+                argv=[config['python'],'-I','-S','-B','-c',script])
+    result=capture(launch_spec(synthetic,packet,scratch,cache,source_write_paths=()),
+                   15,start_guard=start_guard)
+    if (result['returncode'] or result['timed_out']
+            or json.loads(result['stdout'])!={'readonly_denied':True}
+            or allowed.read_text()!='AFTER' or blocked.read_text()!='BEFORE'):
+        raise BoundaryProbeBlocked('read-only native test source scope failed',{'phase':'readonly_source_scope','outcome':result})

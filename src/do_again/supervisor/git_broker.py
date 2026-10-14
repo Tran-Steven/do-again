@@ -52,7 +52,7 @@ def seal_metadata(path: Path) -> None:
 
 def validate_packet(packet: dict) -> None:
     required = {'operation', 'request_id', 'expected_head', 'expected_epoch', 'paths', 'message'}
-    if set(packet) - required - {'request_fingerprint'} or not required <= set(packet) or packet['operation'] != 'git_commit':
+    if set(packet) - required - {'request_fingerprint','tested_tree_sha256'} or not required <= set(packet) or packet['operation'] != 'git_commit':
         raise ExecutionBlocked('unknown Git capability or administrative fields')
     if not isinstance(packet['request_id'], str) or not REQUEST_ID.fullmatch(packet['request_id']):
         raise ExecutionBlocked('invalid Git request identity')
@@ -64,6 +64,8 @@ def validate_packet(packet: dict) -> None:
     if 'request_fingerprint' in packet and (not isinstance(packet['request_fingerprint'], str)
             or not re.fullmatch('[0-9a-f]{64}', packet['request_fingerprint'])):
         raise ExecutionBlocked('invalid original Git request fingerprint')
+    if 'tested_tree_sha256' in packet and not re.fullmatch('[0-9a-f]{64}',str(packet['tested_tree_sha256'])):
+        raise ExecutionBlocked('invalid tested content binding')
 
 
 def commit_via_broker(broker, packet: dict) -> dict:
@@ -75,12 +77,15 @@ def commit_via_broker(broker, packet: dict) -> dict:
     if sys.platform != 'darwin' or os.geteuid() != 0:
         raise ExecutionBlocked('local Git capability requires the immutable root macOS broker')
     validate_packet(packet)
+    from .live_canary import effect_authorized
     from .macos_server import verify_installation, worktree_authority
     with broker.lock:
         def gate(*, head=True):
+            if time.monotonic() >= getattr(broker, '_reviewed_deadline', float('inf')):
+                raise ExecutionBlocked('reviewed task expired before Git effect')
             status = broker.registry.status(broker.project.repo)
             if (status['intent'] != 'active' or status['epoch'] != packet['expected_epoch']
-                    or broker.config.get('production_ready') is not True or not broker._verified()):
+                    or not effect_authorized(broker) or not broker._verified()):
                 raise ExecutionBlocked('operator authority or native qualification blocks Git')
             if head and worktree_authority(broker.project.worktree)['repo_head'] != packet['expected_head']:
                 raise ExecutionBlocked('assigned Git head changed')
@@ -114,7 +119,19 @@ def commit_via_broker(broker, packet: dict) -> dict:
             gate()
             if processes.owned(broker.project.uid):
                 raise ExecutionBlocked('dedicated identity has unresolved processes')
-            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint)
+            parent = None
+            if broker.config.get('reviewed_task_scope') is not None:
+                from .reviewed_task import validate_scope, BASE, PATHS
+                scope = validate_scope(broker.config,broker.project)
+                if (packet['request_id'] != scope['request_id']+'-commit'
+                        or packet.get('request_fingerprint') != hashlib.sha256(canonical_json(scope)).hexdigest()
+                        or packet['expected_head'] != BASE or set(packet['paths']) != set(PATHS)
+                        or 'tested_tree_sha256' not in packet):
+                    raise ExecutionBlocked('Git effect is outside exact reviewed no-publication task')
+                parent = scope['request_id']
+            broker.ledger.reserve(broker.project.key, packet['request_id'], fingerprint,
+                intent={'operation':packet['operation'],'source_sha':broker.config['source_sha'],
+                        'request_fingerprint':packet.get('request_fingerprint')},parent_request=parent)
         # No authoritative effect occurs in the candidate phase.
         try:
             for path in (scratch, cache):
@@ -125,7 +142,7 @@ def commit_via_broker(broker, packet: dict) -> dict:
             transaction.prepare(broker.project.worktree / '.git')
             for path in (transaction.metadata, *transaction.metadata.rglob('*')):
                 os.chown(path, broker.project.uid, broker.project.gid)
-            deadline = time.monotonic() + 120
+            deadline = min(time.monotonic() + 120, getattr(broker, '_reviewed_deadline', float('inf')))
             def run(argv):
                 remaining = min(30, deadline - time.monotonic())
                 if remaining <= 0:
@@ -153,6 +170,22 @@ def commit_via_broker(broker, packet: dict) -> dict:
             changed = run(transaction._command('diff-tree','--no-commit-id','--name-only','-z','-r',head)).rstrip('\x00').split('\x00')
             if parents != [head, packet['expected_head']] or not all(path in packet['paths'] for path in changed) or changed == ['']:
                 raise ExecutionBlocked('candidate parent or exact file bindings failed verification')
+            if 'tested_tree_sha256' in packet:
+                # Independently bind the candidate Git blobs to the complete source
+                # measurement tested BEFORE commit, while authority is still at base.
+                import json
+                code=('import sys,json;sys.path.insert(0,'+repr(str(INSTALL_ROOT/'current/package'))+');'
+                      'from do_again.supervisor.git_manifest import tree_manifest;'
+                      'print(json.dumps(tree_manifest(sys.argv[1],sys.argv[2],sys.argv[3])))')
+                manifest=json.loads(run([broker.config['python'],'-I','-S','-B','-c',code,
+                    str(git),str(transaction.metadata),head]))
+                from .native_test_evidence import measure_committed_tree
+                measured=measure_committed_tree(broker.project.worktree,commit=packet['expected_head'],
+                    manifest=manifest,read_authority=lambda:worktree_authority(broker.project.worktree)['repo_head'])
+                if measured['tree_sha256']!=packet['tested_tree_sha256']:
+                    raise ExecutionBlocked('candidate commit differs from exact tested content')
+                tested_diff=run(transaction._command('diff','--no-ext-diff','--no-textconv',
+                    packet['expected_head'],head,'--',*packet['paths']))
             seal_metadata(sealed)
         except Exception as exc:
             result = {'state':'failed_pre_promotion','returncode':1,'error':str(exc),'source_sha':broker.config['source_sha']}
@@ -177,5 +210,8 @@ def commit_via_broker(broker, packet: dict) -> dict:
                 raise ExecutionBlocked('Git promotion is uncertain; reconciliation required')
             result = {'state':'succeeded','returncode':0,'base_sha':packet['expected_head'],'authority':actual,
                       'paths':changed,'source_sha':broker.config['source_sha'],'execution_uid':broker.project.uid}
+            if 'tested_tree_sha256' in packet:
+                result.update(tested_tree_sha256=packet['tested_tree_sha256'],
+                    diff=tested_diff,diff_sha256=hashlib.sha256(tested_diff.encode()).hexdigest())
             broker.ledger.finish(broker.project.key, packet['request_id'], result)
             return result

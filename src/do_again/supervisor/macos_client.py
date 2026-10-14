@@ -7,6 +7,10 @@ from .macos_execution import ExecutionBlocked, MAX_PACKET, MAX_OUTPUT, SOCKET_RO
 from ..core.schema import canonical_json
 
 
+class BrokerUnavailable(ExecutionBlocked):
+    """Transport failed; it does not attest authority loss or effect outcome."""
+
+
 def broker_request(repo: Path, packet: dict) -> dict:
     """Project is selected by the trusted daemon's socket, never packet content."""
     path = SOCKET_ROOT / f'{project_identity(repo)[:24]}.sock'
@@ -29,7 +33,7 @@ def _request(path: Path, packet: dict) -> dict:
     if len(payload) > MAX_PACKET:
         raise ExecutionBlocked('request exceeds broker limit')
     with socket.socket(socket.AF_UNIX) as connection:
-        connection.settimeout(600 if packet == {'operation':'qualify_capabilities'}
+        connection.settimeout(650 if packet == {'operation':'controller_amended_task'} else 600 if packet in ({'operation':'controller_tick'},{'operation':'qualify_capabilities'},{'operation':'qualify_worker'},{'operation':'qualify_service'})
                               else float(packet.get('timeout', 60)) + 30)
         try:
             connection.connect(str(path))
@@ -39,12 +43,24 @@ def _request(path: Path, packet: dict) -> dict:
             data = bytearray()
             while b'\n' not in data:
                 part = connection.recv(65536)
-                if not part or len(data) + len(part) > 12 * MAX_OUTPUT + 65536:
-                    raise ExecutionBlocked('invalid or incomplete broker response')
+                if not part:
+                    raise BrokerUnavailable('broker connection closed before a complete response; execution remains blocked')
+                if len(data) + len(part) > 12 * MAX_OUTPUT + 65536:
+                    raise ExecutionBlocked('broker response exceeds size bound')
                 data.extend(part)
             response = json.loads(bytes(data).split(b'\n', 1)[0])
-        except (OSError, ValueError) as exc:
-            raise ExecutionBlocked('supervisor unavailable; execution remains blocked') from exc
+        except OSError as exc:
+            raise BrokerUnavailable('supervisor unavailable; execution remains blocked') from exc
+        except ValueError as exc:
+            raise ExecutionBlocked('invalid broker response; execution remains blocked') from exc
     if response.get('ok') is not True:
         raise ExecutionBlocked(response.get('error', 'supervisor refused execution'))
     return response['result']
+
+
+def worker_service_request(repo: Path,operation: str,*,epoch: int | None = None) -> dict:
+    if operation not in {'stage_worker','start_worker','withdraw_worker','activate_canary','restart_canary'}:
+        raise ExecutionBlocked('unknown worker lifecycle operation')
+    packet={'operation':operation,'project':project_identity(repo)}
+    if operation=='start_worker':packet['epoch']=epoch
+    return _request(SOCKET_ROOT/'operator.sock',packet)

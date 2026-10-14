@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import copy
 import os
 import shutil
 import subprocess
@@ -40,11 +41,13 @@ class FakeRepository:
         if endpoint=='git/trees':return {'sha':self.export['tree']}
         if endpoint=='git/commits':return {'sha':self.export['head']}
         if endpoint.startswith('git/refs'):
-            self.head=payload['sha'];return {'object':{'sha':self.head}}
+            self.head=payload['sha']
+            if self.pr is not None:self.pr['head']['sha']=self.head
+            return {'object':{'sha':self.head}}
         if method=='PATCH' and endpoint.startswith('pulls/'):
             self.pr.update(payload);return self.pr
         if endpoint=='pulls':
-            self.pr={'number':7,'state':'open','title':payload['title'],'body':payload['body'],
+            self.pr={'number':7,'state':'open','draft':True,'title':payload['title'],'body':payload['body'],
                      'html_url':'https://github.com/'+self.repository+'/pull/7',
                      'head':{'sha':self.head,'ref':self.branch,'repo':{'full_name':self.repository}},
                      'base':{'ref':'main','repo':{'full_name':self.repository}}}
@@ -93,9 +96,18 @@ class PublicationTests(unittest.TestCase):
         self.api.head='f'*40
         with self.assertRaises(ExecutionBlocked):self.publish()
         self.assertEqual(self.api.effects,[])
+
         self.api.head=None;self.branch='main'
         with self.assertRaises(ExecutionBlocked):self.publish()
         self.assertEqual(self.api.effects,[])
+
+    def test_workflow_changes_rejected_before_any_github_operation(self):
+        for path in ('.github/workflows/ci.yml','.GitHub/Workflows/other.yml',
+                     '.github/workflows','../.github/workflows/ci.yml'):
+            with self.subTest(path=path):
+                self.export['entries'][0]['path']=path
+                with patch.object(self.api,'request',side_effect=AssertionError('network must not run')):
+                    with self.assertRaises(ExecutionBlocked):self.publish()
 
     def test_pause_before_reference_mutation_does_not_publish_branch_or_pr(self):
         calls=0
@@ -113,6 +125,81 @@ class PublicationTests(unittest.TestCase):
         self.api.head=self.base;self.publish()
         changes=[p for m,e,p in self.api.effects if m=='PATCH']
         self.assertEqual(changes,[{'sha':self.head,'force':False}])
+
+    def existing_parent_pr(self):
+        self.api.head=self.base
+        self.api.pr={'number':7,'state':'open','draft':True,'title':'Original task','body':'Original evidence',
+                     'html_url':'https://github.com/'+self.api.repository+'/pull/7',
+                     'head':{'sha':self.base,'ref':self.branch,'repo':{'full_name':self.api.repository}},
+                     'base':{'ref':'main','repo':{'full_name':self.api.repository}}}
+        return copy.deepcopy(self.api.pr)
+
+    def test_stale_pr_list_after_branch_update_never_creates_second_pr(self):
+        old=self.existing_parent_pr();request=self.api.request
+        def stale(method,endpoint,payload=None):
+            if method=='GET' and endpoint.startswith('pulls?'):return [copy.deepcopy(old)]
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=stale):result=self.publish()
+        self.assertEqual(result['pull_request'],7)
+        self.assertEqual(self.api.pr['head']['sha'],self.head)
+        self.assertEqual(self.api.pr['body'],'Acceptance evidence')
+        self.assertFalse(any(endpoint=='pulls' for method,endpoint,payload in self.api.effects))
+
+    def test_missing_list_or_stale_exact_pr_remains_uncertain_without_second_creation(self):
+        for stale_detail in (False,True):
+            with self.subTest(stale_detail=stale_detail):
+                self.api.effects=[];old=self.existing_parent_pr();request=FakeRepository.request.__get__(self.api)
+                queries=0
+                def stale(method,endpoint,payload=None):
+                    nonlocal queries
+                    if method=='GET' and endpoint.startswith('pulls?'):
+                        queries+=1
+                        return [copy.deepcopy(old)] if queries==1 else []
+                    if stale_detail and method=='GET' and endpoint=='pulls/7':return copy.deepcopy(old)
+                    return request(method,endpoint,payload)
+                with patch.object(self.api,'request',side_effect=stale), patch('do_again.supervisor.github.time.sleep'):
+                    if stale_detail:
+                        with self.assertRaisesRegex(ExecutionBlocked,'no second creation'):self.publish()
+                    else:self.assertEqual(self.publish()['pull_request'],7)
+                self.assertFalse(any(endpoint=='pulls' for method,endpoint,payload in self.api.effects))
+
+    def test_stale_detail_converges_with_one_branch_update_and_one_metadata_patch(self):
+        old=self.existing_parent_pr();request=self.api.request;reads=0
+        def lag(method,endpoint,payload=None):
+            nonlocal reads
+            if method=='GET' and endpoint=='pulls/7':
+                reads+=1
+                if reads<=3:return copy.deepcopy(old)
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=lag),patch('do_again.supervisor.github.time.sleep'):
+            result=self.publish()
+        self.assertEqual(result['head'],self.head)
+        self.assertEqual(sum(e.startswith('git/refs') for m,e,p in self.api.effects),1)
+        self.assertEqual(sum(m=='PATCH' and e=='pulls/7' for m,e,p in self.api.effects),1)
+        self.assertFalse(any(e=='pulls' for m,e,p in self.api.effects))
+
+    def test_other_head_during_detail_lag_stops_immediately_without_metadata_patch(self):
+        old=self.existing_parent_pr();old['head']['sha']='f'*40;request=self.api.request
+        def diverged(method,endpoint,payload=None):
+            if method=='GET' and endpoint=='pulls/7':return old
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=diverged),patch('do_again.supervisor.github.time.sleep') as sleep:
+            with self.assertRaisesRegex(ExecutionBlocked,'identity diverged'):self.publish()
+        sleep.assert_not_called()
+        self.assertFalse(any(e=='pulls/7' and m=='PATCH' for m,e,p in self.api.effects))
+
+    def test_metadata_readback_lag_does_not_repeat_patch(self):
+        self.existing_parent_pr();request=self.api.request;old=None;reads=0
+        def lag(method,endpoint,payload=None):
+            nonlocal old,reads
+            if method=='PATCH' and endpoint=='pulls/7':old=copy.deepcopy(self.api.pr)
+            if method=='GET' and endpoint=='pulls/7' and old is not None:
+                reads+=1
+                if reads<4:return copy.deepcopy(old)
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=lag),patch('do_again.supervisor.github.time.sleep'):
+            self.publish()
+        self.assertEqual(sum(m=='PATCH' and e=='pulls/7' for m,e,p in self.api.effects),1)
 
     def test_lost_pr_response_is_uncertain_and_readback_proves_existing_effect(self):
         self.api.lose_pr_response=True
@@ -135,6 +222,7 @@ class GitHubScopeTests(unittest.TestCase):
         with patch('do_again.supervisor.github.https_bytes',return_value=(401,b'synthetic credential failure')) as fetch:
             with self.assertRaises(ExecutionBlocked) as error:api.request('GET','git/ref/heads/main')
             self.assertNotIn('synthetic credential',str(error.exception))
+            self.assertIn('GET git/ref/heads/main (HTTP 401)',str(error.exception))
             self.assertTrue(fetch.call_args.args[0].startswith('https://api.github.com/repos/Tran-Steven/do-again/'))
 
     def test_arbitrary_admin_endpoints_and_main_updates_cannot_contact_network(self):
@@ -186,12 +274,142 @@ class PublicationBrokerTests(unittest.TestCase):
                  patch('do_again.supervisor.macos_server.verify_installation')]
         for item in patches:item.start();self.addCleanup(item.stop)
 
+    def test_existing_local_workspace_fails_before_network_and_retains_bytes(self):
+        from do_again.core.schema import canonical_json
+        workspace=self.module.EXECUTION_ROOT/self.broker.project.key/'requests'/self.packet['request_id']/'scratch'
+        workspace.mkdir(parents=True);sentinel=workspace/'retained';sentinel.write_bytes(b'original inspection bytes')
+        result=self.module.publish_via_broker(self.broker,self.packet)
+        self.assertEqual(result['state'],'failed_pre_publication')
+        self.assertEqual(result['returncode'],1)
+        self.assertEqual(self.api.effects,[]);self.assertEqual(self.exports,0)
+        self.assertEqual(sentinel.read_bytes(),b'original inspection bytes')
+        self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+        fp=hashlib.sha256(canonical_json(self.packet)).hexdigest()
+        self.assertEqual(self.broker.ledger.lookup(self.broker.project.key,self.packet['request_id'],fp),result)
+
+    def test_native_publication_inspection_uses_distinct_workspace(self):
+        from do_again.supervisor.controller_native_effects import NativeControllerEffects
+        effect=NativeControllerEffects(self.broker,{},self.admission,lambda request:[])
+        self.broker.config['controller_scope']={'epoch':0}
+        self.broker.config['operator_uid']=501
+        inspected=[]
+        def manifest(sid,head):
+            inspected.append(sid)
+            workspace=self.module.EXECUTION_ROOT/self.broker.project.key/'requests'/sid/'scratch'
+            workspace.mkdir(parents=True)
+            return {}
+        effect.manifest=manifest;effect.measure=lambda head,manifest:None
+        self.broker._dispatch=lambda packet,uid:self.module.publish_via_broker(self.broker,packet)
+        request={'request_id':'native-task-0001','expected':{'repo_head':self.base}}
+        result=effect('publication',self.packet['request_id'],request,{'commit':{'authority':{'repo_head':self.head}}})
+        self.assertEqual(inspected,[self.packet['request_id']+'-inspection'])
+        self.assertEqual(result['state'],'succeeded');self.assertEqual(self.exports,1)
+        self.assertTrue(self.api.effects)
+
     def test_completed_publication_receipt_replays_without_export_or_remote_effect(self):
         result=self.module.publish_via_broker(self.broker,self.packet)
         self.assertEqual(result['state'],'succeeded')
         effects=list(self.api.effects)
         self.assertEqual(self.module.publish_via_broker(self.broker,self.packet),result)
         self.assertEqual(self.exports,1);self.assertEqual(self.api.effects,effects)
+
+    def test_explicit_tested_baseline_publication_keeps_maintenance_and_original_task(self):
+        from dataclasses import replace
+        from do_again.supervisor.candidate_transaction import KIND
+        self.broker.project=replace(self.broker.project,account='_doagain_jp')
+        self.api.repository='Tran-Steven/jobpipe'
+        self.broker.config['projects'][0]['github_repository']=self.api.repository
+        self.broker.config.update(production_ready=False,
+            controller_profile={'kind':KIND,'public_evidence':True},
+            controller_scope={'kind':'jobpipe-native-controller-v1','integration':'proposal-only'})
+        self.state['intent']='maintenance'
+        original={'operation':'reviewed_task','publication_performed':False}
+        self.broker.ledger.reserve(self.broker.project.key,'original-reviewed-task','c'*64)
+        self.broker.ledger.finish(self.broker.project.key,'original-reviewed-task',original)
+        packet={k:v for k,v in self.packet.items() if k not in {'title','body'}}|{'operation':'publish_tested_baseline'}
+        with patch('do_again.supervisor.native_checkpoint.verify_checkpoints',return_value={
+                self.broker.project.key:{'commit':self.head,'verified':True}}),\
+                patch('do_again.supervisor.live_canary.effect_authorized',return_value=True):
+            result=self.module.publish_tested_baseline(self.broker,packet)
+            effects=list(self.api.effects)
+            self.assertEqual(self.module.publish_tested_baseline(self.broker,packet),result)
+            self.assertEqual(effects,self.api.effects)
+        self.assertEqual(self.state['intent'],'maintenance')
+        self.assertEqual(result['head'],self.head)
+        self.assertEqual(self.broker.ledger.lookup(self.broker.project.key,'original-reviewed-task','c'*64),original)
+        self.assertIn('zero autonomous coding cycles',self.api.pr['body'])
+        self.assertEqual(self.broker.ledger.intent(self.broker.project.key,packet['request_id'])['classification'],
+                         'operator_approved_tested_baseline')
+
+    def test_staged_checkpoint_publication_is_fresh_and_never_finishes_old_slot(self):
+        from dataclasses import replace
+        from do_again.supervisor.candidate_transaction import KIND
+        from do_again.supervisor.native_checkpoint import STAGED_KIND
+        from do_again.supervisor.publication_quarantine import append_quarantine
+        from contextlib import closing
+        import sqlite3
+        self.broker.project=replace(self.broker.project,account='_doagain_jp')
+        self.api.repository='Tran-Steven/jobpipe';self.broker.config['source_sha']='b'*40
+        self.broker.config['projects'][0]['github_repository']=self.api.repository
+        self.broker.config.update(production_ready=False,
+            controller_profile={'kind':KIND,'public_evidence':True},
+            controller_scope={'kind':'jobpipe-native-controller-v1','integration':'proposal-only'})
+        self.state['intent']='maintenance'
+        old='retained-uncertain-publication';fp='c'*64
+        intent={'operation':'git_publish','source_sha':'b'*40,'request_fingerprint':fp}
+        self.broker.ledger.reserve(self.broker.project.key,old,'d'*64,intent=intent)
+        original=self.broker.ledger.observe_request(self.broker.project.key,old,fp)
+        with closing(sqlite3.connect(self.broker.ledger.path)) as db:
+            append_quarantine(db,self.broker.project.key,old,expected_intent=intent,
+                approval_reference='explicit reviewed recovery fixture')
+        packet={k:v for k,v in self.packet.items() if k not in {'title','body'}}|{'operation':'publish_tested_checkpoint'}
+        claim={self.broker.project.key:{'kind':STAGED_KIND,'commit':self.head,'verified':True}}
+        with patch('do_again.supervisor.native_checkpoint.verify_checkpoints',return_value=claim), \
+             patch('do_again.supervisor.live_canary.effect_authorized',return_value=True):
+            result=self.module.publish_tested_checkpoint(self.broker,packet)
+        self.assertEqual(result['state'],'succeeded');self.assertEqual(self.state['intent'],'maintenance')
+        self.assertEqual(self.broker.ledger.observe_request(self.broker.project.key,old,fp),original)
+        self.assertEqual(self.broker.ledger.intent(self.broker.project.key,packet['request_id'])['classification'],
+            'operator_approved_tested_checkpoint')
+        self.assertIn('original request remains uncompleted',self.api.pr['body'])
+        effects=list(self.api.effects)
+        observed=self.module.reconcile_publication(self.broker,{'operation':'git_publication_reconcile','request_id':old})
+        self.assertEqual(observed['state'],'quarantined_unresolved');self.assertFalse(observed['terminal_success'])
+        self.assertEqual(self.api.effects,effects)
+        self.assertEqual(self.broker.ledger.observe_request(self.broker.project.key,old,fp),original)
+
+    def test_checkpoint_kind_cannot_be_relabelled_as_reviewed_baseline(self):
+        from dataclasses import replace
+        from do_again.supervisor.candidate_transaction import KIND
+        from do_again.supervisor.native_checkpoint import STAGED_KIND
+        self.broker.project=replace(self.broker.project,account='_doagain_jp')
+        self.api.repository='Tran-Steven/jobpipe'
+        self.broker.config['projects'][0]['github_repository']=self.api.repository
+        self.broker.config.update(production_ready=False,controller_profile={'kind':KIND,'public_evidence':True},
+            controller_scope={'kind':'jobpipe-native-controller-v1','integration':'proposal-only'})
+        self.state['intent']='maintenance'
+        packet={k:v for k,v in self.packet.items() if k not in {'title','body'}}|{'operation':'publish_tested_baseline'}
+        with patch('do_again.supervisor.native_checkpoint.verify_checkpoints',return_value={
+                self.broker.project.key:{'kind':STAGED_KIND,'commit':self.head,'verified':True}}):
+            with self.assertRaises(ExecutionBlocked):self.module.publish_tested_baseline(self.broker,packet)
+        self.assertEqual(self.api.effects,[])
+
+    def test_baseline_publication_rejects_unverified_checkpoint_before_effects(self):
+        from dataclasses import replace
+        from do_again.supervisor.candidate_transaction import KIND
+        self.broker.project=replace(self.broker.project,account='_doagain_jp')
+        self.api.repository='Tran-Steven/jobpipe'
+        self.broker.config['projects'][0]['github_repository']=self.api.repository
+        self.broker.config.update(production_ready=False,
+            controller_profile={'kind':KIND,'public_evidence':True},
+            controller_scope={'kind':'jobpipe-native-controller-v1','integration':'proposal-only'})
+        packet={k:v for k,v in self.packet.items() if k not in {'title','body'}}|{'operation':'publish_tested_baseline'}
+        for claim in ({},{self.broker.project.key:{'commit':'f'*40}}):
+            with patch('do_again.supervisor.native_checkpoint.verify_checkpoints',return_value=claim):
+                with self.assertRaisesRegex(ExecutionBlocked,'original native-tested checkpoint'):
+                    self.module.publish_tested_baseline(self.broker,packet)
+        self.assertEqual(self.api.effects,[]);self.assertEqual(self.exports,0)
+        self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
 
     def test_lost_pr_response_blocks_after_journal_restart_without_second_trigger(self):
         self.api.lose_pr_response=True
@@ -208,6 +426,14 @@ class PublicationBrokerTests(unittest.TestCase):
         self.assertEqual(result['state'],'succeeded');self.assertTrue(result['reconciled_read_only'])
         self.assertEqual(self.api.effects,effects)
         self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+
+    def test_workflow_denial_finishes_pre_dispatch_without_uncertain_reservation(self):
+        self.export['entries'][0]['path']='.github/workflows/ci.yml'
+        result=self.module.publish_via_broker(self.broker,self.packet)
+        self.assertEqual(result['state'],'failed_pre_publication')
+        self.assertEqual(result['returncode'],1)
+        self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+        self.assertEqual(self.api.effects,[])
 
     def test_missing_pr_or_changed_payload_stays_uncertain_without_effect(self):
         self.api.lose_pr_response=True
@@ -226,6 +452,71 @@ class PublicationBrokerTests(unittest.TestCase):
         self.state['intent']='paused'
         with self.assertRaises(ExecutionBlocked):self.module.publish_via_broker(self.broker,self.packet)
         self.assertEqual(self.api.effects,[]);self.assertEqual(self.exports,0)
+
+
+@unittest.skipUnless(shutil.which('git'),'real Git fixture required')
+class CanaryPartialDispositionTests(unittest.TestCase):
+    command=PublicationTests.command
+    setUp=PublicationBrokerTests.setUp
+
+    def partial(self):
+        prefix='canary-'+'c'*24
+        self.broker.config['source_sha']='d'*40
+        self.packet['request_id']=prefix+'-1-publish'
+        self.module.publish_via_broker(self.broker,self.packet)
+        self.api.pr['draft']=True
+        (self.root/'selected').write_bytes(b'second change\n')
+        self.command('add','selected');self.command('commit','-qm','second bounded change')
+        self.head=self.command('rev-parse','HEAD').strip()
+        self.export=export_commit(self.git,self.root/'.git',self.head);self.api.export=self.export
+        self.packet={**self.packet,'request_id':prefix+'-2-publish','expected_head':self.head,
+                     'title':'Second task','body':'Second evidence'}
+        request=self.api.request
+        def interrupted(method,endpoint,payload=None):
+            if method=='PATCH' and endpoint.startswith('pulls/'):
+                raise OSError('metadata update not dispatched')
+            return request(method,endpoint,payload)
+        with patch.object(self.api,'request',side_effect=interrupted):
+            with self.assertRaises(OSError):self.module.publish_via_broker(self.broker,self.packet)
+        self.state['intent']='maintenance';self.broker.config['production_ready']=False
+        self.broker.canary=SimpleNamespace(rid=lambda task,stage:prefix+'-'+str(task)+'-'+stage)
+        def readback(method,endpoint,payload=None):
+            if method=='GET' and endpoint=='git/commits/'+self.head:
+                return {'sha':self.head,'parents':[{'sha':self.export['parent']}]}
+            return request(method,endpoint,payload)
+        self.readback=readback
+
+    def test_explicit_partial_disposition_retains_intents_and_never_changes_github(self):
+        self.partial();effects=list(self.api.effects)
+        original=self.broker.ledger.intent(self.broker.project.key,self.packet['request_id'])
+        with patch.object(self.api,'request',side_effect=self.readback):
+            result=self.module.classify_canary_partial_publication(self.broker)
+        self.assertEqual(result['state'],'blocked_partial_publication')
+        self.assertEqual(result['returncode'],1);self.assertFalse(result['engineering_complete'])
+        self.assertEqual(self.api.effects,effects);self.assertEqual(self.broker.ledger.pending(self.broker.project.key),[])
+        self.assertEqual(self.broker.ledger.intent(self.broker.project.key,self.packet['request_id']),original)
+        self.assertTrue((self.broker.state/'canary-partial-publication-disposition.json').exists())
+
+    def test_foreign_metadata_completed_payload_or_non_draft_cannot_be_classified(self):
+        self.partial();original=copy.deepcopy(self.api.pr);effects=list(self.api.effects)
+        for changes in ({'body':'foreign edit'},{'title':'Second task','body':'Second evidence'},
+                        {'draft':False},{'number':8}):
+            self.api.pr=copy.deepcopy(original);self.api.pr.update(changes)
+            with self.subTest(changes=changes),patch.object(self.api,'request',side_effect=self.readback):
+                with self.assertRaises(ExecutionBlocked):self.module.classify_canary_partial_publication(self.broker)
+            self.assertEqual(len(self.broker.ledger.pending(self.broker.project.key)),1)
+            self.assertEqual(self.api.effects,effects)
+
+    def test_active_production_or_changed_runtime_never_classifies_partial_effect(self):
+        self.partial();effects=list(self.api.effects)
+        for field,value in [('intent','active'),('production_ready',True),('source_sha','other source')]:
+            target=self.state if field=='intent' else self.broker.config
+            old=target[field];target[field]=value
+            with self.subTest(field=field),self.assertRaises(ExecutionBlocked):
+                self.module.classify_canary_partial_publication(self.broker)
+            target[field]=old
+            self.assertEqual(len(self.broker.ledger.pending(self.broker.project.key)),1)
+            self.assertEqual(self.api.effects,effects)
 
 
 @unittest.skipUnless(os.name=='posix','native POSIX credential modes required')

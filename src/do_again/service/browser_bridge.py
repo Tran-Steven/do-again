@@ -1,0 +1,176 @@
+"""Bound local Unix-socket transport for an explicitly authorized planner call.
+
+No browser session is launched here. A sealed root broker connects to a
+separately owned operator service. Both sides must authenticate the Unix
+socket peer; protocol messages are bounded and carry reserved call identity.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import secrets
+import socket
+import stat
+import sys
+from pathlib import Path
+
+from ..core.schema import canonical_json
+from ..supervisor.macos_execution import ExecutionBlocked
+
+CALL_ID = re.compile(r'planner-[0-9a-f]{20}-[1-9][0-9]{0,4}')
+MAX_FRAME = 100000
+
+
+def read_frame(connection):
+    buffer = bytearray()
+    while 10 not in buffer:
+        chunk = connection.recv(min(8192, MAX_FRAME + 1 - len(buffer)))
+        if not chunk:
+            raise ExecutionBlocked('browser bridge closed before a complete frame')
+        buffer.extend(chunk)
+        if len(buffer) > MAX_FRAME:
+            raise ExecutionBlocked('browser bridge frame exceeds bound')
+    raw, suffix = bytes(buffer).split(bytes([10]), 1)
+    if suffix:
+        raise ExecutionBlocked('browser bridge sent more than one frame')
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ExecutionBlocked('browser bridge frame is not valid JSON') from exc
+    if not isinstance(value, dict):
+        raise ExecutionBlocked('browser bridge frame must be an object')
+    return value
+
+
+def write_frame(connection, value):
+    data = canonical_json(value) + bytes([10])
+    if len(data) > MAX_FRAME:
+        raise ExecutionBlocked('browser bridge output exceeds bound')
+    connection.sendall(data)
+
+
+def authenticated_peer_uid(connection):
+    """Read kernel-authenticated peer UID, including framework Python builds.
+
+    macOS exports getpeereid(2) in libSystem even when Python's socket
+    wrapper does not expose it. Never substitute a caller-supplied UID or
+    a filesystem ownership check for authenticated socket credentials.
+    """
+    if sys.platform != 'darwin':
+        raise ExecutionBlocked('browser bridge needs macOS kernel peer credentials')
+    if hasattr(connection, 'getpeereid'):
+        try:
+            uid, _ = connection.getpeereid()
+        except (OSError, ValueError) as exc:
+            raise ExecutionBlocked('macOS peer credentials could not be verified') from exc
+        return uid
+    import ctypes
+    try:
+        fd = connection.fileno()
+        if not isinstance(fd, int) or fd < 0:
+            raise ValueError('invalid socket descriptor')
+        library = ctypes.CDLL('/usr/lib/libSystem.B.dylib', use_errno=True)
+        native = library.getpeereid
+        native.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_uint),
+                           ctypes.POINTER(ctypes.c_uint)]
+        native.restype = ctypes.c_int
+        uid = ctypes.c_uint()
+        gid = ctypes.c_uint()
+        if native(fd, ctypes.byref(uid), ctypes.byref(gid)) != 0:
+            raise OSError(ctypes.get_errno(), 'getpeereid failed')
+        return uid.value
+    except (AttributeError, OSError, TypeError, ValueError) as exc:
+        raise ExecutionBlocked('macOS peer credentials could not be verified') from exc
+
+
+class BrokerBrowserBridge:
+    """Root-to-operator bridge; a failed/uncertain request must not be retried."""
+
+    def __init__(self, socket_path, *, expected_uid=501):
+        self.socket_path = Path(socket_path)
+        if expected_uid != 501:
+            raise ExecutionBlocked('browser operator UID must equal approved identity')
+        self.expected_uid = expected_uid
+
+    def probe_authorized(self, *, conversation_id, profile_sha256, grant_sha256):
+        """Zero-model-call operator socket and grant identity probe."""
+        path = self.socket_path
+        if not path.is_absolute() or path.is_symlink():
+            raise ExecutionBlocked('browser bridge socket must be absolute and unaliased')
+        try:
+            info = path.lstat()
+        except OSError as exc:
+            raise ExecutionBlocked('approved browser bridge socket unavailable') from exc
+        if (not stat.S_ISSOCK(info.st_mode) or info.st_uid != self.expected_uid
+                or info.st_mode & 0o077 or info.st_nlink != 1):
+            raise ExecutionBlocked('browser bridge socket ownership or mode differs')
+        nonce = secrets.token_hex(16)
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(15.0)
+            client.connect(str(path))
+            if authenticated_peer_uid(client) != self.expected_uid:
+                raise ExecutionBlocked('browser bridge peer is not the approved operator')
+            write_frame(client, {'operation':'probe','nonce':nonce,
+                                 'grant_sha256':grant_sha256})
+            result = read_frame(client)
+        if (set(result) != {'operation','nonce','conversation_id','profile_sha256','grant_sha256'}
+                or result['operation'] != 'probe-result' or result['nonce'] != nonce
+                or result['conversation_id'] != conversation_id
+                or result['profile_sha256'] != profile_sha256
+                or result['grant_sha256'] != grant_sha256):
+            raise ExecutionBlocked('browser bridge probe identity differs')
+        return {'peer_uid': self.expected_uid, 'conversation_id': conversation_id,
+                'profile_sha256': profile_sha256}
+
+    def observe_once(self, message, **identity):
+        return self.send_once(message, observe_only=True, **identity)
+
+    def send_once(self, message, *, conversation_id, call_id, profile_sha256, grant_sha256, observe_only=False):
+        path = self.socket_path
+        if not path.is_absolute() or path.is_symlink():
+            raise ExecutionBlocked('browser bridge socket must be absolute and unaliased')
+        try:
+            info = path.lstat()
+        except OSError as exc:
+            raise ExecutionBlocked('approved browser bridge socket unavailable') from exc
+        if (not stat.S_ISSOCK(info.st_mode) or info.st_uid != self.expected_uid
+                or info.st_mode & 0o077 or info.st_nlink != 1):
+            raise ExecutionBlocked('browser bridge socket ownership or mode differs')
+        if not isinstance(message, str) or not isinstance(call_id, str) or not CALL_ID.fullmatch(call_id):
+            raise ExecutionBlocked('browser bridge requires a reserved planner call')
+        request = {'call_id': call_id, 'conversation_id': conversation_id,
+                   'profile_sha256': profile_sha256, 'grant_sha256':grant_sha256,
+                   'message': message}
+        if observe_only: request['operation'] = 'observe-original'
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(480.0)
+            client.connect(str(path))
+            if authenticated_peer_uid(client) != self.expected_uid:
+                raise ExecutionBlocked('browser bridge peer is not the approved operator')
+            write_frame(client, request)
+            try:
+                reply = read_frame(client)
+            except (OSError, ExecutionBlocked) as exc:
+                from .browser_planner import BrowserPlanningAwaitingReply
+                raise BrowserPlanningAwaitingReply('original reply pending; observe only, never resend') from exc
+        if (set(reply) == {'call_id', 'conversation_id', 'grant_sha256', 'state'}
+                and reply['call_id'] == call_id and reply['conversation_id'] == conversation_id
+                and reply['grant_sha256'] == grant_sha256 and reply['state'] == 'awaiting_original_reply'):
+            from .browser_planner import BrowserPlanningAwaitingReply
+            raise BrowserPlanningAwaitingReply('original reply pending; observe only, never resend')
+        if (set(reply) == {'call_id', 'conversation_id', 'grant_sha256', 'state', 'error'}
+                and reply['call_id'] == call_id
+                and reply['conversation_id'] == conversation_id
+                and reply['grant_sha256'] == grant_sha256
+                and reply['state'] == 'pre_dispatch_blocked'
+                and isinstance(reply['error'], str) and len(reply['error']) <= 1000):
+            from .browser_planner import BrowserPlanningNotDispatched
+            raise BrowserPlanningNotDispatched(reply['error'])
+        if (set(reply) != {'call_id', 'conversation_id', 'grant_sha256', 'response'}
+                or reply['call_id'] != call_id
+                or reply['conversation_id'] != conversation_id
+                or reply['grant_sha256'] != grant_sha256
+                or not isinstance(reply['response'], str)):
+            raise ExecutionBlocked('browser bridge result differs from reserved call')
+        return {'conversation_id': conversation_id, 'response': reply['response']}

@@ -123,11 +123,11 @@ class LocalSessionRecapTests(unittest.TestCase):
         (self.repo/"app.txt").write_text("a")
         git("add", "app.txt")
         git("commit", "-m", "Fix audio playback")
-        # Git stamps real wall-clock commit dates. Use a matching window,
-        # not the frozen October 8 request-fixture clock.
-        commit_now = datetime.now(timezone.utc)
-        report = build_summary(self.layout, since=commit_now-timedelta(days=2),
-                               now=commit_now+timedelta(days=2))
+        # Anchor the fixture window to its actual commit time. A fixed 2026
+        # timestamp eventually excludes fresh CI commits and flakes the suite.
+        committed_at = datetime.fromisoformat(git("log", "-1", "--format=%cI").stdout.strip())
+        report = build_summary(self.layout, since=committed_at-timedelta(days=1),
+                               now=committed_at+timedelta(days=1))
         self.assertIn("Fix audio playback", report["recent_project_commits"])
         self.assertIn("may include non-Do Again changes", render_summary(report))
 

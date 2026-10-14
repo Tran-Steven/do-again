@@ -60,6 +60,19 @@ class DedicatedExecutionTests(unittest.TestCase):
         with self.assertRaises(boundary.ExecutionBlocked):boundary.profile(self.project,self.scratch,self.cache)
         self.assertEqual(sentinel.read_text(),'UNCHANGED')
 
+    def test_effect_evidence_is_redacted_scoped_and_survives_restart(self):
+        ledger=boundary.ExecutionLedger(self.root/'execution.sqlite')
+        ledger.reserve('project','request-123','fingerprint',intent={'sensitive':'private-value'})
+        ledger.finish('project','request-123',{'stdout':'private-value'})
+        evidence=ledger.evidence('project')
+        self.assertEqual(evidence['counts'],{'execution':1,'capability_intent':1})
+        self.assertNotIn('private-value',str(evidence))
+        self.assertEqual(boundary.ExecutionLedger(ledger.path).evidence('project'),evidence)
+        ledger.reserve('other','request-456','different');ledger.finish('other','request-456',{'returncode':0})
+        self.assertEqual(ledger.evidence('project'),evidence)
+        ledger.reserve('project','request-789','new')
+        self.assertNotEqual(ledger.evidence('project')['sha256'],evidence['sha256'])
+
     def test_started_ledger_survives_restart_and_never_replays(self):
         ledger=boundary.ExecutionLedger(self.root/'execution.sqlite')
         self.assertIsNone(ledger.reserve('project','request-123','fingerprint'))

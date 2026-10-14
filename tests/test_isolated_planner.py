@@ -266,41 +266,50 @@ class IsolatedPlannerTests(unittest.TestCase):
 
 
 class BrowserDispatchHookTests(unittest.TestCase):
-    def test_send_message_reserves_durably_before_only_enter(self):
-        target = SimpleNamespace(url="https://chatgpt.com/c/01234567-89ab-4cde-8012-0123456789ab")
+    def test_send_message_reserves_durably_before_only_send(self):
+        target = SimpleNamespace(id='fixture-target',url="https://chatgpt.com/c/01234567-89ab-4cde-8012-0123456789ab")
         events = []
         with patch("do_again.browser.runtime._assistant_snapshot",
                    return_value={"busy": False, "count": 0}), \
+             patch("do_again.browser.runtime._require_send_target_focus"), \
              patch("do_again.browser.runtime._context_limit_warning",
                    return_value=""), \
              patch("do_again.browser.runtime.cdp.evaluate",
-                   side_effect=["ready", True]), \
+                   side_effect=["ready", True, True]), \
              patch("do_again.browser.runtime.cdp.insert_text",
                    side_effect=lambda *_: events.append("insert")), \
-             patch("do_again.browser.runtime.cdp.press_enter",
-                   side_effect=lambda *_: events.append("enter")), \
+             patch("do_again.browser.runtime.cdp.click_send",
+                   side_effect=lambda *_: events.append("send")), \
+             patch("do_again.browser.runtime.cdp.press_enter") as enter, \
              patch("do_again.browser.runtime.time.sleep"):
             result = runtime.send_message(
                 target, "hello", wait_for_response=False,
                 before_dispatch=lambda: events.append("reserved"))
-        self.assertEqual(events, ["insert", "reserved", "enter"])
+        self.assertEqual(events, ["insert", "reserved", "send"])
+        enter.assert_not_called()
         self.assertEqual(result["response"], "submitted")
 
-    def test_failed_reservation_prevents_enter(self):
-        target = SimpleNamespace(url="https://chatgpt.com/c/01234567-89ab-4cde-8012-0123456789ab")
+    def test_failed_reservation_prevents_send_and_retains_uncertainty(self):
+        from do_again.browser.errors import BrowserSubmissionUncertain
+        target = SimpleNamespace(id='fixture-target',url="https://chatgpt.com/c/01234567-89ab-4cde-8012-0123456789ab")
         with patch("do_again.browser.runtime._assistant_snapshot",
                    return_value={"busy": False, "count": 0}), \
+             patch("do_again.browser.runtime._require_send_target_focus"), \
              patch("do_again.browser.runtime._context_limit_warning",
                    return_value=""), \
-             patch("do_again.browser.runtime.cdp.evaluate", return_value="ready"), \
+             patch("do_again.browser.runtime.cdp.evaluate", side_effect=['ready',True]), \
              patch("do_again.browser.runtime.cdp.insert_text"), \
              patch("do_again.browser.runtime.cdp.press_enter") as enter, \
+             patch("do_again.browser.runtime.cdp.click_send") as send, \
              patch("do_again.browser.runtime.time.sleep"):
-            with self.assertRaisesRegex(OperatorError, "journal unavailable"):
+            with self.assertRaises(BrowserSubmissionUncertain) as uncertain:
                 runtime.send_message(
                     target, "hello", wait_for_response=False,
                     before_dispatch=lambda: (_ for _ in ()).throw(
                         OperatorError("journal unavailable")))
+        self.assertIsInstance(uncertain.exception.__cause__,OperatorError)
+        self.assertIn('journal unavailable',str(uncertain.exception.__cause__))
+        send.assert_not_called()
         enter.assert_not_called()
 
 
