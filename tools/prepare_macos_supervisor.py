@@ -448,7 +448,7 @@ def prepare(source: Path, jobpipe: Path, do_again_repo: Path, output: Path, *, i
         from do_again.supervisor.macos_execution import project_from_dict
         require_jobpipe_grant(config,project_from_dict(jp))
         for path,blob in config['controller_profile']['test_files'].items():
-            if git(jobpipe,'rev-parse',jp['source_sha']+':'+path)!=blob:
+            if git(jobpipe,'rev-parse',jp['source_sha']+':'+path)!=blob and native_head_checkpoint is None:
                 raise ValueError('controller baseline test hash differs from sealed jobpipe snapshot')
         if config['controller_profile']['kind'] == 'native-development-local-v2':
             profile = config['controller_profile']

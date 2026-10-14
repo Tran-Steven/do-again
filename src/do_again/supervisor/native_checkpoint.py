@@ -63,6 +63,9 @@ def verify_checkpoints(config, previous):
         private_root_file(metadata/'HEAD')
         authority=worktree_authority(root)
         manifest=tree_manifest(Path(config['git']),metadata,claim['commit'])
+        for name,blob in config.get('controller_profile',{}).get('test_files',{}).items():
+            if manifest.get(name,{}).get('blob_sha')!=blob:
+                raise ExecutionBlocked('retained native baseline tests differ from the newly sealed profile')
         measured=measure_committed_tree(root,commit=claim['commit'],manifest=manifest,
             read_authority=lambda:worktree_authority(root)['repo_head'])
         verify_claim(claim,original,authority,measured,execution_uid=project["uid"])
