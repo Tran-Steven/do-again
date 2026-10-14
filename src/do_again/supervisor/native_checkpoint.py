@@ -1,5 +1,6 @@
 """Read-only upgrade admission for an already tested protected native head."""
 import re
+import stat
 from pathlib import Path
 from .macos_execution import ExecutionBlocked, ExecutionLedger
 
@@ -28,6 +29,17 @@ def verify_claim(claim, original, authority, measurement, *, execution_uid=402):
             or measurement!={'commit':claim['commit'],'clean':True,'tree_sha256':claim['tree_sha256']}):
         raise ExecutionBlocked('native checkpoint head, tested tree or source cleanliness differs')
     return True
+
+
+def require_checkpoint_metadata(path, *, operator_uid):
+    """The existing Git broker may retain operator-owned protected metadata."""
+    root=Path(path)
+    for item in (root,root/'HEAD'):
+        info=item.lstat()
+        if (item.is_symlink() or info.st_uid not in {0,operator_uid}
+                or info.st_mode & 0o022 or (item==root and not stat.S_ISDIR(info.st_mode))
+                or (item!=root and (not stat.S_ISREG(info.st_mode) or info.st_nlink!=1))):
+            raise ExecutionBlocked('retained Git metadata has an unapproved owner, alias or write boundary')
 
 
 def verify_checkpoints(config, previous):
@@ -60,7 +72,7 @@ def verify_checkpoints(config, previous):
             raise ExecutionBlocked('native checkpoint request invalid')
         original=ledger.observe_request(key,claim['request_id'],claim['request_fingerprint'])
         root=Path(project['worktree']);metadata=root/'.git'
-        private_root_file(metadata/'HEAD')
+        require_checkpoint_metadata(metadata,operator_uid=config['operator_uid'])
         authority=worktree_authority(root)
         manifest=tree_manifest(Path(config['git']),metadata,claim['commit'])
         for name,blob in config.get('controller_profile',{}).get('test_files',{}).items():

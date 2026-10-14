@@ -25,3 +25,17 @@ class CheckpointTests(unittest.TestCase):
             if variant=='tests':original['result']['tests'][0]['returncode']=1
             with self.subTest(variant=variant),self.assertRaises(ExecutionBlocked):
                 verify_claim(self.claim,original,authority,measure)
+
+    def test_checkpoint_metadata_preserves_approved_operator_ownership_and_rejects_aliases(self):
+        import os,tempfile
+        from pathlib import Path
+        from do_again.supervisor.native_checkpoint import require_checkpoint_metadata
+        with tempfile.TemporaryDirectory() as root:
+            metadata=Path(root)/'git';metadata.mkdir(mode=0o700)
+            head=metadata/'HEAD';head.write_text('c'*40);head.chmod(0o600)
+            require_checkpoint_metadata(metadata,operator_uid=os.getuid())
+            head.chmod(0o666)
+            with self.assertRaises(ExecutionBlocked):require_checkpoint_metadata(metadata,operator_uid=os.getuid())
+            head.chmod(0o600);head.unlink();head.symlink_to(Path(root)/'other')
+            with self.assertRaises((ExecutionBlocked,FileNotFoundError)):
+                require_checkpoint_metadata(metadata,operator_uid=os.getuid())
