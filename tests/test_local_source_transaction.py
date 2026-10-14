@@ -19,6 +19,7 @@ from do_again.supervisor.local_development_pipeline import LocalDevelopmentPipel
 def sha(data): return hashlib.sha256(data).hexdigest()
 def blob(data): return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class LocalSourceTransactionTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
@@ -88,6 +89,7 @@ class LocalSourceTransactionTests(unittest.TestCase):
         self.assertNotIn('(subpath '+json.dumps(str(self.repo))+')',write)
         with self.assertRaises(ExecutionBlocked):profile(project,scratch,cache,source_write_paths=('../outside',))
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class LocalPipelineTests(unittest.TestCase):
     setUp = LocalSourceTransactionTests.setUp
     git = LocalSourceTransactionTests.git
@@ -184,6 +186,7 @@ class LocalPipelineTests(unittest.TestCase):
         with self.assertRaises(IndentationError):p.execute(self.request,now)
         self.assertEqual(self.events,[]);self.assertFalse(self.txn.path.exists())
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class NativePytestCaptureTests(unittest.TestCase):
     setUp = LocalSourceTransactionTests.setUp
     git = LocalSourceTransactionTests.git
@@ -212,6 +215,7 @@ class NativePytestCaptureTests(unittest.TestCase):
         self.assertEqual(passing['native_test_counts']['passed'],1)
         self.assertEqual(passing['native_test_counts']['skipped'],0)
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class LocalControllerProfileTests(unittest.TestCase):
     setUp = LocalSourceTransactionTests.setUp
     git = LocalSourceTransactionTests.git

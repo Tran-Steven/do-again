@@ -2,6 +2,7 @@
 import json
 import stat
 import unittest
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -91,6 +92,7 @@ class BridgeTests(unittest.TestCase):
                 with self.assertRaises(ExecutionBlocked):
                     read_frame(BufferedSocket(data))
 
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_broker_requires_operator_owned_socket_and_kernel_peer(self):
         reply = {'call_id': 'planner-' + 'a'*20 + '-1',
                  'conversation_id': '01234567-89ab-4cde-8012-0123456789ab',
@@ -110,6 +112,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(fake.timeout, 480.0)
         self.assertEqual(len(fake.sent), 1)
 
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_non_dispatch_refusal_must_match_the_original_call_and_grant(self):
         from do_again.service.browser_planner import BrowserPlanningNotDispatched
         call='planner-'+'a'*20+'-1';conversation='01234567-89ab-4cde-8012-0123456789ab'
@@ -132,6 +135,7 @@ class BridgeTests(unittest.TestCase):
                 else:self.fail('refusal accepted as an answer')
             self.assertEqual(len(fake.sent),1)
 
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_zero_model_call_probe_requires_exact_session(self):
         identity = {
             'operation':'probe-result', 'nonce':'a'*32,

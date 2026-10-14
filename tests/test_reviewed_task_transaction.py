@@ -14,6 +14,7 @@ from do_again.supervisor.reviewed_task import (
 )
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class OriginalBaselineTraversalTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
@@ -48,6 +49,7 @@ class OriginalBaselineTraversalTests(unittest.TestCase):
         self.assertEqual(list(external.iterdir()), [])
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class GitMetadataSnapshotTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
@@ -104,6 +106,7 @@ class GitMetadataSnapshotTests(unittest.TestCase):
                 copy_git_metadata(self.source, self.destination)
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class ReviewedTaskTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)

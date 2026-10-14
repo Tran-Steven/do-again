@@ -3,6 +3,7 @@ import copy
 import json
 import tempfile
 import unittest
+import os
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -155,6 +156,7 @@ class PersistentJournalTests(unittest.TestCase):
             OfflineContinuation(self.path,self.scope,self.binding).status(self.now)
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class PersistentRunnerTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)

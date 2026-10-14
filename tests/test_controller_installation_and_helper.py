@@ -53,7 +53,7 @@ class GrantTests(unittest.TestCase):
         with self.assertRaises(ExecutionBlocked):validate_controller_configuration({'hosted_planning_scope':{}},now=self.now)
     def test_unprivileged_factory_rejected_before_backend_creation(self):
         from do_again.supervisor.controller_backend import create_controller_backend
-        with patch('os.geteuid',return_value=501),patch('do_again.supervisor.controller_backend.ControllerBackend') as backend:
+        with patch('os.geteuid',return_value=501,create=True),patch('do_again.supervisor.controller_backend.ControllerBackend') as backend:
             with self.assertRaises(ExecutionBlocked):create_controller_backend(None)
         backend.assert_not_called()
 
@@ -62,6 +62,7 @@ class GrantTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp,self.assertRaises(ExecutionBlocked):
             validate_controller_stage(tmp,self.config,now=self.now)
 
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_preapproved_wheel_preparation_is_offline_and_rejects_tampering(self):
         from test_dependency_capability import wheel_fixture
         from do_again.supervisor.controller_installation import prepare_test_wheels
@@ -108,6 +109,7 @@ class HelperConfinementTests(unittest.TestCase):
         self.assertIn('(deny default)',profile);self.assertNotIn('network-outbound',profile)
         self.assertNotIn('/Users',profile);self.assertNotIn('/bin/sh',profile)
         with self.assertRaises(ExecutionBlocked):helper_profile('/sealed/codex','/sealed/work',endpoints=['127.0.0.1'])
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_child_timeout_is_bounded(self):
         with tempfile.TemporaryDirectory() as tmp,self.assertRaises(ExecutionBlocked):
             bounded_process([os.sys.executable,'-c','import time;time.sleep(5)'],work=tmp,

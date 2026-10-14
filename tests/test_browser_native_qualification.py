@@ -3,6 +3,7 @@ import json
 from contextlib import closing
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -11,6 +12,7 @@ from do_again.supervisor.controller_browser_helper import qualify_operator_brows
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class NativeBrowserQualificationTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

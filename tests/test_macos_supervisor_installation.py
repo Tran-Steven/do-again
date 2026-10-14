@@ -203,6 +203,7 @@ else:
                     'source_sha':json.loads((p/'config.json').read_text())['source_sha']}),\
                 patch.object(self.module,'validate_project_scope'),patch.object(self.module,'verify_worker_quiescence'),\
                 patch('do_again.supervisor.native_checkpoint.verify_checkpoints'),\
+                patch('do_again.supervisor.macos_execution.MacOSProcesses',return_value=Mock(owned=Mock(return_value=[]))),\
                 patch.object(self.module,'wait_for_supervisor_readiness') as ready:
             ready.side_effect=RuntimeError('readiness failed')
             with self.assertRaisesRegex(RuntimeError,'readiness failed'):

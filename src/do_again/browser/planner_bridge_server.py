@@ -179,12 +179,17 @@ class OperatorBrowserBridge:
                 request['message'], conversation_id=request['conversation_id'],
                 call_id=request['call_id'], profile_sha256=request['profile_sha256'])
         except BrowserPreDispatchBlocked as exc:
+            if observing:
+                # An observer failure cannot establish what an earlier Send did.
+                raise
             # Only a typed refusal before the durable Send boundary permits
             # this disposition. Timeouts and generic errors never do.
-            write_frame(connection, {'call_id':request['call_id'],
+            reply={'call_id':request['call_id'],
                 'conversation_id':request['conversation_id'],
                 'grant_sha256':browser_grant_digest(self.grant),
-                'state':'pre_dispatch_blocked','error':str(exc)[:1000]})
+                'state':'pre_dispatch_blocked','error':str(exc)[:1000]}
+            if self.replies is not None:self.replies.record(identity,reply)
+            write_frame(connection, reply)
             return dict(identity, state='pre_dispatch_blocked')
         if observing and result is None:
             write_frame(connection, {'call_id':request['call_id'],

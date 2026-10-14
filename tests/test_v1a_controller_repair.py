@@ -1,6 +1,7 @@
 """Offline regression: repair entrypoint is parseable and non-automatic."""
 import ast
 import unittest
+import os
 from pathlib import Path
 
 
@@ -23,6 +24,7 @@ class RepairEntrypointTests(unittest.TestCase):
             for node in ast.walk(main)
         ), "Importing Path inside main shadows Path.home() during preflight")
 
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_normal_user_preflight_never_reads_root_private_evidence(self):
         import importlib.util
         from unittest.mock import patch

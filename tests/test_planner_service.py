@@ -2,6 +2,7 @@
 import stat
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from do_again.browser import planner_service
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class OperatorPlannerServiceTests(unittest.TestCase):
     def test_service_rejects_unsupported_platform_before_browser_access(self):
         with patch('do_again.browser.planner_service.sys.platform', 'linux'), \

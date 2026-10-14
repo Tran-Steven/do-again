@@ -1,6 +1,7 @@
 """Replay safety under original-answer recovery and UI message virtualization."""
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,7 +13,7 @@ from do_again.service.browser_planner import BrowserResponseTransport, browser_g
 from do_again.service.controller_planner import PlanningCallJournal
 from do_again.supervisor.controller_backend import planning_goal
 from do_again.supervisor.macos_execution import ExecutionBlocked
-from test_operator_browser_bridge import FakeConnection
+from test_operator_browser_bridge import FakeConnection,operator_record_fixture
 
 
 class OriginalReplyTests(unittest.TestCase):
@@ -75,8 +76,9 @@ class OriginalReplyTests(unittest.TestCase):
         BrowserResponseTransport(send,observe)('{}',{},call=call,grant=grant)
         send.assert_not_called();observe.assert_called_once()
 
+    @unittest.skipUnless(os.name=='posix','descriptor-based native journal fixture')
     def test_reply_is_durable_before_socket_disconnect_and_cache_never_sends(self):
-        with tempfile.TemporaryDirectory() as tmp, \
+        with tempfile.TemporaryDirectory() as tmp,operator_record_fixture(), \
              patch('do_again.browser.planner_bridge_server.private_operator_directory',return_value=True), \
              patch('do_again.browser.planner_bridge_server.os.geteuid',return_value=501), \
              patch('do_again.browser.planner_bridge_server.authenticated_peer_uid',return_value=0):

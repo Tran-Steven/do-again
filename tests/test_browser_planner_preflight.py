@@ -3,9 +3,11 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import os
 from pathlib import Path
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class BrowserPreflightTests(unittest.TestCase):
     def setUp(self):
         spec = importlib.util.spec_from_file_location(

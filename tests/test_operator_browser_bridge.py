@@ -2,6 +2,8 @@
 import json
 import tempfile
 import unittest
+import os
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -9,6 +11,18 @@ from unittest.mock import Mock, patch
 from do_again.browser.planner_bridge_server import OperatorBrowserBridge, DurableDeliveryReservation
 from do_again.service.browser_planner import browser_grant_digest
 from do_again.supervisor.macos_execution import ExecutionBlocked
+
+
+@contextmanager
+def operator_record_fixture():
+    """Protocol fixture's UID501 on POSIX CI; never native identity evidence."""
+    original=os.fstat
+    def measured(fd):
+        info=original(fd)
+        values={name:getattr(info,name) for name in dir(info) if name.startswith('st_')}
+        values['st_uid']=501
+        return SimpleNamespace(**values)
+    with patch('do_again.browser.planner_bridge_server.os.fstat',side_effect=measured):yield
 
 
 class FakeConnection:
@@ -22,6 +36,7 @@ class FakeConnection:
         self.outgoing.append(data)
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class OperatorBridgeTests(unittest.TestCase):
     def setUp(self):
         self.call = 'planner-'+'a'*20+'-1'
@@ -116,6 +131,47 @@ class OperatorBridgeTests(unittest.TestCase):
              patch('do_again.browser.planner_bridge_server.authenticated_peer_uid',return_value=0):
             with self.assertRaises(BrowserSubmissionUncertain):self.handler.handle_once(conn)
         self.assertEqual(conn.outgoing,[])
+
+    def test_lost_refusal_frame_is_durably_observed_without_second_send(self):
+        from do_again.browser.errors import BrowserPreDispatchBlocked
+        from do_again.browser.planner_bridge_server import DurableReplyJournal
+        with tempfile.TemporaryDirectory() as temp,operator_record_fixture():
+            root=Path(temp);delivery=root/'delivery';replies=root/'replies'
+            delivery.mkdir(mode=0o700);replies.mkdir(mode=0o700)
+            driver=SimpleNamespace(send_once=Mock(side_effect=BrowserPreDispatchBlocked('bound composer unavailable')),observe_once=Mock())
+            handler=OperatorBrowserBridge(grant=self.grant,driver=driver,
+                reserve_delivery=DurableDeliveryReservation(delivery),replies=DurableReplyJournal(replies))
+            conn=FakeConnection(self.request);conn.sendall=Mock(side_effect=OSError('connection lost'))
+            with patch('do_again.browser.planner_bridge_server.os.geteuid',return_value=501),\
+                    patch('do_again.browser.planner_bridge_server.authenticated_peer_uid',return_value=0):
+                with self.assertRaises(OSError):handler.handle_once(conn)
+                cached=handler.replies.read(self.call);self.assertEqual(cached['reply']['state'],'pre_dispatch_blocked')
+                observer=FakeConnection(dict(self.request,operation='observe-original'))
+                handler.handle_once(observer)
+            self.assertEqual(json.loads(observer.outgoing[0]),cached['reply'])
+            driver.send_once.assert_called_once();driver.observe_once.assert_not_called()
+
+    def test_observer_refusal_cannot_relabel_original_unknown_call(self):
+        from do_again.browser.errors import BrowserPreDispatchBlocked
+        from do_again.browser.planner_bridge_server import DurableReplyJournal
+        with tempfile.TemporaryDirectory() as temp,operator_record_fixture():
+            root=Path(temp);delivery=root/'delivery';replies=root/'replies'
+            delivery.mkdir(mode=0o700);replies.mkdir(mode=0o700)
+            reservation=DurableDeliveryReservation(delivery)
+            import hashlib
+            reservation({'call_id':self.call,'conversation_id':self.conversation,
+                'profile_sha256':self.profile,'message_sha256':hashlib.sha256(self.request['message'].encode()).hexdigest()})
+            original=(delivery/(self.call+'.json')).read_bytes()
+            handler=OperatorBrowserBridge(grant=self.grant,
+                driver=SimpleNamespace(observe_once=Mock(side_effect=BrowserPreDispatchBlocked('observer cannot read tab')),send_once=Mock()),
+                reserve_delivery=reservation,replies=DurableReplyJournal(replies))
+            conn=FakeConnection(dict(self.request,operation='observe-original'))
+            with patch('do_again.browser.planner_bridge_server.os.geteuid',return_value=501),\
+                    patch('do_again.browser.planner_bridge_server.authenticated_peer_uid',return_value=0):
+                with self.assertRaises(BrowserPreDispatchBlocked):handler.handle_once(conn)
+            self.assertEqual((delivery/(self.call+'.json')).read_bytes(),original)
+            self.assertIsNone(handler.replies.read(self.call));self.assertEqual(conn.outgoing,[])
+            handler.driver.send_once.assert_not_called()
 
     def test_untrusted_peer_cannot_reserve_or_send(self):
         conn = FakeConnection(self.request)

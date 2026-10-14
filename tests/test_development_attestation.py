@@ -9,6 +9,7 @@ from do_again.supervisor.development_attestation import DevelopmentAttestations,
 from do_again.supervisor.native_test_evidence import observe_tests
 
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class AttestationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
@@ -95,6 +96,7 @@ class AttestationTests(unittest.TestCase):
             with self.assertRaises(ExecutionBlocked):
                 observe_tests(expected_head=self.head,cases=cases,measure=lambda:self.fail(),execute=lambda c:self.fail())
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class CommittedSourceTests(unittest.TestCase):
     def test_measures_real_committed_bytes_and_rejects_edits_links_and_extras(self):
         import hashlib
@@ -112,6 +114,7 @@ class CommittedSourceTests(unittest.TestCase):
             extra.unlink();source.unlink();source.symlink_to('/etc/hosts')
             with self.assertRaises((ExecutionBlocked,OSError)):measure()
 
+@unittest.skipUnless(os.name=="posix", "native ownership, descriptors or process control require POSIX")
 class RealTestProcessTests(unittest.TestCase):
     def test_real_commit_and_test_process_bind_evidence_and_detect_dirty_source(self):
         import subprocess

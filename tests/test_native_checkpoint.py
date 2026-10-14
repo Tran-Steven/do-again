@@ -1,5 +1,6 @@
 import copy
 import unittest
+import os
 from do_again.supervisor.native_checkpoint import verify_claim
 from do_again.supervisor.macos_execution import ExecutionBlocked
 
@@ -26,6 +27,7 @@ class CheckpointTests(unittest.TestCase):
             with self.subTest(variant=variant),self.assertRaises(ExecutionBlocked):
                 verify_claim(self.claim,original,authority,measure)
 
+    @unittest.skipUnless(os.name=="posix", "native POSIX fixture; Windows native parity is not claimed")
     def test_checkpoint_metadata_preserves_approved_operator_ownership_and_rejects_aliases(self):
         import os,tempfile
         from pathlib import Path

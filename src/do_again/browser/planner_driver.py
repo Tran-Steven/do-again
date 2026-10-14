@@ -34,23 +34,30 @@ class ChatGPTPlannerDriver:
         if (not bound.startswith('https://chatgpt.com/c/')
                 or runtime._chat_id(bound) != conversation_id):
             raise ExecutionBlocked('project browser conversation does not match planner grant')
-        status = runtime.ensure_browser_running(verify_auth=True)
-        target = runtime._find_chatgpt_target(int(status['port']), bound)
-        if target is None:
-            # Restoring a saved conversation is navigation, never message
-            # dispatch. User-level receipt delivery already does the same.
-            # Do not reserve a second call or generate a new conversation.
-            target = runtime.cdp.create_target(
-                int(status['port']), bound, background=True)
-        target, _ = runtime.wait_for_authenticated(
-            int(status['port']), chat_url=bound, target=target, timeout=30.0)
-        if runtime._chat_id(target.url) != conversation_id:
-            raise ExecutionBlocked('authenticated browser target changed conversation')
+        # Authenticate the exact bound conversation, not an unrelated first
+        # ChatGPT tab. Everything in this block precedes the sole Send path.
+        try:
+            status = runtime.ensure_browser_running(verify_auth=False)
+            target = runtime._find_chatgpt_target(int(status['port']), bound)
+            if target is None:
+                target = runtime.cdp.create_target(int(status['port']), bound, background=True)
+            target, probe = runtime.wait_for_authenticated(
+                int(status['port']), chat_url=bound, target=target, timeout=30.0)
+            live_url=probe.get('url') if isinstance(probe,dict) else None
+            if (runtime._chat_id(target.url) != conversation_id or not isinstance(live_url,str)
+                    or not live_url.startswith('https://chatgpt.com/c/')
+                    or runtime._chat_id(live_url)!=conversation_id):
+                raise ExecutionBlocked('authenticated browser target changed conversation')
+        except Exception as exc:
+            from .errors import BrowserPreDispatchBlocked
+            raise BrowserPreDispatchBlocked('bound planner preflight failed before Send: '+type(exc).__name__+': '+str(exc)[:500]) from exc
 
         def before_dispatch():
             if self.profile_attestor() != profile_sha256:
                 raise ExecutionBlocked('browser profile changed immediately before dispatch')
-            if runtime._chat_id(target.url) != conversation_id:
+            live_url=runtime.cdp.evaluate(target,'location.href',timeout=10.0)
+            if (not isinstance(live_url,str) or not live_url.startswith('https://chatgpt.com/c/')
+                    or runtime._chat_id(live_url)!=conversation_id):
                 raise ExecutionBlocked('browser target changed immediately before dispatch')
             self.record_dispatch({
                 'call_id': call_id, 'conversation_id': conversation_id,
